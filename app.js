@@ -4153,18 +4153,19 @@ function renderWorkbenchCard(item) {
 function buildAssetDistributionRows(assets, mode = "organization") {
   if (mode === "location") {
     const rows = flattenLocationTree()
-      .filter((node) => node.enabled !== false)
+      .filter((node) => node.level === 0 && node.enabled !== false)
       .map((node) => ({ key: node.path, label: node.name || node.path, title: node.path, count: 0 }));
     const rowMap = new Map(rows.map((row) => [row.key, row]));
     assets.forEach((asset) => {
-      const key = normalizeLocationValue(asset.location) || "未设置位置";
+      const location = normalizeLocationValue(asset.location);
+      const key = location.split(" / ").filter(Boolean)[0] || "未设置位置";
       if (!rowMap.has(key)) {
-        const label = key.split(" / ").filter(Boolean).pop() || key;
-        const row = { key, label, title: key, count: 0 };
+        const row = { key, label: key, title: key, count: 0 };
         rows.push(row);
         rowMap.set(key, row);
       }
-      rowMap.get(key).count += 1;
+      const row = rowMap.get(key);
+      if (row) row.count += 1;
     });
     return rows.length ? rows : [{ key: "empty", label: "暂无位置", title: "暂无位置", count: 0 }];
   }
@@ -4204,8 +4205,8 @@ function renderDashboardPanel(assets) {
   const distributionRows = buildAssetDistributionRows(assets, distributionMode);
   const distributionMax = Math.max(...distributionRows.map((item) => item.count), 1);
   const distributionTicks = [distributionMax, Math.round(distributionMax * 0.75), Math.round(distributionMax * 0.5), Math.round(distributionMax * 0.25), 0];
-  const distributionColumnMin = distributionMode === "location" ? 64 : 72;
-  const distributionWidth = Math.max(distributionMode === "location" ? 540 : 420, distributionRows.length * (distributionMode === "location" ? 70 : 84));
+  const distributionColumnMin = 72;
+  const distributionWidth = Math.max(420, distributionRows.length * 84);
   const distributionColumns = `repeat(${distributionRows.length}, minmax(${distributionColumnMin}px, 1fr))`;
   const totalBarHeight = assets.length ? 100 : 0;
   const activeBarHeight = assets.length ? Math.max((receiveCount / assets.length) * 100, 8) : 0;

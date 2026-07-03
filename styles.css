@@ -4854,8 +4854,6 @@ button.self-service-category-chip.more:hover {
 }
 
 .asset-distribution-card {
-  order: -1;
-  grid-column: 1 / -1;
   min-height: 310px;
 }
 
