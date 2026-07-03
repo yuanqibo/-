@@ -4224,23 +4224,16 @@ function dashboardMetricLabel(value, mode = "count") {
 
 function dashboardChartScale(maxValue = 0) {
   const max = Math.max(1, Math.ceil(Number(maxValue) || 0));
-  if (max <= 5) {
-    return {
-      max,
-      ticks: Array.from({ length: max + 1 }, (_, index) => max - index),
-    };
-  }
-  if (max <= 10 && max % 2 === 0) {
-    return {
-      max,
-      ticks: Array.from({ length: max / 2 + 1 }, (_, index) => max - index * 2),
-    };
-  }
-  const step = Math.ceil(max / 5);
+  const rawStep = Math.max(1, max / 5);
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalized = rawStep / magnitude;
+  const niceStep = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  const step = Math.max(1, niceStep * magnitude);
   const scaledMax = Math.ceil(max / step) * step;
+  const tickCount = Math.floor(scaledMax / step) + 1;
   return {
     max: scaledMax,
-    ticks: Array.from({ length: scaledMax / step + 1 }, (_, index) => scaledMax - index * step),
+    ticks: Array.from({ length: tickCount }, (_, index) => scaledMax - index * step),
   };
 }
 
