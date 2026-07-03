@@ -2456,6 +2456,8 @@ const state = {
   navOpen: {},
   assetSubnavScrollTop: 0,
   assetDistributionMode: "organization",
+  assetCategoryMetricMode: "count",
+  assetCategoryCompanyFilter: "所属/承租公司",
   locationTreeOpen: {},
   assetCategoryTreeOpen: {},
   locationImportBusy: false,
@@ -4181,6 +4183,46 @@ function buildAssetDistributionRows(assets, mode = "organization") {
   return rows.length ? rows : [{ key: "default", label: "默认公司", title: "默认公司", count: 0 }];
 }
 
+function topLevelAssetCategoryName(category = "") {
+  const value = String(category || "").trim();
+  if (!value) return "其他";
+  const rows = flattenAssetCategoryTree().filter((node) => node.enabled !== false);
+  const matched = rows.find((node) => node.name === value || node.path === value);
+  return matched ? matched.path.split(" / ")[0] : value;
+}
+
+function buildAssetCategoryStatRows(assets, companyFilter = "所属/承租公司") {
+  const filteredAssets =
+    companyFilter && companyFilter !== "所属/承租公司"
+      ? assets.filter((asset) => (asset.ownerCompany || asset.company || "默认公司") === companyFilter)
+      : assets;
+  const rows = flattenAssetCategoryTree()
+    .filter((node) => node.level === 0 && node.enabled !== false)
+    .map((node) => ({ key: node.name, label: node.name, title: node.name, count: 0, amount: 0 }));
+  const rowMap = new Map(rows.map((row) => [row.key, row]));
+
+  filteredAssets.forEach((asset) => {
+    const key = topLevelAssetCategoryName(asset.category || asset.type);
+    if (!rowMap.has(key)) {
+      const row = { key, label: key, title: key, count: 0, amount: 0 };
+      rows.push(row);
+      rowMap.set(key, row);
+    }
+    const row = rowMap.get(key);
+    row.count += 1;
+    row.amount += Number(asset.price) || 0;
+  });
+
+  const visibleRows = rows.filter((row) => row.count > 0 || row.amount > 0);
+  return visibleRows.length ? visibleRows : [{ key: "empty", label: "暂无分类", title: "暂无分类", count: 0, amount: 0 }];
+}
+
+function dashboardMetricLabel(value, mode = "count") {
+  const number = Math.round(Number(value) || 0);
+  if (mode === "amount" && number >= 10000) return `${Math.round(number / 10000).toLocaleString("zh-CN")}万`;
+  return number.toLocaleString("zh-CN");
+}
+
 function renderDashboardPanel(assets) {
   const receiveCount = assets.filter((item) => item.status === "在用").length;
   const borrowCount = assets.filter((item) => item.status === "借用中").length;
@@ -4208,6 +4250,17 @@ function renderDashboardPanel(assets) {
   const distributionColumnMin = 72;
   const distributionWidth = Math.max(420, distributionRows.length * 84);
   const distributionColumns = `repeat(${distributionRows.length}, minmax(${distributionColumnMin}px, 1fr))`;
+  const categoryCompanyFilter = companyOptions.includes(state.assetCategoryCompanyFilter) ? state.assetCategoryCompanyFilter : "所属/承租公司";
+  const categoryMetricMode = state.assetCategoryMetricMode === "amount" ? "amount" : "count";
+  const categoryStatRows = buildAssetCategoryStatRows(assets, categoryCompanyFilter);
+  const categoryMetricKey = categoryMetricMode === "amount" ? "amount" : "count";
+  const categoryRawMax = Math.max(...categoryStatRows.map((item) => item[categoryMetricKey]), 0);
+  const categoryMax = categoryRawMax || 1;
+  const categoryTicks = categoryRawMax
+    ? [categoryMax, Math.round(categoryMax * 0.75), Math.round(categoryMax * 0.5), Math.round(categoryMax * 0.25), 0]
+    : [0, 0, 0, 0, 0];
+  const categoryColumns = `repeat(${categoryStatRows.length}, minmax(64px, 1fr))`;
+  const categoryWidth = Math.max(420, categoryStatRows.length * 76);
   const totalBarHeight = assets.length ? 100 : 0;
   const activeBarHeight = assets.length ? Math.max((receiveCount / assets.length) * 100, 8) : 0;
 
@@ -4315,6 +4368,49 @@ function renderDashboardPanel(assets) {
               <span class="bar active" style="--bar-height: ${activeBarHeight}%"></span>
               <em>在用数量</em>
             </div>
+          </div>
+        </div>
+      </article>
+      <article class="dashboard-chart-card asset-category-stat-card">
+        <div class="dashboard-card-head">
+          <h3>资产分类统计</h3>
+          <div class="dashboard-card-filters">
+            <select aria-label="资产分类所属或承租公司" data-dashboard-category-company>
+              ${companyOptions
+                .map((option) => `<option value="${escapeHtml(option)}" ${option === categoryCompanyFilter ? "selected" : ""}>${escapeHtml(option)}</option>`)
+                .join("")}
+            </select>
+          </div>
+        </div>
+        <div class="asset-distribution-chart asset-category-stat-chart">
+          <div class="asset-distribution-body">
+            <div class="asset-distribution-axis" aria-hidden="true">
+              ${categoryTicks.map((tick) => `<span>${dashboardMetricLabel(tick, categoryMetricMode)}</span>`).join("")}
+            </div>
+            <div class="asset-distribution-plot" style="--distribution-width: ${categoryWidth}px; --distribution-columns: ${categoryColumns}">
+              <div class="asset-distribution-plot-inner">
+                <div class="asset-distribution-grid" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+                <div class="asset-distribution-bars">
+                  ${categoryStatRows
+                    .map((item) => {
+                      const value = item[categoryMetricKey];
+                      const barHeight = categoryMax ? Math.max((value / categoryMax) * 78, value ? 6 : 0) : 0;
+                      return `<div class="asset-distribution-bar" title="${escapeHtml(item.title)}：${dashboardMetricLabel(value, categoryMetricMode)}" style="--bar-height: ${barHeight.toFixed(2)}%">
+                        ${value || item.count || item.amount ? `<strong>${dashboardMetricLabel(value, categoryMetricMode)}</strong>` : ""}
+                        <span></span>
+                      </div>`;
+                    })
+                    .join("")}
+                </div>
+                <div class="asset-distribution-labels">
+                  ${categoryStatRows.map((item) => `<span title="${escapeHtml(item.title)}">${escapeHtml(item.label)}</span>`).join("")}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="asset-distribution-tabs asset-category-stat-tabs">
+            <button class="${categoryMetricMode === "count" ? "active" : ""}" type="button" data-asset-category-metric="count" aria-pressed="${categoryMetricMode === "count" ? "true" : "false"}">数量</button>
+            <button class="${categoryMetricMode === "amount" ? "active" : ""}" type="button" data-asset-category-metric="amount" aria-pressed="${categoryMetricMode === "amount" ? "true" : "false"}">金额</button>
           </div>
         </div>
       </article>
@@ -10620,6 +10716,16 @@ function bindPageEvents() {
   document.querySelectorAll("[data-asset-distribution-mode]").forEach((el) =>
     el.addEventListener("click", () => {
       state.assetDistributionMode = el.dataset.assetDistributionMode === "location" ? "location" : "organization";
+      render();
+    })
+  );
+  document.querySelector("[data-dashboard-category-company]")?.addEventListener("change", (event) => {
+    state.assetCategoryCompanyFilter = event.currentTarget.value || "所属/承租公司";
+    render();
+  });
+  document.querySelectorAll("[data-asset-category-metric]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.assetCategoryMetricMode = el.dataset.assetCategoryMetric === "amount" ? "amount" : "count";
       render();
     })
   );

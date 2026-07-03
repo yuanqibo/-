@@ -4992,6 +4992,20 @@ button.self-service-category-chip.more:hover {
   color: #1296db;
 }
 
+.asset-category-stat-card .dashboard-card-filters select {
+  min-width: 176px;
+}
+
+.asset-category-stat-card .asset-distribution-bars,
+.asset-category-stat-card .asset-distribution-labels {
+  padding-right: 34px;
+  padding-left: 24px;
+}
+
+.asset-category-stat-card .asset-distribution-bar span {
+  width: 30px;
+}
+
 .bar-chart {
   min-height: 246px;
   position: relative;
