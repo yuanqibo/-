@@ -4213,8 +4213,7 @@ function buildAssetCategoryStatRows(assets, companyFilter = "所属/承租公司
     row.amount += Number(asset.price) || 0;
   });
 
-  const visibleRows = rows.filter((row) => row.count > 0 || row.amount > 0);
-  return visibleRows.length ? visibleRows : [{ key: "empty", label: "暂无分类", title: "暂无分类", count: 0, amount: 0 }];
+  return rows.length ? rows : [{ key: "empty", label: "暂无分类", title: "暂无分类", count: 0, amount: 0 }];
 }
 
 function dashboardMetricLabel(value, mode = "count") {
@@ -4259,8 +4258,8 @@ function renderDashboardPanel(assets) {
   const categoryTicks = categoryRawMax
     ? [categoryMax, Math.round(categoryMax * 0.75), Math.round(categoryMax * 0.5), Math.round(categoryMax * 0.25), 0]
     : [0, 0, 0, 0, 0];
-  const categoryColumns = `repeat(${categoryStatRows.length}, minmax(64px, 1fr))`;
-  const categoryWidth = Math.max(420, categoryStatRows.length * 76);
+  const categoryColumns = `repeat(${categoryStatRows.length}, minmax(52px, 1fr))`;
+  const categoryWidth = Math.max(420, categoryStatRows.length * 52);
   const totalBarHeight = assets.length ? 100 : 0;
   const activeBarHeight = assets.length ? Math.max((receiveCount / assets.length) * 100, 8) : 0;
 

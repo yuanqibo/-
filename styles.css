@@ -4996,14 +4996,22 @@ button.self-service-category-chip.more:hover {
   min-width: 176px;
 }
 
+.asset-category-stat-card .asset-distribution-plot {
+  overflow-x: hidden;
+}
+
 .asset-category-stat-card .asset-distribution-bars,
 .asset-category-stat-card .asset-distribution-labels {
-  padding-right: 34px;
-  padding-left: 24px;
+  padding-right: 22px;
+  padding-left: 18px;
 }
 
 .asset-category-stat-card .asset-distribution-bar span {
-  width: 30px;
+  width: 24px;
+}
+
+.asset-category-stat-card .asset-distribution-labels span {
+  font-size: 11px;
 }
 
 .bar-chart {
