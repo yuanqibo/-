@@ -128,6 +128,39 @@ MYSQL_PASSWORD='请换成你的 MySQL 密码' bash scripts/setup-server.sh
 sudo systemctl restart asset-portal
 ```
 
+### Git 拉取更新
+
+项目接入 Git 远程仓库后，服务器建议直接从仓库拉取代码：
+
+```bash
+sudo mkdir -p /opt/asset-portal
+sudo chown -R $USER:$USER /opt/asset-portal
+git clone <你的Git仓库地址> /opt/asset-portal
+cd /opt/asset-portal
+npm install --omit=dev
+MYSQL_PASSWORD='请换成你的 MySQL 密码' bash scripts/setup-server.sh
+sudo systemctl restart asset-portal
+```
+
+之后每次本地改完并推送到仓库，服务器只需要执行：
+
+```bash
+cd /opt/asset-portal
+git pull --ff-only
+npm install --omit=dev
+sudo systemctl restart asset-portal
+```
+
+也可以直接执行仓库里的更新脚本：
+
+```bash
+APP_DIR=/opt/asset-portal bash scripts/update-from-git.sh
+```
+
+`data/`、`node_modules/`、日志、`.env` 不会进入 Git 仓库，服务器上的数据库和环境变量不会被覆盖。
+
+### rsync 备选更新
+
 之后每次在 Mac 本地改完代码，只需要执行：
 
 ```bash
