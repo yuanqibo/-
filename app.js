@@ -4351,7 +4351,7 @@ function renderDashboardPanel(assets) {
       </article>
       <article class="dashboard-chart-card">
         <div class="dashboard-card-head">
-          <h3>资产数量分布</h3>
+          <h3>在用资产统计</h3>
           <span class="tag blue">当前范围</span>
         </div>
         <div class="bar-chart">
