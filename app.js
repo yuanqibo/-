@@ -4260,8 +4260,14 @@ function renderDashboardPanel(assets) {
     : [0, 0, 0, 0, 0];
   const categoryColumns = `repeat(${categoryStatRows.length}, minmax(52px, 1fr))`;
   const categoryWidth = Math.max(420, categoryStatRows.length * 52);
-  const totalBarHeight = assets.length ? 100 : 0;
-  const activeBarHeight = assets.length ? Math.max((receiveCount / assets.length) * 100, 8) : 0;
+  const activeAssetRows = buildAssetCategoryStatRows(
+    assets.filter((asset) => asset.status === "在用"),
+    "所属/承租公司"
+  );
+  const activeAssetMax = Math.max(...activeAssetRows.map((item) => item.count), 1);
+  const activeAssetTicks = [activeAssetMax, activeAssetMax * 0.75, activeAssetMax * 0.5, activeAssetMax * 0.25, 0];
+  const activeAssetColumns = `repeat(${activeAssetRows.length}, minmax(52px, 1fr))`;
+  const activeAssetWidth = Math.max(420, activeAssetRows.length * 52);
 
   return `<article class="panel dashboard-panel">
     <div class="panel-header">
@@ -4349,23 +4355,34 @@ function renderDashboardPanel(assets) {
           </div>
         </div>
       </article>
-      <article class="dashboard-chart-card">
+      <article class="dashboard-chart-card active-asset-stat-card">
         <div class="dashboard-card-head">
           <h3>在用资产统计</h3>
           <span class="tag blue">当前范围</span>
         </div>
-        <div class="bar-chart">
-          <div class="bar-grid" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-          <div class="bar-group">
-            <div class="bar-column">
-              <strong>${assets.length}</strong>
-              <span class="bar" style="--bar-height: ${totalBarHeight}%"></span>
-              <em>总资产数</em>
+        <div class="asset-distribution-chart active-asset-stat-chart">
+          <div class="asset-distribution-body">
+            <div class="asset-distribution-axis" aria-hidden="true">
+              ${activeAssetTicks.map((tick) => `<span>${tick.toLocaleString("zh-CN")}</span>`).join("")}
             </div>
-            <div class="bar-column">
-              <strong>${receiveCount}</strong>
-              <span class="bar active" style="--bar-height: ${activeBarHeight}%"></span>
-              <em>在用数量</em>
+            <div class="asset-distribution-plot" style="--distribution-width: ${activeAssetWidth}px; --distribution-columns: ${activeAssetColumns}">
+              <div class="asset-distribution-plot-inner">
+                <div class="asset-distribution-grid" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+                <div class="asset-distribution-bars">
+                  ${activeAssetRows
+                    .map((item) => {
+                      const barHeight = activeAssetMax ? Math.max((item.count / activeAssetMax) * 78, item.count ? 6 : 0) : 0;
+                      return `<div class="asset-distribution-bar" title="${escapeHtml(item.title)}：${item.count.toLocaleString("zh-CN")}" style="--bar-height: ${barHeight.toFixed(2)}%">
+                        ${item.count ? `<strong>${item.count.toLocaleString("zh-CN")}</strong>` : ""}
+                        <span></span>
+                      </div>`;
+                    })
+                    .join("")}
+                </div>
+                <div class="asset-distribution-labels">
+                  ${activeAssetRows.map((item) => `<span title="${escapeHtml(item.title)}">${escapeHtml(item.label)}</span>`).join("")}
+                </div>
+              </div>
             </div>
           </div>
         </div>

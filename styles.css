@@ -5000,17 +5000,25 @@ button.self-service-category-chip.more:hover {
   overflow-x: hidden;
 }
 
+.active-asset-stat-card .asset-distribution-plot {
+  overflow-x: hidden;
+}
+
 .asset-category-stat-card .asset-distribution-bars,
-.asset-category-stat-card .asset-distribution-labels {
+.asset-category-stat-card .asset-distribution-labels,
+.active-asset-stat-card .asset-distribution-bars,
+.active-asset-stat-card .asset-distribution-labels {
   padding-right: 22px;
   padding-left: 18px;
 }
 
-.asset-category-stat-card .asset-distribution-bar span {
+.asset-category-stat-card .asset-distribution-bar span,
+.active-asset-stat-card .asset-distribution-bar span {
   width: 24px;
 }
 
-.asset-category-stat-card .asset-distribution-labels span {
+.asset-category-stat-card .asset-distribution-labels span,
+.active-asset-stat-card .asset-distribution-labels span {
   font-size: 11px;
 }
 
