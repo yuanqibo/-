@@ -4242,13 +4242,14 @@ function renderDashboardPanel(assets) {
     return segment;
   });
   const companyOptions = ["所属/承租公司", ...Array.from(new Set(assets.map((item) => item.ownerCompany || item.company).filter(Boolean)))];
+  const dashboardBarMinWidth = 420;
+  const dashboardBarColumnMin = 52;
   const distributionMode = state.assetDistributionMode === "location" ? "location" : "organization";
   const distributionRows = buildAssetDistributionRows(assets, distributionMode);
   const distributionMax = Math.max(...distributionRows.map((item) => item.count), 1);
   const distributionTicks = [distributionMax, Math.round(distributionMax * 0.75), Math.round(distributionMax * 0.5), Math.round(distributionMax * 0.25), 0];
-  const distributionColumnMin = 72;
-  const distributionWidth = Math.max(420, distributionRows.length * 84);
-  const distributionColumns = `repeat(${distributionRows.length}, minmax(${distributionColumnMin}px, 1fr))`;
+  const distributionWidth = Math.max(dashboardBarMinWidth, distributionRows.length * dashboardBarColumnMin);
+  const distributionColumns = `repeat(${distributionRows.length}, minmax(${dashboardBarColumnMin}px, 1fr))`;
   const categoryCompanyFilter = companyOptions.includes(state.assetCategoryCompanyFilter) ? state.assetCategoryCompanyFilter : "所属/承租公司";
   const categoryMetricMode = state.assetCategoryMetricMode === "amount" ? "amount" : "count";
   const categoryStatRows = buildAssetCategoryStatRows(assets, categoryCompanyFilter);
@@ -4258,16 +4259,16 @@ function renderDashboardPanel(assets) {
   const categoryTicks = categoryRawMax
     ? [categoryMax, Math.round(categoryMax * 0.75), Math.round(categoryMax * 0.5), Math.round(categoryMax * 0.25), 0]
     : [0, 0, 0, 0, 0];
-  const categoryColumns = `repeat(${categoryStatRows.length}, minmax(52px, 1fr))`;
-  const categoryWidth = Math.max(420, categoryStatRows.length * 52);
+  const categoryColumns = `repeat(${categoryStatRows.length}, minmax(${dashboardBarColumnMin}px, 1fr))`;
+  const categoryWidth = Math.max(dashboardBarMinWidth, categoryStatRows.length * dashboardBarColumnMin);
   const activeAssetRows = buildAssetCategoryStatRows(
     assets.filter((asset) => asset.status === "在用"),
     "所属/承租公司"
   );
   const activeAssetMax = Math.max(...activeAssetRows.map((item) => item.count), 1);
   const activeAssetTicks = [activeAssetMax, activeAssetMax * 0.75, activeAssetMax * 0.5, activeAssetMax * 0.25, 0];
-  const activeAssetColumns = `repeat(${activeAssetRows.length}, minmax(52px, 1fr))`;
-  const activeAssetWidth = Math.max(420, activeAssetRows.length * 52);
+  const activeAssetColumns = `repeat(${activeAssetRows.length}, minmax(${dashboardBarColumnMin}px, 1fr))`;
+  const activeAssetWidth = Math.max(dashboardBarMinWidth, activeAssetRows.length * dashboardBarColumnMin);
 
   return `<article class="panel dashboard-panel">
     <div class="panel-header">
