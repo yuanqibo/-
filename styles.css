@@ -4856,14 +4856,14 @@ button.self-service-category-chip.more:hover {
 .asset-distribution-card,
 .active-asset-stat-card,
 .asset-category-stat-card {
-  height: 330px;
-  min-height: 330px;
+  height: 420px;
+  min-height: 420px;
 }
 
 .asset-distribution-chart {
-  --dashboard-bar-plot-height: 100px;
-  --dashboard-bar-label-height: 128px;
-  min-height: 266px;
+  --dashboard-bar-plot-height: 224px;
+  --dashboard-bar-label-height: 120px;
+  min-height: 364px;
   display: grid;
   grid-template-rows: 1fr auto;
   gap: 10px;
@@ -4878,8 +4878,11 @@ button.self-service-category-chip.more:hover {
 }
 
 .asset-distribution-axis {
-  display: grid;
-  grid-template-rows: repeat(5, 1fr);
+  box-sizing: border-box;
+  height: calc(var(--dashboard-bar-plot-height) + var(--dashboard-bar-label-height));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   padding: 0 8px var(--dashboard-bar-label-height) 0;
   color: #c9ced6;
   font-size: 12px;
@@ -4897,7 +4900,7 @@ button.self-service-category-chip.more:hover {
   height: calc(var(--dashboard-bar-plot-height) + var(--dashboard-bar-label-height));
   grid-template-rows: var(--dashboard-bar-plot-height) var(--dashboard-bar-label-height);
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   position: relative;
   scrollbar-width: thin;
 }
@@ -4915,7 +4918,7 @@ button.self-service-category-chip.more:hover {
   grid-row: 1;
   position: relative;
   display: grid;
-  grid-template-rows: repeat(5, 1fr);
+  grid-template-rows: repeat(var(--tick-intervals, 4), 1fr);
   border-left: 1px solid #d4d9e2;
   border-bottom: 1px solid #d4d9e2;
 }
@@ -4945,7 +4948,7 @@ button.self-service-category-chip.more:hover {
 
 .asset-distribution-bar strong {
   position: absolute;
-  bottom: calc(var(--bar-height) + 8px);
+  bottom: min(calc(var(--bar-height) + 8px), calc(100% - 14px));
   color: #1296db;
   font-size: 13px;
   line-height: 1;
@@ -4953,7 +4956,7 @@ button.self-service-category-chip.more:hover {
 }
 
 .asset-distribution-bar span {
-  width: 28px;
+  width: 34px;
   height: var(--bar-height);
   min-height: 0;
   border-radius: 2px 2px 0 0;
@@ -4966,16 +4969,16 @@ button.self-service-category-chip.more:hover {
   grid-template-columns: var(--distribution-columns);
   padding: 0 42px 0 30px;
   min-height: var(--dashboard-bar-label-height);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .asset-distribution-labels span {
   justify-self: center;
-  margin-top: 5px;
+  margin-top: 9px;
   color: #8a9099;
   font-size: 11px;
   line-height: 1.2;
-  transform: translateY(-4px) rotate(-38deg);
+  transform: rotate(-38deg);
   transform-origin: top center;
   white-space: nowrap;
 }
@@ -5005,24 +5008,24 @@ button.self-service-category-chip.more:hover {
 }
 
 .asset-category-stat-card .asset-distribution-plot {
-  overflow-x: hidden;
+  overflow-x: visible;
 }
 
 .active-asset-stat-card .asset-distribution-plot {
-  overflow-x: hidden;
+  overflow-x: visible;
 }
 
 .asset-category-stat-card .asset-distribution-bars,
 .asset-category-stat-card .asset-distribution-labels,
 .active-asset-stat-card .asset-distribution-bars,
 .active-asset-stat-card .asset-distribution-labels {
-  padding-right: 22px;
-  padding-left: 18px;
+  padding-right: 42px;
+  padding-left: 30px;
 }
 
 .asset-category-stat-card .asset-distribution-bar span,
 .active-asset-stat-card .asset-distribution-bar span {
-  width: 28px;
+  width: 34px;
 }
 
 .bar-chart {
