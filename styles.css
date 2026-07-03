@@ -4854,6 +4854,8 @@ button.self-service-category-chip.more:hover {
 }
 
 .asset-distribution-card {
+  order: -1;
+  grid-column: 1 / -1;
   min-height: 310px;
 }
 
@@ -4890,6 +4892,18 @@ button.self-service-category-chip.more:hover {
   min-width: 0;
   display: grid;
   grid-template-rows: minmax(150px, 1fr) 48px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  position: relative;
+  scrollbar-width: thin;
+}
+
+.asset-distribution-plot-inner {
+  grid-row: 1 / -1;
+  min-width: var(--distribution-width, 100%);
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(150px, 1fr) 48px;
   position: relative;
 }
 
@@ -4911,6 +4925,7 @@ button.self-service-category-chip.more:hover {
   inset: 0 0 48px;
   z-index: 1;
   display: grid;
+  grid-template-columns: var(--distribution-columns);
   align-items: end;
   padding: 0 42px 0 30px;
   pointer-events: none;
@@ -4944,6 +4959,7 @@ button.self-service-category-chip.more:hover {
 .asset-distribution-labels {
   grid-row: 2;
   display: grid;
+  grid-template-columns: var(--distribution-columns);
   padding: 0 42px 0 30px;
 }
 

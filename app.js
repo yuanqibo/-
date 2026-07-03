@@ -2455,6 +2455,7 @@ const state = {
   pendingRoleDeleteId: "",
   navOpen: {},
   assetSubnavScrollTop: 0,
+  assetDistributionMode: "organization",
   locationTreeOpen: {},
   assetCategoryTreeOpen: {},
   locationImportBusy: false,
@@ -4149,6 +4150,36 @@ function renderWorkbenchCard(item) {
   </button>`;
 }
 
+function buildAssetDistributionRows(assets, mode = "organization") {
+  if (mode === "location") {
+    const rows = flattenLocationTree()
+      .filter((node) => node.enabled !== false)
+      .map((node) => ({ key: node.path, label: node.name || node.path, title: node.path, count: 0 }));
+    const rowMap = new Map(rows.map((row) => [row.key, row]));
+    assets.forEach((asset) => {
+      const key = normalizeLocationValue(asset.location) || "未设置位置";
+      if (!rowMap.has(key)) {
+        const label = key.split(" / ").filter(Boolean).pop() || key;
+        const row = { key, label, title: key, count: 0 };
+        rows.push(row);
+        rowMap.set(key, row);
+      }
+      rowMap.get(key).count += 1;
+    });
+    return rows.length ? rows : [{ key: "empty", label: "暂无位置", title: "暂无位置", count: 0 }];
+  }
+
+  const distributionMap = new Map();
+  assets.forEach((asset) => {
+    const key = asset.ownerCompany || asset.company || "默认公司";
+    distributionMap.set(key, (distributionMap.get(key) || 0) + 1);
+  });
+  const rows = Array.from(distributionMap, ([label, count]) => ({ key: label, label, title: label, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+  return rows.length ? rows : [{ key: "default", label: "默认公司", title: "默认公司", count: 0 }];
+}
+
 function renderDashboardPanel(assets) {
   const receiveCount = assets.filter((item) => item.status === "在用").length;
   const borrowCount = assets.filter((item) => item.status === "借用中").length;
@@ -4169,18 +4200,13 @@ function renderDashboardPanel(assets) {
     return segment;
   });
   const companyOptions = ["所属/承租公司", ...Array.from(new Set(assets.map((item) => item.ownerCompany || item.company).filter(Boolean)))];
-  const distributionMap = new Map();
-  assets.forEach((asset) => {
-    const key = asset.ownerCompany || asset.company || "默认公司";
-    distributionMap.set(key, (distributionMap.get(key) || 0) + 1);
-  });
-  const distributionRows = Array.from(distributionMap, ([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 6);
-  if (!distributionRows.length) distributionRows.push({ label: "默认公司", count: 0 });
+  const distributionMode = state.assetDistributionMode === "location" ? "location" : "organization";
+  const distributionRows = buildAssetDistributionRows(assets, distributionMode);
   const distributionMax = Math.max(...distributionRows.map((item) => item.count), 1);
   const distributionTicks = [distributionMax, Math.round(distributionMax * 0.75), Math.round(distributionMax * 0.5), Math.round(distributionMax * 0.25), 0];
-  const distributionColumns = `repeat(${distributionRows.length}, minmax(72px, 1fr))`;
+  const distributionColumnMin = distributionMode === "location" ? 64 : 72;
+  const distributionWidth = Math.max(distributionMode === "location" ? 540 : 420, distributionRows.length * (distributionMode === "location" ? 70 : 84));
+  const distributionColumns = `repeat(${distributionRows.length}, minmax(${distributionColumnMin}px, 1fr))`;
   const totalBarHeight = assets.length ? 100 : 0;
   const activeBarHeight = assets.length ? Math.max((receiveCount / assets.length) * 100, 8) : 0;
 
@@ -4244,27 +4270,29 @@ function renderDashboardPanel(assets) {
             <div class="asset-distribution-axis" aria-hidden="true">
               ${distributionTicks.map((tick) => `<span>${tick.toLocaleString("zh-CN")}</span>`).join("")}
             </div>
-            <div class="asset-distribution-plot">
-              <div class="asset-distribution-grid" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
-              <div class="asset-distribution-bars" style="grid-template-columns: ${distributionColumns}">
-                ${distributionRows
-                  .map((item) => {
-                    const barHeight = distributionMax ? Math.max((item.count / distributionMax) * 78, item.count ? 6 : 0) : 0;
-                    return `<div class="asset-distribution-bar" style="--bar-height: ${barHeight.toFixed(2)}%">
-                      <strong>${item.count.toLocaleString("zh-CN")}</strong>
-                      <span></span>
-                    </div>`;
-                  })
-                  .join("")}
-              </div>
-              <div class="asset-distribution-labels" style="grid-template-columns: ${distributionColumns}">
-                ${distributionRows.map((item) => `<span>${escapeHtml(item.label)}</span>`).join("")}
+            <div class="asset-distribution-plot" style="--distribution-width: ${distributionWidth}px; --distribution-columns: ${distributionColumns}">
+              <div class="asset-distribution-plot-inner">
+                <div class="asset-distribution-grid" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+                <div class="asset-distribution-bars">
+                  ${distributionRows
+                    .map((item) => {
+                      const barHeight = distributionMax ? Math.max((item.count / distributionMax) * 78, item.count ? 6 : 0) : 0;
+                      return `<div class="asset-distribution-bar" title="${escapeHtml(item.title)}：${item.count.toLocaleString("zh-CN")}" style="--bar-height: ${barHeight.toFixed(2)}%">
+                        ${item.count ? `<strong>${item.count.toLocaleString("zh-CN")}</strong>` : ""}
+                        <span></span>
+                      </div>`;
+                    })
+                    .join("")}
+                </div>
+                <div class="asset-distribution-labels">
+                  ${distributionRows.map((item) => `<span title="${escapeHtml(item.title)}">${escapeHtml(item.label)}</span>`).join("")}
+                </div>
               </div>
             </div>
           </div>
           <div class="asset-distribution-tabs">
-            <button class="active" type="button">组织架构</button>
-            <button type="button">所在位置</button>
+            <button class="${distributionMode === "organization" ? "active" : ""}" type="button" data-asset-distribution-mode="organization" aria-pressed="${distributionMode === "organization" ? "true" : "false"}">组织架构</button>
+            <button class="${distributionMode === "location" ? "active" : ""}" type="button" data-asset-distribution-mode="location" aria-pressed="${distributionMode === "location" ? "true" : "false"}">所在位置</button>
           </div>
         </div>
       </article>
@@ -10587,6 +10615,12 @@ function bindPageEvents() {
   );
   document.querySelectorAll("[data-asset-subnav-toggle]").forEach((el) =>
     el.addEventListener("click", () => toggleAssetSubnavGroup(el.dataset.assetSubnavToggle))
+  );
+  document.querySelectorAll("[data-asset-distribution-mode]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.assetDistributionMode = el.dataset.assetDistributionMode === "location" ? "location" : "organization";
+      render();
+    })
   );
   document.querySelectorAll("[data-system-menu]").forEach((el) =>
     el.addEventListener("click", () => {
