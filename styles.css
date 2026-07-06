@@ -4721,15 +4721,15 @@ button.self-service-category-chip.more:hover {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(160px, 0.85fr) minmax(160px, 1fr);
+  grid-template-columns: minmax(240px, 0.95fr) minmax(240px, 1fr);
   align-items: center;
   align-content: center;
-  gap: 18px;
+  gap: 28px;
   padding: 22px 0 30px;
 }
 
 .dashboard-donut {
-  width: min(188px, 100%);
+  width: min(236px, 100%);
   aspect-ratio: 1;
   border-radius: 50%;
   display: grid;
@@ -4823,15 +4823,17 @@ button.self-service-category-chip.more:hover {
 }
 
 .chart-legend {
+  width: min(250px, 100%);
   display: grid;
   gap: 12px;
+  justify-self: end;
 }
 
 .chart-legend div {
   display: grid;
-  grid-template-columns: 10px 1fr auto auto;
+  grid-template-columns: 10px 1fr 28px 42px;
   align-items: center;
-  gap: 10px;
+  column-gap: 8px;
   color: #475569;
   font-size: 13px;
 }
@@ -4839,10 +4841,10 @@ button.self-service-category-chip.more:hover {
 .chart-legend strong {
   color: #0f172a;
   font-size: 16px;
+  text-align: right;
 }
 
 .chart-legend em {
-  min-width: 38px;
   color: var(--muted);
   font-style: normal;
   text-align: right;
