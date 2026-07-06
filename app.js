@@ -4510,9 +4510,7 @@ function renderManagementHome() {
 
 function renderEmployeeHome() {
   const deviceAssets = getScopedAssets().filter((item) => item.type !== "软件许可");
-  const softwareAssets = getScopedAssets().filter((item) => item.type === "软件许可");
   const requests = getScopedRequests();
-  const pendingCount = requests.filter((item) => item.status !== "已完成").length;
   const myPrimaryAsset = deviceAssets[0];
 
   const quickActions = [
@@ -4534,28 +4532,6 @@ function renderEmployeeHome() {
       <h1>${greeting()}，${state.currentUser.name}</h1>
       <p>当前以普通员工身份登录。普通员工由管理员添加员工信息后使用，只展示本人资产、个人申请和审批状态。</p>
       <div class="quick-actions">${quickActions.map(renderQuickActionButton).join("")}</div>
-    </section>
-    <section class="grid stats-grid">
-      <article class="stat-card" data-watermark="ME">
-        <div class="stat-top"><span>我的设备</span>${statusTag("在用")}</div>
-        <div class="stat-value">${deviceAssets.length}</div>
-        <div class="stat-note">已分配到本人或本部门的终端设备</div>
-      </article>
-      <article class="stat-card" data-watermark="OA">
-        <div class="stat-top"><span>审批中申请</span>${statusTag("审批中")}</div>
-        <div class="stat-value">${pendingCount}</div>
-        <div class="stat-note">等待普通管理员处理</div>
-      </article>
-      <article class="stat-card" data-watermark="LIC">
-        <div class="stat-top"><span>可用许可</span><span class="tag blue">个人视角</span></div>
-        <div class="stat-value">${softwareAssets.length}</div>
-        <div class="stat-note">展示本人可见的软件许可与订阅</div>
-      </article>
-      <article class="stat-card" data-watermark="ID">
-        <div class="stat-top"><span>登录身份</span>${statusTag("在用")}</div>
-        <div class="stat-value">1</div>
-        <div class="stat-note">${state.session.method === "oidc" ? `已绑定 ${shortProviderName(state.session.provider)}` : "本地演示账号"}</div>
-      </article>
     </section>
     <section class="grid content-grid">
       <article class="panel">
