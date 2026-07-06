@@ -4956,7 +4956,7 @@ button.self-service-category-chip.more:hover {
   grid-template-columns: var(--distribution-columns);
   align-items: end;
   padding: 0 42px 0 30px;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .asset-distribution-bar {
@@ -4965,6 +4965,59 @@ button.self-service-category-chip.more:hover {
   display: grid;
   justify-items: center;
   align-items: end;
+  cursor: default;
+}
+
+.asset-distribution-bar::after {
+  content: attr(data-tooltip-title) "\A" attr(data-tooltip-detail);
+  position: absolute;
+  left: calc(50% + 26px);
+  bottom: 18px;
+  z-index: 8;
+  min-width: 152px;
+  max-width: 220px;
+  padding: 9px 12px 10px 30px;
+  border-radius: 4px;
+  background: rgba(45, 45, 45, 0.82);
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  text-align: left;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(4px, 6px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.asset-distribution-bar::before {
+  content: "";
+  position: absolute;
+  left: calc(50% + 38px);
+  bottom: 30px;
+  z-index: 9;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #1fa4e5;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(4px, 6px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.asset-distribution-bar:hover::after,
+.asset-distribution-bar:focus-visible::after,
+.asset-distribution-bar:hover::before,
+.asset-distribution-bar:focus-visible::before {
+  opacity: 1;
+  transform: translate(0, 0);
 }
 
 .asset-distribution-bar strong {

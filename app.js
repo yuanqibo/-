@@ -4352,7 +4352,7 @@ function renderDashboardPanel(assets) {
                   ${distributionRows
                     .map((item) => {
                       const barHeight = distributionScale.max ? Math.max((item.count / distributionScale.max) * 100, item.count ? 6 : 0) : 0;
-                      return `<div class="asset-distribution-bar" title="${escapeHtml(item.title)}：${item.count.toLocaleString("zh-CN")}" style="--bar-height: ${barHeight.toFixed(2)}%">
+                      return `<div class="asset-distribution-bar" data-tooltip-title="${escapeHtml(item.title)}" data-tooltip-detail="资产分布情况：${item.count.toLocaleString("zh-CN")}" aria-label="${escapeHtml(item.title)}，资产分布情况：${item.count.toLocaleString("zh-CN")}" style="--bar-height: ${barHeight.toFixed(2)}%">
                         ${item.count ? `<strong>${item.count.toLocaleString("zh-CN")}</strong>` : ""}
                         <span></span>
                       </div>`;
@@ -4387,7 +4387,7 @@ function renderDashboardPanel(assets) {
                   ${activeAssetRows
                     .map((item) => {
                       const barHeight = activeAssetScale.max ? Math.max((item.count / activeAssetScale.max) * 100, item.count ? 6 : 0) : 0;
-                      return `<div class="asset-distribution-bar" title="${escapeHtml(item.title)}：${item.count.toLocaleString("zh-CN")}" style="--bar-height: ${barHeight.toFixed(2)}%">
+                      return `<div class="asset-distribution-bar" data-tooltip-title="${escapeHtml(item.title)}" data-tooltip-detail="在用资产统计：${item.count.toLocaleString("zh-CN")}" aria-label="${escapeHtml(item.title)}，在用资产统计：${item.count.toLocaleString("zh-CN")}" style="--bar-height: ${barHeight.toFixed(2)}%">
                         ${item.count ? `<strong>${item.count.toLocaleString("zh-CN")}</strong>` : ""}
                         <span></span>
                       </div>`;
@@ -4419,7 +4419,7 @@ function renderDashboardPanel(assets) {
                     .map((item) => {
                       const value = item[categoryMetricKey];
                       const barHeight = categoryScale.max ? Math.max((value / categoryScale.max) * 100, value ? 6 : 0) : 0;
-                      return `<div class="asset-distribution-bar" title="${escapeHtml(item.title)}：${dashboardMetricLabel(value, categoryMetricMode)}" style="--bar-height: ${barHeight.toFixed(2)}%">
+                      return `<div class="asset-distribution-bar" data-tooltip-title="${escapeHtml(item.title)}" data-tooltip-detail="资产分类统计：${dashboardMetricLabel(value, categoryMetricMode)}" aria-label="${escapeHtml(item.title)}，资产分类统计：${dashboardMetricLabel(value, categoryMetricMode)}" style="--bar-height: ${barHeight.toFixed(2)}%">
                         ${value || item.count || item.amount ? `<strong>${dashboardMetricLabel(value, categoryMetricMode)}</strong>` : ""}
                         <span></span>
                       </div>`;
