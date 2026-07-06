@@ -281,6 +281,25 @@ button {
   transform: translate(0, -50%);
 }
 
+.employee-terminal-view .nav {
+  flex: 0 0 auto;
+  padding-bottom: 0;
+}
+
+.employee-terminal-view .sidebar-tools {
+  gap: 0;
+  padding: 0;
+}
+
+.employee-terminal-view .sidebar-tool {
+  height: 90px;
+}
+
+.employee-terminal-view .sidebar-tool-icon {
+  width: 36px;
+  height: 36px;
+}
+
 .nav-content {
   position: relative;
   display: flex;

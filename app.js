@@ -3942,6 +3942,7 @@ function saveProfileCenterForm(form) {
 function renderChrome() {
   const authenticated = isAuthenticated();
   document.body.classList.toggle("auth-view", !authenticated);
+  document.body.classList.toggle("employee-terminal-view", authenticated && state.currentUser?.roleCode === "employee");
   document.body.classList.toggle("self-service-view", authenticated && state.route === "settings" && state.systemMenu === "员工自助");
   document.title = authenticated ? `资产云管家 - ${routeTitle()}` : "资产云管家 - 登录入口";
 
