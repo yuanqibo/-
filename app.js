@@ -4269,7 +4269,7 @@ function renderDashboardPanel(assets) {
   const distributionScale = dashboardChartScale(Math.max(...distributionRows.map((item) => item.count), 0));
   const distributionWidth = Math.max(dashboardBarMinWidth, distributionRows.length * dashboardBarColumnMin);
   const distributionColumns = `repeat(${distributionRows.length}, minmax(${dashboardBarColumnMin}px, 1fr))`;
-  const categoryCompanyFilter = companyOptions.includes(state.assetCategoryCompanyFilter) ? state.assetCategoryCompanyFilter : "所属/承租公司";
+  const categoryCompanyFilter = "所属/承租公司";
   const categoryMetricMode = state.assetCategoryMetricMode === "amount" ? "amount" : "count";
   const categoryStatRows = buildAssetCategoryStatRows(assets, categoryCompanyFilter);
   const categoryMetricKey = categoryMetricMode === "amount" ? "amount" : "count";
@@ -4374,7 +4374,6 @@ function renderDashboardPanel(assets) {
       <article class="dashboard-chart-card active-asset-stat-card">
         <div class="dashboard-card-head">
           <h3>在用资产统计</h3>
-          <span class="tag blue">当前范围</span>
         </div>
         <div class="asset-distribution-chart active-asset-stat-chart">
           <div class="asset-distribution-body" style="--tick-intervals: ${Math.max(activeAssetScale.ticks.length - 1, 1)}">
@@ -4406,13 +4405,6 @@ function renderDashboardPanel(assets) {
       <article class="dashboard-chart-card asset-category-stat-card">
         <div class="dashboard-card-head">
           <h3>资产分类统计</h3>
-          <div class="dashboard-card-filters">
-            <select aria-label="资产分类所属或承租公司" data-dashboard-category-company>
-              ${companyOptions
-                .map((option) => `<option value="${escapeHtml(option)}" ${option === categoryCompanyFilter ? "selected" : ""}>${escapeHtml(option)}</option>`)
-                .join("")}
-            </select>
-          </div>
         </div>
         <div class="asset-distribution-chart asset-category-stat-chart">
           <div class="asset-distribution-body" style="--tick-intervals: ${Math.max(categoryScale.ticks.length - 1, 1)}">
@@ -10751,10 +10743,6 @@ function bindPageEvents() {
       render();
     })
   );
-  document.querySelector("[data-dashboard-category-company]")?.addEventListener("change", (event) => {
-    state.assetCategoryCompanyFilter = event.currentTarget.value || "所属/承租公司";
-    render();
-  });
   document.querySelectorAll("[data-asset-category-metric]").forEach((el) =>
     el.addEventListener("click", () => {
       state.assetCategoryMetricMode = el.dataset.assetCategoryMetric === "amount" ? "amount" : "count";
