@@ -4828,7 +4828,7 @@ button.self-service-category-chip.more:hover {
 }
 
 .chart-legend {
-  width: min(250px, 100%);
+  width: min(176px, 100%);
   display: grid;
   gap: 12px;
   justify-self: end;
@@ -4836,7 +4836,7 @@ button.self-service-category-chip.more:hover {
 
 .chart-legend div {
   display: grid;
-  grid-template-columns: 10px 1fr 28px 42px;
+  grid-template-columns: 10px 58px 28px 42px;
   align-items: center;
   column-gap: 8px;
   color: #475569;
