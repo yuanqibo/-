@@ -4262,28 +4262,23 @@ function renderDashboardPanel(assets) {
     return segment;
   });
   const companyOptions = ["所属/承租公司", ...Array.from(new Set(assets.map((item) => item.ownerCompany || item.company).filter(Boolean)))];
-  const dashboardBarMinWidth = 420;
-  const dashboardBarColumnMin = 52;
   const distributionMode = state.assetDistributionMode === "location" ? "location" : "organization";
   const distributionRows = buildAssetDistributionRows(assets, distributionMode);
   const distributionScale = dashboardChartScale(Math.max(...distributionRows.map((item) => item.count), 0));
-  const distributionWidth = Math.max(dashboardBarMinWidth, distributionRows.length * dashboardBarColumnMin);
-  const distributionColumns = `repeat(${distributionRows.length}, minmax(${dashboardBarColumnMin}px, 1fr))`;
+  const distributionColumns = `repeat(${distributionRows.length}, minmax(0, 1fr))`;
   const categoryCompanyFilter = "所属/承租公司";
   const categoryMetricMode = state.assetCategoryMetricMode === "amount" ? "amount" : "count";
   const categoryStatRows = buildAssetCategoryStatRows(assets, categoryCompanyFilter);
   const categoryMetricKey = categoryMetricMode === "amount" ? "amount" : "count";
   const categoryRawMax = Math.max(...categoryStatRows.map((item) => item[categoryMetricKey]), 0);
   const categoryScale = dashboardChartScale(categoryRawMax);
-  const categoryColumns = `repeat(${categoryStatRows.length}, minmax(${dashboardBarColumnMin}px, 1fr))`;
-  const categoryWidth = Math.max(dashboardBarMinWidth, categoryStatRows.length * dashboardBarColumnMin);
+  const categoryColumns = `repeat(${categoryStatRows.length}, minmax(0, 1fr))`;
   const activeAssetRows = buildAssetCategoryStatRows(
     assets.filter((asset) => asset.status === "在用"),
     "所属/承租公司"
   );
   const activeAssetScale = dashboardChartScale(Math.max(...activeAssetRows.map((item) => item.count), 0));
-  const activeAssetColumns = `repeat(${activeAssetRows.length}, minmax(${dashboardBarColumnMin}px, 1fr))`;
-  const activeAssetWidth = Math.max(dashboardBarMinWidth, activeAssetRows.length * dashboardBarColumnMin);
+  const activeAssetColumns = `repeat(${activeAssetRows.length}, minmax(0, 1fr))`;
 
   return `<article class="panel dashboard-panel">
     <div class="panel-header">
@@ -4345,14 +4340,14 @@ function renderDashboardPanel(assets) {
             <div class="asset-distribution-axis" aria-hidden="true">
               ${distributionScale.ticks.map((tick) => `<span>${tick.toLocaleString("zh-CN")}</span>`).join("")}
             </div>
-            <div class="asset-distribution-plot" style="--distribution-width: ${distributionWidth}px; --distribution-columns: ${distributionColumns}; --tick-intervals: ${Math.max(distributionScale.ticks.length - 1, 1)}">
+            <div class="asset-distribution-plot" style="--distribution-columns: ${distributionColumns}; --tick-intervals: ${Math.max(distributionScale.ticks.length - 1, 1)}">
               <div class="asset-distribution-plot-inner">
                 <div class="asset-distribution-grid" aria-hidden="true">${dashboardGridLines(distributionScale.ticks)}</div>
                 <div class="asset-distribution-bars">
                   ${distributionRows
                     .map((item) => {
                       const barHeight = distributionScale.max ? Math.max((item.count / distributionScale.max) * 100, item.count ? 6 : 0) : 0;
-                      return `<div class="asset-distribution-bar" data-tooltip-title="${escapeHtml(item.title)}" data-tooltip-detail="资产分布情况：${item.count.toLocaleString("zh-CN")}" aria-label="${escapeHtml(item.title)}，资产分布情况：${item.count.toLocaleString("zh-CN")}" style="--bar-height: ${barHeight.toFixed(2)}%">
+                      return `<div class="asset-distribution-bar" data-dashboard-bar-tooltip data-tooltip-title="${escapeHtml(item.title)}" data-tooltip-detail="资产分布情况：${item.count.toLocaleString("zh-CN")}" aria-label="${escapeHtml(item.title)}，资产分布情况：${item.count.toLocaleString("zh-CN")}" style="--bar-height: ${barHeight.toFixed(2)}%">
                         ${item.count ? `<strong>${item.count.toLocaleString("zh-CN")}</strong>` : ""}
                         <span></span>
                       </div>`;
@@ -4380,14 +4375,14 @@ function renderDashboardPanel(assets) {
             <div class="asset-distribution-axis" aria-hidden="true">
               ${activeAssetScale.ticks.map((tick) => `<span>${tick.toLocaleString("zh-CN")}</span>`).join("")}
             </div>
-            <div class="asset-distribution-plot" style="--distribution-width: ${activeAssetWidth}px; --distribution-columns: ${activeAssetColumns}; --tick-intervals: ${Math.max(activeAssetScale.ticks.length - 1, 1)}">
+            <div class="asset-distribution-plot" style="--distribution-columns: ${activeAssetColumns}; --tick-intervals: ${Math.max(activeAssetScale.ticks.length - 1, 1)}">
               <div class="asset-distribution-plot-inner">
                 <div class="asset-distribution-grid" aria-hidden="true">${dashboardGridLines(activeAssetScale.ticks)}</div>
                 <div class="asset-distribution-bars">
                   ${activeAssetRows
                     .map((item) => {
                       const barHeight = activeAssetScale.max ? Math.max((item.count / activeAssetScale.max) * 100, item.count ? 6 : 0) : 0;
-                      return `<div class="asset-distribution-bar" data-tooltip-title="${escapeHtml(item.title)}" data-tooltip-detail="在用资产统计：${item.count.toLocaleString("zh-CN")}" aria-label="${escapeHtml(item.title)}，在用资产统计：${item.count.toLocaleString("zh-CN")}" style="--bar-height: ${barHeight.toFixed(2)}%">
+                      return `<div class="asset-distribution-bar" data-dashboard-bar-tooltip data-tooltip-title="${escapeHtml(item.title)}" data-tooltip-detail="在用资产统计：${item.count.toLocaleString("zh-CN")}" aria-label="${escapeHtml(item.title)}，在用资产统计：${item.count.toLocaleString("zh-CN")}" style="--bar-height: ${barHeight.toFixed(2)}%">
                         ${item.count ? `<strong>${item.count.toLocaleString("zh-CN")}</strong>` : ""}
                         <span></span>
                       </div>`;
@@ -4411,7 +4406,7 @@ function renderDashboardPanel(assets) {
             <div class="asset-distribution-axis" aria-hidden="true">
               ${categoryScale.ticks.map((tick) => `<span>${dashboardMetricLabel(tick, categoryMetricMode)}</span>`).join("")}
             </div>
-            <div class="asset-distribution-plot" style="--distribution-width: ${categoryWidth}px; --distribution-columns: ${categoryColumns}; --tick-intervals: ${Math.max(categoryScale.ticks.length - 1, 1)}">
+            <div class="asset-distribution-plot" style="--distribution-columns: ${categoryColumns}; --tick-intervals: ${Math.max(categoryScale.ticks.length - 1, 1)}">
               <div class="asset-distribution-plot-inner">
                 <div class="asset-distribution-grid" aria-hidden="true">${dashboardGridLines(categoryScale.ticks)}</div>
                 <div class="asset-distribution-bars">
@@ -4419,7 +4414,7 @@ function renderDashboardPanel(assets) {
                     .map((item) => {
                       const value = item[categoryMetricKey];
                       const barHeight = categoryScale.max ? Math.max((value / categoryScale.max) * 100, value ? 6 : 0) : 0;
-                      return `<div class="asset-distribution-bar" data-tooltip-title="${escapeHtml(item.title)}" data-tooltip-detail="资产分类统计：${dashboardMetricLabel(value, categoryMetricMode)}" aria-label="${escapeHtml(item.title)}，资产分类统计：${dashboardMetricLabel(value, categoryMetricMode)}" style="--bar-height: ${barHeight.toFixed(2)}%">
+                      return `<div class="asset-distribution-bar" data-dashboard-bar-tooltip data-tooltip-title="${escapeHtml(item.title)}" data-tooltip-detail="资产分类统计：${dashboardMetricLabel(value, categoryMetricMode)}" aria-label="${escapeHtml(item.title)}，资产分类统计：${dashboardMetricLabel(value, categoryMetricMode)}" style="--bar-height: ${barHeight.toFixed(2)}%">
                         ${value || item.count || item.amount ? `<strong>${dashboardMetricLabel(value, categoryMetricMode)}</strong>` : ""}
                         <span></span>
                       </div>`;
@@ -10718,6 +10713,95 @@ function updateSearchQuery(value, source = "local", immediate = false) {
   searchRenderTimer = setTimeout(renderSearchResults, 180);
 }
 
+let dashboardBarTooltipElement = null;
+
+function ensureDashboardBarTooltip() {
+  if (dashboardBarTooltipElement) return dashboardBarTooltipElement;
+  const tooltip = document.createElement("div");
+  tooltip.className = "dashboard-bar-tooltip";
+  tooltip.hidden = true;
+  document.body.appendChild(tooltip);
+  dashboardBarTooltipElement = tooltip;
+  return tooltip;
+}
+
+function hideDashboardBarTooltip() {
+  if (!dashboardBarTooltipElement) return;
+  dashboardBarTooltipElement.classList.remove("show");
+  dashboardBarTooltipElement.hidden = true;
+}
+
+function renderDashboardBarTooltipContent(tooltip, title, detail) {
+  const titleNode = document.createElement("strong");
+  titleNode.textContent = title;
+
+  const detailNode = document.createElement("span");
+  detailNode.className = "dashboard-bar-tooltip-detail";
+
+  const dotNode = document.createElement("i");
+  dotNode.setAttribute("aria-hidden", "true");
+
+  const textNode = document.createElement("span");
+  textNode.textContent = detail;
+
+  detailNode.replaceChildren(dotNode, textNode);
+  tooltip.replaceChildren(titleNode, detailNode);
+}
+
+function positionDashboardBarTooltip(bar) {
+  const title = bar.dataset.tooltipTitle || "";
+  const detail = bar.dataset.tooltipDetail || "";
+  if (!title && !detail) return hideDashboardBarTooltip();
+
+  const tooltip = ensureDashboardBarTooltip();
+  renderDashboardBarTooltipContent(tooltip, title, detail);
+  tooltip.hidden = false;
+  tooltip.classList.remove("show", "left", "right");
+  tooltip.style.left = "0px";
+  tooltip.style.top = "0px";
+
+  const barVisual = bar.querySelector("span") || bar;
+  const barRect = barVisual.getBoundingClientRect();
+  const cardRect = bar.closest(".dashboard-chart-card")?.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const viewportPadding = 12;
+  const gap = 14;
+  const leftLimit = Math.max(viewportPadding, (cardRect?.left ?? 0) + viewportPadding);
+  const rightLimit = Math.min(window.innerWidth - viewportPadding, (cardRect?.right ?? window.innerWidth) - viewportPadding);
+
+  let placement = "right";
+  let left = barRect.right + gap;
+  if (left + tooltipRect.width > rightLimit) {
+    placement = "left";
+    left = barRect.left - gap - tooltipRect.width;
+  }
+  if (left < leftLimit) {
+    left = Math.min(Math.max(barRect.left + barRect.width / 2 - tooltipRect.width / 2, leftLimit), rightLimit - tooltipRect.width);
+  }
+
+  const top = Math.min(
+    Math.max(barRect.top + barRect.height / 2 - tooltipRect.height / 2, viewportPadding),
+    window.innerHeight - tooltipRect.height - viewportPadding
+  );
+
+  tooltip.style.left = `${Math.round(left)}px`;
+  tooltip.style.top = `${Math.round(top)}px`;
+  tooltip.classList.add("show", placement);
+}
+
+function bindDashboardBarTooltips(root = document) {
+  root.querySelectorAll("[data-dashboard-bar-tooltip]").forEach((bar) => {
+    bar.addEventListener("pointerenter", () => positionDashboardBarTooltip(bar));
+    bar.addEventListener("pointermove", () => positionDashboardBarTooltip(bar));
+    bar.addEventListener("pointerleave", hideDashboardBarTooltip);
+    bar.addEventListener("mouseenter", () => positionDashboardBarTooltip(bar));
+    bar.addEventListener("mousemove", () => positionDashboardBarTooltip(bar));
+    bar.addEventListener("mouseleave", hideDashboardBarTooltip);
+    bar.addEventListener("focus", () => positionDashboardBarTooltip(bar));
+    bar.addEventListener("blur", hideDashboardBarTooltip);
+  });
+}
+
 function bindPageEvents() {
   bindPlaceholderSelects();
   bindInlineSelects();
@@ -10725,6 +10809,7 @@ function bindPageEvents() {
   bindAssetLabelTemplateSettings();
   bindAssetCodeInputs();
   bindResizableTableColumns();
+  bindDashboardBarTooltips();
   document.querySelectorAll("[data-route]").forEach((el) =>
     el.addEventListener("click", () => setRoute(el.dataset.route))
   );
