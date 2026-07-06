@@ -4300,7 +4300,7 @@ function renderDashboardPanel(assets) {
             <select aria-label="资产状态范围">
               <option>全部</option>
             </select>
-            <select aria-label="所属或承租公司">
+            <select aria-label="所属或承租公司" disabled>
               ${companyOptions.map((option) => `<option>${escapeHtml(option)}</option>`).join("")}
             </select>
           </div>

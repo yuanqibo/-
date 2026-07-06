@@ -4710,6 +4710,11 @@ button.self-service-category-chip.more:hover {
   color: #9ca3af;
 }
 
+.dashboard-card-filters select:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
 .dashboard-status-card {
   height: 430px;
   min-height: 430px;
