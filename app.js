@@ -4568,13 +4568,6 @@ function renderEmployeeHome() {
   const requests = getScopedRequests();
   const myPrimaryAsset = deviceAssets[0];
 
-  const quickActions = [
-    { label: "发起领用申请", request: "资产领用", variant: "primary" },
-    { label: "提交故障报修", request: "故障报修", variant: "ghost" },
-    { label: "查看我的资产", route: "assets" },
-    { label: "查看我的申请", route: "requests" },
-  ];
-
   const selfServiceCards = [
     { label: "资产领用", request: "资产领用", icon: "＋" },
     { label: "资产借用", request: "资产借用", icon: "＋" },
@@ -4583,10 +4576,8 @@ function renderEmployeeHome() {
   ];
 
   return `
-    <section class="hero">
+    <section class="hero employee-home-hero">
       <h1>${greeting()}，${state.currentUser.name}</h1>
-      <p>当前以普通员工身份登录。普通员工由管理员添加员工信息后使用，只展示本人资产、个人申请和审批状态。</p>
-      <div class="quick-actions">${quickActions.map(renderQuickActionButton).join("")}</div>
     </section>
     <section class="grid employee-entry-grid">
       <article class="panel">

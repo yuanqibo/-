@@ -3221,6 +3221,11 @@ button {
   z-index: 1;
 }
 
+.employee-home-hero {
+  min-height: 92px;
+  padding-bottom: 18px;
+}
+
 .quick-actions {
   display: flex;
   gap: 10px;
