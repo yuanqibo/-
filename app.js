@@ -4565,7 +4565,6 @@ function renderManagementHome() {
 
 function renderEmployeeHome() {
   const deviceAssets = getScopedAssets().filter((item) => item.type !== "软件许可");
-  const requests = getScopedRequests();
   const myPrimaryAsset = deviceAssets[0];
 
   return `
@@ -4573,7 +4572,6 @@ function renderEmployeeHome() {
       <h1>${greeting()}，${state.currentUser.name}</h1>
     </section>
     ${renderDeviceOverviewStrip(myPrimaryAsset)}
-    ${renderRecentRequestPanel("我的申请", requests, "审批不在本系统内流转，页面展示的是业务单据和外部审批回写。")}
   `;
 }
 
