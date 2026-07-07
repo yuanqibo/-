@@ -1518,40 +1518,121 @@ function deleteRoleDefinition(roleId) {
   showToast("角色已删除");
 }
 
+function setRoleCheckboxState(input, checkedCount, totalCount) {
+  if (!input) return;
+  input.checked = totalCount > 0 && checkedCount === totalCount;
+  input.indeterminate = checkedCount > 0 && checkedCount < totalCount;
+}
+
 function refreshRoleModuleState(root = document) {
   const formRoot = root.querySelector?.(".role-config-form") || document.querySelector(".role-config-form");
   if (!formRoot) return;
-  rolePermissionModules.forEach((module) => {
-    const moduleInput = formRoot.querySelector(`[data-role-module="${module.code}"]`);
-    if (!moduleInput) return;
-    const actionInputs = Array.from(formRoot.querySelectorAll(`[data-role-permission^="${module.code}:"]`));
-    const checkedCount = actionInputs.filter((input) => input.checked).length;
-    const moduleCard = moduleInput.closest(".role-permission-module");
-    const counter = moduleCard?.querySelector("em");
-    moduleInput.checked = checkedCount === actionInputs.length;
-    moduleInput.indeterminate = checkedCount > 0 && checkedCount < actionInputs.length;
-    moduleCard?.classList.toggle("selected", checkedCount > 0);
-    if (counter) counter.textContent = `${checkedCount}/${actionInputs.length}`;
-    actionInputs.forEach((input) => input.closest(".role-permission-chip")?.classList.toggle("checked", input.checked));
+  const groups = rolePermissionGroups();
+  const actionInputs = Array.from(formRoot.querySelectorAll("[data-role-permission]"));
+  const permissions = new Set(actionInputs.filter((input) => input.checked).map((input) => input.dataset.rolePermission));
+  if (state.roleForm) state.roleForm.permissions = Array.from(permissions);
+
+  let activeGroup = groups.find((group) => group.id === state.rolePermissionGroup) || groups[0];
+  if (!activeGroup) return;
+  let activeModule = activeGroup.modules.find((module) => module.code === state.rolePermissionModule);
+  if (!activeModule) activeModule = activeGroup.modules[0];
+  state.rolePermissionGroup = activeGroup.id;
+  state.rolePermissionModule = activeModule?.code || "";
+
+  const allCodes = groups.flatMap(roleGroupCodes);
+  const allChecked = roleCheckedCount(allCodes, permissions);
+  setRoleCheckboxState(formRoot.querySelector("[data-role-all-permissions]"), allChecked, allCodes.length);
+
+  const summaryCount = formRoot.querySelector(".role-permission-section summary em");
+  if (summaryCount) summaryCount.textContent = `${permissions.size} / ${allCodes.length}`;
+
+  groups.forEach((group) => {
+    const codes = roleGroupCodes(group);
+    const checkedCount = roleCheckedCount(codes, permissions);
+    const isActiveGroup = group.id === activeGroup.id;
+    formRoot.querySelectorAll(`[data-role-permission-group="${group.id}"]`).forEach((row) => row.classList.toggle("active", isActiveGroup));
+    formRoot.querySelectorAll(`[data-role-module-group="${group.id}"]`).forEach((row) => {
+      row.hidden = !isActiveGroup;
+    });
+    const count = formRoot.querySelector(`[data-role-group-count="${group.id}"]`);
+    if (count) count.textContent = `(${checkedCount}/${codes.length})`;
+    setRoleCheckboxState(formRoot.querySelector(`[data-role-group-check="${group.id}"]`), checkedCount, codes.length);
   });
+
+  const activeGroupCodes = roleGroupCodes(activeGroup);
+  setRoleCheckboxState(formRoot.querySelector("[data-role-active-group-check]"), roleCheckedCount(activeGroupCodes, permissions), activeGroupCodes.length);
+  const activeGroupTitle = formRoot.querySelector("[data-role-active-group-title]");
+  if (activeGroupTitle) activeGroupTitle.textContent = activeGroup.name;
+
+  rolePermissionModules.forEach((module) => {
+    const codes = roleModuleCodes(module);
+    const checkedCount = roleCheckedCount(codes, permissions);
+    const isActiveModule = module.code === activeModule?.code;
+    const moduleRow = formRoot.querySelector(`[data-role-module-row="${module.code}"]`);
+    moduleRow?.classList.toggle("active", isActiveModule);
+    const count = formRoot.querySelector(`[data-role-module-count="${module.code}"]`);
+    if (count) count.textContent = `(${checkedCount}/${codes.length})`;
+    setRoleCheckboxState(formRoot.querySelector(`[data-role-module="${module.code}"]`), checkedCount, codes.length);
+    const actionPanel = formRoot.querySelector(`[data-role-action-panel="${module.code}"]`);
+    if (actionPanel) actionPanel.hidden = !isActiveModule;
+  });
+
+  const activeModuleCodes = activeModule ? roleModuleCodes(activeModule) : [];
+  setRoleCheckboxState(formRoot.querySelector("[data-role-active-module-check]"), roleCheckedCount(activeModuleCodes, permissions), activeModuleCodes.length);
+  const activeModuleTitle = formRoot.querySelector("[data-role-active-module-title]");
+  if (activeModuleTitle) activeModuleTitle.textContent = activeModule?.name || "-";
+
+  actionInputs.forEach((input) => input.closest(".role-permission-action")?.classList.toggle("checked", input.checked));
+}
+
+function setRolePermissionCodes(codes, checked, root = document) {
+  const formRoot = root.querySelector?.(".role-config-form") || document.querySelector(".role-config-form");
+  if (!formRoot) return;
+  const codeSet = new Set(codes);
+  formRoot.querySelectorAll("[data-role-permission]").forEach((input) => {
+    if (codeSet.has(input.dataset.rolePermission)) input.checked = checked;
+  });
+  syncRoleFormFromDom(root);
+  refreshRoleModuleState(root);
+}
+
+function selectRolePermissionGroup(groupId, root = document) {
+  syncRoleFormFromDom(root);
+  const group = rolePermissionGroups().find((item) => item.id === groupId);
+  if (!group) return;
+  state.rolePermissionGroup = group.id;
+  if (!group.modules.some((module) => module.code === state.rolePermissionModule)) {
+    state.rolePermissionModule = group.modules[0]?.code || "";
+  }
+  refreshRoleModuleState(root);
+}
+
+function selectRolePermissionModule(moduleCode, root = document) {
+  syncRoleFormFromDom(root);
+  const group = rolePermissionGroups().find((item) => item.modules.some((module) => module.code === moduleCode));
+  if (!group) return;
+  state.rolePermissionGroup = group.id;
+  state.rolePermissionModule = moduleCode;
+  refreshRoleModuleState(root);
+}
+
+function toggleRoleGroup(groupId, checked, root = document) {
+  const group = rolePermissionGroups().find((item) => item.id === groupId);
+  if (!group) return;
+  state.rolePermissionGroup = group.id;
+  if (!group.modules.some((module) => module.code === state.rolePermissionModule)) {
+    state.rolePermissionModule = group.modules[0]?.code || "";
+  }
+  setRolePermissionCodes(roleGroupCodes(group), checked, root);
 }
 
 function toggleRoleModule(moduleCode, checked, root = document) {
-  syncRoleFormFromDom(root);
-  const module = rolePermissionModules.find((item) => item.code === moduleCode);
-  if (!module || !state.roleForm) return;
-  const next = new Set(state.roleForm.permissions || []);
-  module.actions.forEach(([action]) => {
-    const code = `${module.code}:${action}`;
-    if (checked) next.add(code);
-    else next.delete(code);
-  });
-  state.roleForm.permissions = Array.from(next);
-  const formRoot = root.querySelector?.(".role-config-form") || document.querySelector(".role-config-form");
-  formRoot?.querySelectorAll(`[data-role-permission^="${module.code}:"]`).forEach((input) => {
-    input.checked = checked;
-  });
-  refreshRoleModuleState(root);
+  const group = rolePermissionGroups().find((item) => item.modules.some((module) => module.code === moduleCode));
+  const module = group?.modules.find((item) => item.code === moduleCode);
+  if (!module) return;
+  state.rolePermissionGroup = group.id;
+  state.rolePermissionModule = module.code;
+  setRolePermissionCodes(roleModuleCodes(module), checked, root);
 }
 
 function submitRoleSearch(type = "role") {
@@ -2454,6 +2535,8 @@ const state = {
   roleForm: null,
   roleError: "",
   pendingRoleDeleteId: "",
+  rolePermissionGroup: "system",
+  rolePermissionModule: "employee",
   navOpen: {},
   assetSubnavScrollTop: 0,
   assetDistributionMode: "organization",
@@ -9580,27 +9663,143 @@ function roleListItemMarkup(role) {
 function rolePermissionGroups() {
   return [
     {
+      id: "system",
       name: "系统",
       modules: rolePermissionModules.filter((module) =>
         ["employee", "department", "role", "selfService", "integration", "form"].includes(module.code)
       ),
     },
     {
+      id: "asset",
       name: "资产",
       modules: rolePermissionModules.filter((module) => ["asset", "stocktake", "consumable"].includes(module.code)),
     },
     {
+      id: "approval",
       name: "审批",
       modules: rolePermissionModules.filter((module) => ["request"].includes(module.code)),
     },
   ].filter((group) => group.modules.length);
 }
 
+function roleModuleCodes(module) {
+  return module.actions.map(([action]) => `${module.code}:${action}`);
+}
+
+function roleGroupCodes(group) {
+  return group.modules.flatMap(roleModuleCodes);
+}
+
+function roleCheckedCount(codes, permissions) {
+  return codes.filter((code) => permissions.has(code)).length;
+}
+
+function rolePermissionSelection(form = state.roleForm) {
+  const groups = rolePermissionGroups();
+  const permissions = new Set(form?.permissions || []);
+  let group = groups.find((item) => item.id === state.rolePermissionGroup);
+  if (!group) {
+    group = groups.find((item) => roleGroupCodes(item).some((code) => permissions.has(code))) || groups[0];
+  }
+  let module = group?.modules.find((item) => item.code === state.rolePermissionModule);
+  if (!module) {
+    module = group?.modules.find((item) => roleModuleCodes(item).some((code) => permissions.has(code))) || group?.modules[0];
+  }
+  state.rolePermissionGroup = group?.id || "";
+  state.rolePermissionModule = module?.code || "";
+  return { groups, group, module, permissions };
+}
+
+function resetRolePermissionSelection(form = state.roleForm) {
+  state.rolePermissionGroup = "";
+  state.rolePermissionModule = "";
+  rolePermissionSelection(form);
+}
+
+function rolePermissionCascadeMarkup(form, disabled) {
+  const { groups, group: activeGroup, module: activeModule, permissions } = rolePermissionSelection(form);
+  const allCodes = groups.flatMap(roleGroupCodes);
+  const allChecked = roleCheckedCount(allCodes, permissions);
+  const groupCodes = activeGroup ? roleGroupCodes(activeGroup) : [];
+  const groupChecked = roleCheckedCount(groupCodes, permissions);
+  const moduleCodes = activeModule ? roleModuleCodes(activeModule) : [];
+  const moduleChecked = roleCheckedCount(moduleCodes, permissions);
+
+  return `<div class="role-permission-cascade" data-role-permission-cascade>
+    <section class="role-permission-column">
+      <div class="role-permission-column-head">
+        <label><input type="checkbox" data-role-all-permissions ${allChecked === allCodes.length ? "checked" : ""} ${disabled}> 全选</label>
+        <strong>角色授权</strong>
+      </div>
+      <div class="role-permission-column-list">
+        ${groups
+          .map((group) => {
+            const codes = roleGroupCodes(group);
+            const checkedCount = roleCheckedCount(codes, permissions);
+            return `<div class="role-permission-row ${group.id === activeGroup?.id ? "active" : ""}" data-role-permission-group="${escapeHtml(group.id)}">
+              <input type="checkbox" aria-label="${escapeHtml(group.name)}全选" data-role-group-check="${escapeHtml(group.id)}" ${checkedCount === codes.length ? "checked" : ""} ${disabled}>
+              <span class="role-permission-row-name">${escapeHtml(group.name)}</span>
+              <em data-role-group-count="${escapeHtml(group.id)}">(${checkedCount}/${codes.length})</em>
+              <b aria-hidden="true">&rsaquo;</b>
+            </div>`;
+          })
+          .join("")}
+      </div>
+    </section>
+
+    <section class="role-permission-column">
+      <div class="role-permission-column-head">
+        <label><input type="checkbox" data-role-active-group-check ${groupChecked === groupCodes.length ? "checked" : ""} ${disabled}> 全选</label>
+        <strong data-role-active-group-title>${escapeHtml(activeGroup?.name || "-")}</strong>
+      </div>
+      <div class="role-permission-column-list">
+        ${groups
+          .flatMap((group) =>
+            group.modules.map((module) => {
+              const codes = roleModuleCodes(module);
+              const checkedCount = roleCheckedCount(codes, permissions);
+              return `<div class="role-permission-row ${module.code === activeModule?.code ? "active" : ""}" data-role-module-row="${escapeHtml(module.code)}" data-role-module-group="${escapeHtml(group.id)}" ${group.id === activeGroup?.id ? "" : "hidden"}>
+                <input type="checkbox" aria-label="${escapeHtml(module.name)}全选" data-role-module="${escapeHtml(module.code)}" ${checkedCount === codes.length ? "checked" : ""} ${disabled}>
+                <span class="role-permission-row-name">${escapeHtml(module.name)}</span>
+                <em data-role-module-count="${escapeHtml(module.code)}">(${checkedCount}/${codes.length})</em>
+                <b aria-hidden="true">&rsaquo;</b>
+              </div>`;
+            })
+          )
+          .join("")}
+      </div>
+    </section>
+
+    <section class="role-permission-column">
+      <div class="role-permission-column-head">
+        <label><input type="checkbox" data-role-active-module-check ${moduleChecked === moduleCodes.length ? "checked" : ""} ${disabled}> 全选</label>
+        <strong data-role-active-module-title>${escapeHtml(activeModule?.name || "-")}</strong>
+      </div>
+      <div class="role-permission-column-list">
+        ${groups
+          .flatMap((group) =>
+            group.modules.map((module) => `<div class="role-permission-action-panel" data-role-action-panel="${escapeHtml(module.code)}" ${module.code === activeModule?.code ? "" : "hidden"}>
+              ${module.actions
+                .map(([action, label]) => {
+                  const code = `${module.code}:${action}`;
+                  return `<label class="role-permission-action ${permissions.has(code) ? "checked" : ""}">
+                    <input type="checkbox" data-role-permission="${escapeHtml(code)}" ${permissions.has(code) ? "checked" : ""} ${disabled}>
+                    <span>${escapeHtml(label)}</span>
+                  </label>`;
+                })
+                .join("")}
+            </div>`)
+          )
+          .join("")}
+      </div>
+    </section>
+  </div>`;
+}
+
 function roleConfigFormMarkup(form, options = {}) {
   const readonly = Boolean(options.readonly);
   const permissionsExpanded = Boolean(options.permissionsExpanded);
   const disabled = readonly ? "disabled" : "";
-  const formPermissions = new Set(form.permissions || []);
   return `<form id="demoForm" class="role-config-form" data-mode="role-definition">
     <div class="role-modal-fields">
       <div class="role-error" data-role-form-error ${state.roleError ? "" : "hidden"}>${escapeHtml(state.roleError || "")}</div>
@@ -9620,47 +9819,7 @@ function roleConfigFormMarkup(form, options = {}) {
         <span>权限配置</span>
         <em>${form.permissions.length} / ${allRolePermissionCodes().length}</em>
       </summary>
-      <div class="role-permission-builder">
-        ${rolePermissionGroups()
-          .map(
-            (group) => `<section class="role-permission-group">
-              <div class="role-permission-group-title">${escapeHtml(group.name)}</div>
-              <div class="role-permission-modules">
-                ${group.modules
-                  .map((module) => {
-                    const moduleCodes = module.actions.map(([action]) => `${module.code}:${action}`);
-                    const checkedCount = moduleCodes.filter((code) => formPermissions.has(code)).length;
-                    return `<article class="role-permission-module ${checkedCount ? "selected" : ""}">
-                      <label class="role-permission-module-head">
-                        <input type="checkbox" data-role-module="${escapeHtml(module.code)}" ${checkedCount === moduleCodes.length ? "checked" : ""} ${disabled}>
-                        <span>${escapeHtml(module.name)}</span>
-                        <em>${checkedCount}/${moduleCodes.length}</em>
-                      </label>
-                      <div class="role-permission-actions">
-                        ${module.actions
-                          .map(([action, label]) => {
-                            const code = `${module.code}:${action}`;
-                            return `<label class="role-permission-chip ${formPermissions.has(code) ? "checked" : ""}">
-                              <input type="checkbox" data-role-permission="${escapeHtml(code)}" ${formPermissions.has(code) ? "checked" : ""} ${disabled}>
-                              <span>${escapeHtml(label)}</span>
-                            </label>`;
-                          })
-                          .join("")}
-                      </div>
-                    </article>`;
-                  })
-                  .join("")}
-              </div>
-            </section>`
-          )
-          .join("")}
-      </div>
-      <div class="role-summary-card">
-        <div>
-          <h3>已选权限</h3>
-          <p>${rolePermissionSummary({ permissions: form.permissions }) || "未选择权限"}</p>
-        </div>
-      </div>
+      ${rolePermissionCascadeMarkup(form, disabled)}
     </details>
 
     <div class="modal-actions">
@@ -9685,6 +9844,7 @@ function openRoleDefinitionModal(roleId = "") {
         description: "",
         permissions: ["employee:view", "asset:view"],
       };
+  resetRolePermissionSelection(state.roleForm);
   modalTitle.textContent = role ? "编辑角色" : "新增角色";
   modal.classList.add("role-modal");
   modal.classList.remove("asset-create-modal", "asset-flow-modal", "asset-import-modal", "print-preview-modal", "asset-label-print-modal", "location-modal", "profile-center-modal");
@@ -11243,6 +11403,16 @@ function bindRoleManagementEvents() {
   roleEventsBound = true;
   document.addEventListener("click", (event) => {
     if (!isInsideRoleManagement(event.target) && !event.target.closest?.(".role-modal")) return;
+    const permissionGroup = event.target.closest("[data-role-permission-group]");
+    if (permissionGroup && !event.target.closest("input")) {
+      selectRolePermissionGroup(permissionGroup.dataset.rolePermissionGroup, modal);
+      return;
+    }
+    const permissionModule = event.target.closest("[data-role-module-row]");
+    if (permissionModule && !event.target.closest("input")) {
+      selectRolePermissionModule(permissionModule.dataset.roleModuleRow, modal);
+      return;
+    }
     const tabButton = event.target.closest("[data-role-tab]");
     if (tabButton) {
       state.roleTab = tabButton.dataset.roleTab || "system";
@@ -11321,6 +11491,24 @@ function bindRoleManagementEvents() {
   });
   document.addEventListener("change", (event) => {
     if (!isInsideRoleManagement(event.target) && !event.target.closest?.(".role-modal")) return;
+    if (event.target.matches("[data-role-all-permissions]")) {
+      setRolePermissionCodes(allRolePermissionCodes(), event.target.checked, modal);
+      return;
+    }
+    if (event.target.matches("[data-role-active-group-check]")) {
+      const group = rolePermissionGroups().find((item) => item.id === state.rolePermissionGroup);
+      if (group) setRolePermissionCodes(roleGroupCodes(group), event.target.checked, modal);
+      return;
+    }
+    if (event.target.matches("[data-role-group-check]")) {
+      toggleRoleGroup(event.target.dataset.roleGroupCheck, event.target.checked, modal);
+      return;
+    }
+    if (event.target.matches("[data-role-active-module-check]")) {
+      const module = rolePermissionModules.find((item) => item.code === state.rolePermissionModule);
+      if (module) setRolePermissionCodes(roleModuleCodes(module), event.target.checked, modal);
+      return;
+    }
     if (event.target.matches("[data-role-module]")) {
       toggleRoleModule(event.target.dataset.roleModule, event.target.checked, modal);
       return;
