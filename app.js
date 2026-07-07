@@ -2458,6 +2458,7 @@ const state = {
   assetDistributionMode: "organization",
   assetCategoryMetricMode: "count",
   assetCategoryCompanyFilter: "所属/承租公司",
+  employeeRequestTab: "all",
   locationTreeOpen: {},
   assetCategoryTreeOpen: {},
   locationImportBusy: false,
@@ -2668,6 +2669,16 @@ const approvalNavIcon = `<svg class="nav-approval-icon" viewBox="0 0 48 48" aria
     <path d="M18.5 17h11.5M18.5 23h11.5M18.5 29h7.5" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round"/>
     <circle cx="33.5" cy="33" r="4.8" fill="currentColor" stroke="#ffffff" stroke-width="2.4"/>
     <path d="M25.8 42c1.4-4.1 4.3-6 7.7-6s6.3 1.9 7.7 6H25.8Z" fill="currentColor" stroke="#ffffff" stroke-width="2.2" stroke-linejoin="round"/>
+  </g>
+</svg>`;
+
+const applicationNavIcon = `<svg class="nav-application-icon" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+  <g transform="translate(1 -1)">
+    <path d="M13 7.5h19.5l5.5 5.8V30a3.5 3.5 0 0 1-3.5 3.5h-18A3.5 3.5 0 0 1 13 30V7.5Z" fill="currentColor"/>
+    <path d="M31.8 7.5v6.2h6.2" fill="#ffffff" opacity=".9"/>
+    <path d="M18.5 17h11M18.5 23h8.2M18.5 29h5" stroke="#ffffff" stroke-width="2.8" stroke-linecap="round"/>
+    <path d="M29.5 34.4 38 25.9l3.6 3.6-8.5 8.5-4.8 1.2 1.2-4.8Z" fill="currentColor" stroke="#ffffff" stroke-width="2.4" stroke-linejoin="round"/>
+    <path d="m36.2 27.7 3.6 3.6" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
   </g>
 </svg>`;
 
@@ -3171,6 +3182,14 @@ function getAccessibleNav(items = nav) {
 
 function flattenNav(items = getAccessibleNav()) {
   return items.flatMap((item) => [item, ...flattenNav(item.children || [])]);
+}
+
+function getPrimaryNavItems() {
+  const items = getAccessibleNav();
+  if (state.currentUser?.roleCode !== "employee") return items;
+  return items
+    .filter((item) => item.id !== "assets")
+    .map((item) => (item.id === "requests" ? { ...item, label: "申请", icon: applicationNavIcon } : item));
 }
 
 function normalizeRoute(route) {
@@ -3988,7 +4007,7 @@ function renderNav() {
     .join("");
 
   navEl.querySelector(".sidebar-account-host").innerHTML = renderAccountMenu();
-  navEl.querySelector(".nav-content").innerHTML = `<div class="nav-section">${renderGroup(getAccessibleNav())}</div>`;
+  navEl.querySelector(".nav-content").innerHTML = `<div class="nav-section">${renderGroup(getPrimaryNavItems())}</div>`;
   renderSidebarTools();
 }
 
@@ -4151,6 +4170,42 @@ function renderWorkbenchCard(item) {
     <span class="action-icon">${item.icon}</span>
     <strong>${item.label}</strong>
   </button>`;
+}
+
+function renderDeviceOverviewStrip(asset) {
+  return `<section class="panel device-overview-strip">
+    <div class="device-overview-heading">
+      <h2 class="panel-title">我的设备概览</h2>
+      <div class="panel-subtitle">如果设备异常，可从资产详情发起归还或报修。</div>
+    </div>
+    ${
+      asset
+        ? `<div class="device-overview-body">
+            <div class="device-overview-main">
+              <strong>${asset.name}</strong>
+              <div class="panel-subtitle">${asset.model} / ${asset.assetTag}</div>
+            </div>
+            <div class="device-overview-meta">
+              <span>当前状态</span>
+              ${statusTag(asset.status)}
+            </div>
+            <div class="device-overview-meta">
+              <span>存放位置</span>
+              <strong>${asset.location}</strong>
+            </div>
+            <div class="device-overview-meta">
+              <span>资产风险</span>
+              ${riskBadge(asset.risk)}
+            </div>
+            <div class="device-overview-meta">
+              <span>保修截止</span>
+              <strong>${asset.warrantyDate}</strong>
+            </div>
+            <button class="btn" data-detail="${asset.id}">查看详情</button>
+          </div>`
+        : `<div class="device-overview-empty">当前还没有分配到你的设备，建议先发起领用申请。</div>`
+    }
+  </section>`;
 }
 
 function buildAssetDistributionRows(assets, mode = "organization") {
@@ -4533,7 +4588,7 @@ function renderEmployeeHome() {
       <p>当前以普通员工身份登录。普通员工由管理员添加员工信息后使用，只展示本人资产、个人申请和审批状态。</p>
       <div class="quick-actions">${quickActions.map(renderQuickActionButton).join("")}</div>
     </section>
-    <section class="grid content-grid">
+    <section class="grid employee-entry-grid">
       <article class="panel">
         <div class="panel-header">
           <div>
@@ -4545,36 +4600,8 @@ function renderEmployeeHome() {
           ${selfServiceCards.map(renderWorkbenchCard).join("")}
         </div>
       </article>
-      <article class="panel">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">我的设备概览</h2>
-            <div class="panel-subtitle">如果设备异常，可从资产详情发起归还或报修。</div>
-          </div>
-        </div>
-        ${
-          myPrimaryAsset
-            ? `<div class="permission-list">
-                <div class="permission-item">
-                  <div>
-                    <strong>${myPrimaryAsset.name}</strong>
-                    <div class="panel-subtitle">${myPrimaryAsset.model} / ${myPrimaryAsset.assetTag}</div>
-                  </div>
-                  ${statusTag(myPrimaryAsset.status)}
-                </div>
-                <div class="permission-item">
-                  <div><strong>存放位置</strong><div class="panel-subtitle">${myPrimaryAsset.location}</div></div>
-                  ${riskBadge(myPrimaryAsset.risk)}
-                </div>
-                <div class="permission-item">
-                  <div><strong>保修截止</strong><div class="panel-subtitle">${myPrimaryAsset.warrantyDate}</div></div>
-                  <button class="btn" data-detail="${myPrimaryAsset.id}">查看详情</button>
-                </div>
-              </div>`
-            : `<div class="empty-note">当前还没有分配到你的设备，建议先发起领用申请。</div>`
-        }
-      </article>
     </section>
+    ${renderDeviceOverviewStrip(myPrimaryAsset)}
     ${renderRecentRequestPanel("我的申请", requests, "审批不在本系统内流转，页面展示的是业务单据和外部审批回写。")}
   `;
 }
@@ -9270,8 +9297,142 @@ function completeness(value) {
   return `<div class="complete"><span>${value}%</span><i><b class="${color}" style="width:${value}%"></b></i></div>`;
 }
 
+function employeeRequestActionIcon(kind) {
+  const icons = {
+    receive: `<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M11 5h10v10H11V5Z" fill="#ffffff" opacity=".94"/>
+      <path d="M13.5 5v6l2.5-1.7 2.5 1.7V5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M5.7 20.4h6.8l3 3h6.1c2.8 0 4.8-1.4 5.9-3.7" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M4.5 24.9h7.8" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round"/>
+    </svg>`,
+    borrow: `<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M17 6h9v9h-9V6Z" fill="#ffffff" opacity=".94"/>
+      <path d="M7 17h8v8H7v-8Z" fill="#ffffff" opacity=".94"/>
+      <path d="M10.8 8.4a7 7 0 0 0-4.2 6.4m14.6 8.8a7 7 0 0 0 4.2-6.4" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="m7.1 10.5 3.8-2.2.7 4.4M24.9 21.5l-3.8 2.2-.7-4.4" fill="none" stroke="#ffffff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`,
+    giveBack: `<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M8 6h16v18H8V6Z" fill="#ffffff" opacity=".95"/>
+      <path d="M11.5 11h9M11.5 16h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M16 25.5V15.8m0 9.7-4-4m4 4 4-4" fill="none" stroke="#ffffff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`,
+    returnAsset: `<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M8 7h17v18H8V7Z" fill="#ffffff" opacity=".95"/>
+      <path d="M13 13h8M13 18h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M20.2 22.4h-6.5a4.2 4.2 0 1 1 0-8.4h.7" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="m13.8 10.9-3.2 3.2 3.2 3.2" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`,
+    handover: `<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <circle cx="13" cy="10.5" r="4.2" fill="#ffffff" opacity=".95"/>
+      <path d="M5.8 25c1.1-5 4-7.7 7.2-7.7s6.1 2.7 7.2 7.7H5.8Z" fill="#ffffff" opacity=".95"/>
+      <circle cx="22.4" cy="12.2" r="3" fill="none" stroke="#ffffff" stroke-width="2.3"/>
+      <path d="M25.8 17.2a8 8 0 0 1 3.1 5.2M26.4 9.2l2.5-2.5m0 0v4.1m0-4.1h-4.1" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`,
+  };
+  return icons[kind] || icons.receive;
+}
+
+function renderEmployeeRequestAction(item) {
+  return `<button class="employee-request-action" type="button" data-open-request="${escapeHtml(item.request)}">
+    <span class="employee-request-action-icon ${item.tone}">${employeeRequestActionIcon(item.icon)}</span>
+    <span class="employee-request-action-label">${escapeHtml(item.label)}</span>
+  </button>`;
+}
+
+function employeeRequestStatusGroup(status = "") {
+  if (["审批中", "待审批", "待审核", "待处理"].includes(status)) return "pending";
+  if (["已完成", "已同意", "已通过", "同意", "通过"].includes(status)) return "approved";
+  if (["已驳回", "驳回", "已拒绝", "拒绝"].includes(status)) return "rejected";
+  return "pending";
+}
+
+function employeeRequestTabs(rows) {
+  return [
+    { key: "all", label: "全部", count: rows.length },
+    { key: "pending", label: "待审批", count: rows.filter((item) => employeeRequestStatusGroup(item.status) === "pending").length },
+    { key: "approved", label: "已同意", count: rows.filter((item) => employeeRequestStatusGroup(item.status) === "approved").length },
+    { key: "rejected", label: "已驳回", count: rows.filter((item) => employeeRequestStatusGroup(item.status) === "rejected").length },
+  ];
+}
+
+function renderEmployeeRequestTabs(tabs, activeTab) {
+  return `<div class="employee-request-tabs" role="tablist" aria-label="我的申请状态">
+    ${tabs
+      .map(
+        (tab) => `<button class="${activeTab === tab.key ? "active" : ""}" type="button" role="tab" aria-selected="${activeTab === tab.key ? "true" : "false"}" data-employee-request-tab="${tab.key}">
+          ${tab.label} (${tab.count})
+        </button>`
+      )
+      .join("")}
+  </div>`;
+}
+
+function employeeRequestCardStatus(item) {
+  const group = employeeRequestStatusGroup(item.status);
+  if (group === "approved") return { label: "自动同意", tone: "approved" };
+  if (group === "rejected") return { label: "已驳回", tone: "rejected" };
+  return { label: item.status || "待审批", tone: "pending" };
+}
+
+function renderEmployeeRequestCard(item) {
+  const status = employeeRequestCardStatus(item);
+  return `<article class="employee-request-card">
+    <div class="employee-request-card-main">
+      <div class="employee-request-card-title">
+        <span class="employee-request-status-pill ${status.tone}">${escapeHtml(status.label)}</span>
+        <strong>${escapeHtml(item.type)}</strong>
+      </div>
+      <div class="employee-request-card-fields">
+        <div><span>单据编号</span><strong>${escapeHtml(item.id)}</strong></div>
+        <div><span>发起时间</span><strong>${escapeHtml(item.date || "-")}</strong></div>
+        <div><span>审批时间</span><strong>${employeeRequestStatusGroup(item.status) === "pending" ? "-" : escapeHtml(item.date || "-")}</strong></div>
+        <div><span>资产数量</span><strong>-</strong></div>
+      </div>
+    </div>
+    <button class="btn employee-request-detail" type="button" data-request="${escapeHtml(item.id)}">查看详情</button>
+  </article>`;
+}
+
 function renderRequests() {
-  return `<section class="panel approval-blank-panel" aria-label="审批"></section>`;
+  if (state.currentUser?.roleCode !== "employee") {
+    return `<section class="panel approval-blank-panel" aria-label="审批"></section>`;
+  }
+
+  const actions = [
+    { label: "自助资产领用", request: "资产领用", icon: "receive", tone: "blue" },
+    { label: "自助资产借用", request: "资产借用", icon: "borrow", tone: "sky" },
+    { label: "自助资产归还", request: "资产归还", icon: "giveBack", tone: "orange" },
+    { label: "自助资产退还", request: "资产退还", icon: "returnAsset", tone: "violet" },
+    { label: "自助资产交接", request: "资产交接", icon: "handover", tone: "green" },
+  ];
+  const rows = getScopedRequests();
+  const tabs = employeeRequestTabs(rows);
+  const activeTab = tabs.some((tab) => tab.key === state.employeeRequestTab) ? state.employeeRequestTab : "all";
+  const visibleRows = activeTab === "all" ? rows : rows.filter((item) => employeeRequestStatusGroup(item.status) === activeTab);
+
+  return `<section class="employee-request-page">
+    <section class="employee-request-head" aria-label="员工申请">
+      <h1 class="employee-request-title">员工申请</h1>
+      <div class="employee-request-actions-grid">
+        ${actions.map(renderEmployeeRequestAction).join("")}
+      </div>
+    </section>
+    <section class="employee-request-history" aria-label="我的申请">
+      <div class="employee-request-list-head">
+        ${renderEmployeeRequestTabs(tabs, activeTab)}
+        <button class="employee-request-advanced" type="button" data-employee-request-advanced>高级搜索</button>
+      </div>
+      <div class="employee-request-card-list">
+        ${
+          visibleRows.length
+            ? visibleRows
+                .map(renderEmployeeRequestCard)
+                .join("")
+            : `<div class="employee-request-empty">当前分类下还没有可展示的申请。</div>`
+        }
+      </div>
+    </section>
+  </section>`;
 }
 
 function renderStocktake() {
@@ -10909,6 +11070,13 @@ function bindPageEvents() {
   document.querySelectorAll("[data-borrow-return-tab]").forEach((el) =>
     el.addEventListener("click", () => setBorrowReturnTab(el.dataset.borrowReturnTab))
   );
+  document.querySelectorAll("[data-employee-request-tab]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.employeeRequestTab = el.dataset.employeeRequestTab || "all";
+      render();
+    })
+  );
+  document.querySelector("[data-employee-request-advanced]")?.addEventListener("click", () => showToast("高级搜索已预留，可接入申请单号、类型和时间筛选"));
   document.querySelectorAll("[data-borrow-return-select]").forEach((el) =>
     el.addEventListener("change", () => {
       setSelectedAsset(el.dataset.borrowReturnSelect, el.checked);
