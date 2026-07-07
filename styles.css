@@ -3352,11 +3352,6 @@ button {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.employee-entry-grid {
-  margin-top: 18px;
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .panel {
   padding: 18px;
 }

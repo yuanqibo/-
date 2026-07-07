@@ -4568,29 +4568,9 @@ function renderEmployeeHome() {
   const requests = getScopedRequests();
   const myPrimaryAsset = deviceAssets[0];
 
-  const selfServiceCards = [
-    { label: "资产领用", request: "资产领用", icon: "＋" },
-    { label: "资产借用", request: "资产借用", icon: "＋" },
-    { label: "资产归还", request: "资产归还", icon: "＋" },
-    { label: "故障报修", request: "故障报修", icon: "＋" },
-  ];
-
   return `
     <section class="hero employee-home-hero">
       <h1>${greeting()}，${state.currentUser.name}</h1>
-    </section>
-    <section class="grid employee-entry-grid">
-      <article class="panel">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">员工自助入口</h2>
-            <div class="panel-subtitle">普通员工只做申请，不直接执行资产动作。</div>
-          </div>
-        </div>
-        <div class="grid actions-grid">
-          ${selfServiceCards.map(renderWorkbenchCard).join("")}
-        </div>
-      </article>
     </section>
     ${renderDeviceOverviewStrip(myPrimaryAsset)}
     ${renderRecentRequestPanel("我的申请", requests, "审批不在本系统内流转，页面展示的是业务单据和外部审批回写。")}
