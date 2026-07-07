@@ -1437,7 +1437,7 @@ function createRoleDefinitionDraft() {
     name: "",
     type: isEmployeeRole ? "employee" : "admin",
     description: "",
-    permissions: isEmployeeRole ? ["asset:view", "request:view", "selfService:view"] : ["employee:view", "asset:view"],
+    permissions: [],
   };
   openRoleDefinitionModal();
 }
@@ -9867,7 +9867,7 @@ function openRoleDefinitionModal(roleId = "") {
         name: "",
         type: state.roleTab === "employee" ? "employee" : "admin",
         description: "",
-        permissions: state.roleTab === "employee" ? ["asset:view", "request:view", "selfService:view"] : ["employee:view", "asset:view"],
+        permissions: [],
       };
   state.roleForm = role ? roleFormFromRole(role) : draft;
   resetRolePermissionSelection(state.roleForm);
