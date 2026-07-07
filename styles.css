@@ -3774,27 +3774,27 @@ button {
 
 .role-modal-fields {
   display: grid;
-  gap: 44px;
-  margin-bottom: 28px;
+  gap: 18px;
+  margin-bottom: 16px;
 }
 
 .role-error {
-  padding: 12px 16px;
+  padding: 8px 10px;
   border: 1px solid #fecaca;
   border-radius: 4px;
   background: #fff1f2;
   color: #dc2626;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 750;
 }
 
 .role-modal-field {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: 100px minmax(0, 1fr);
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   color: #2f343b;
-  font-size: 20px;
+  font-size: 16px;
 }
 
 .role-modal-field > span {
@@ -3805,19 +3805,19 @@ button {
 
 .role-modal-field.required > span::before {
   content: "*";
-  margin-right: 6px;
+  margin-right: 4px;
   color: #ff4d43;
 }
 
 .role-modal-field input {
   width: 100%;
-  height: 58px;
+  height: 38px;
   border: 1px solid #d1d5db;
-  border-radius: 6px;
-  padding: 0 20px;
+  border-radius: 4px;
+  padding: 0 12px;
   background: #ffffff;
   color: #1f2937;
-  font-size: 20px;
+  font-size: 15px;
   outline: 0;
 }
 
@@ -3839,9 +3839,9 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 48px;
+  min-height: 34px;
   color: #475569;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 750;
   cursor: pointer;
   list-style: none;
@@ -3853,15 +3853,15 @@ button {
 
 .role-permission-section summary::after {
   content: "+";
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   display: inline-grid;
   place-items: center;
-  margin-left: 14px;
+  margin-left: 10px;
   border: 1px solid #dbe3ee;
   border-radius: 50%;
   color: #64748b;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 500;
 }
 
@@ -3872,13 +3872,13 @@ button {
 .role-permission-section summary em {
   margin-left: auto;
   color: #94a3b8;
-  font-size: 13px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 700;
 }
 
 .role-permission-builder {
-  max-height: min(48vh, 500px);
+  max-height: min(36vh, 260px);
   overflow: auto;
   border: 1px solid #e8edf4;
   border-radius: 6px;
@@ -3890,17 +3890,17 @@ button {
 }
 
 .role-permission-group-title {
-  padding: 10px 12px;
+  padding: 8px 10px;
   color: #64748b;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 750;
 }
 
 .role-permission-modules {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  padding: 0 12px 12px;
+  gap: 8px;
+  padding: 0 10px 10px;
 }
 
 .role-permission-module {
@@ -3917,10 +3917,10 @@ button {
 .role-permission-module-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px;
+  gap: 7px;
+  padding: 8px;
   color: #1f2937;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 750;
 }
 
@@ -3934,21 +3934,21 @@ button {
 .role-permission-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 10px 10px;
+  gap: 6px;
+  padding: 0 8px 8px;
 }
 
 .role-permission-chip {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 28px;
-  padding: 0 8px;
+  min-height: 24px;
+  padding: 0 7px;
   border: 1px solid #e2e8f0;
   border-radius: 999px;
   background: #ffffff;
   color: #475569;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .role-permission-chip.checked {
@@ -3960,17 +3960,17 @@ button {
 .role-summary-card {
   display: flex;
   justify-content: space-between;
-  gap: 18px;
-  margin: 12px 0 0;
-  padding: 12px;
+  gap: 12px;
+  margin: 10px 0 0;
+  padding: 10px;
   border: 1px solid #e8edf4;
   border-radius: 6px;
   background: #ffffff;
 }
 
 .role-summary-card h3 {
-  margin: 0 0 6px;
-  font-size: 14px;
+  margin: 0 0 4px;
+  font-size: 13px;
 }
 
 .role-summary-card p {
@@ -3991,8 +3991,8 @@ button {
 }
 
 .modal.role-modal {
-  width: min(1800px, calc(100vw - 72px));
-  max-height: min(860px, calc(100vh - 32px));
+  width: min(760px, calc(100vw - 48px));
+  max-height: min(600px, calc(100vh - 64px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -4002,27 +4002,27 @@ button {
 
 .modal.role-modal .modal-header {
   flex: 0 0 auto;
-  min-height: 112px;
-  padding: 30px 48px;
+  min-height: 58px;
+  padding: 14px 20px;
   border-bottom: 1px solid #e5e7eb;
 }
 
 .modal.role-modal .modal-header h2 {
   margin: 0;
   color: #2f343b;
-  font-size: 30px;
+  font-size: 20px;
   font-weight: 700;
 }
 
 .modal.role-modal .icon-button {
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   border: 0;
   border-radius: 0;
   color: #888888;
   background: transparent;
   box-shadow: none;
-  font-size: 36px;
+  font-size: 28px;
   line-height: 1;
 }
 
@@ -4034,13 +4034,13 @@ button {
 .modal.role-modal #modalBody {
   flex: 1;
   min-height: 0;
-  padding: 56px 48px 24px;
+  padding: 20px;
   overflow: auto;
 }
 
 .modal.role-modal .modal-actions {
-  margin-top: 24px;
-  padding-top: 18px;
+  margin-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid #edf2f7;
 }
 
@@ -4220,20 +4220,20 @@ button {
   }
 
   .modal.role-modal {
-    width: min(680px, calc(100vw - 24px));
+    width: min(560px, calc(100vw - 24px));
   }
 
   .modal.role-modal .modal-header {
-    min-height: 82px;
-    padding: 20px 24px;
+    min-height: 58px;
+    padding: 14px 18px;
   }
 
   .modal.role-modal #modalBody {
-    padding: 24px;
+    padding: 18px;
   }
 
   .role-modal-fields {
-    gap: 18px;
+    gap: 14px;
   }
 
   .role-modal-field {
@@ -4247,8 +4247,8 @@ button {
   }
 
   .role-modal-field input {
-    height: 44px;
-    font-size: 16px;
+    height: 38px;
+    font-size: 15px;
   }
 
   .role-user-field {
