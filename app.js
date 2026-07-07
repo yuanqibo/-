@@ -1543,7 +1543,7 @@ function refreshRoleModuleState(root = document) {
   const allChecked = roleCheckedCount(allCodes, permissions);
   setRoleCheckboxState(formRoot.querySelector("[data-role-all-permissions]"), allChecked, allCodes.length);
 
-  const summaryCount = formRoot.querySelector(".role-permission-section summary em");
+  const summaryCount = formRoot.querySelector("[data-role-permission-total]");
   if (summaryCount) summaryCount.textContent = `${permissions.size} / ${allCodes.length}`;
 
   groups.forEach((group) => {
@@ -9798,7 +9798,6 @@ function rolePermissionCascadeMarkup(form, disabled) {
 
 function roleConfigFormMarkup(form, options = {}) {
   const readonly = Boolean(options.readonly);
-  const permissionsExpanded = Boolean(options.permissionsExpanded);
   const disabled = readonly ? "disabled" : "";
   return `<form id="demoForm" class="role-config-form" data-mode="role-definition">
     <div class="role-modal-fields">
@@ -9814,13 +9813,9 @@ function roleConfigFormMarkup(form, options = {}) {
       </label>
     </div>
 
-    <details class="role-permission-section" ${permissionsExpanded ? "open" : ""}>
-      <summary>
-        <span>权限配置</span>
-        <em>${form.permissions.length} / ${allRolePermissionCodes().length}</em>
-      </summary>
+    <div class="role-permission-panel">
       ${rolePermissionCascadeMarkup(form, disabled)}
-    </details>
+    </div>
 
     <div class="modal-actions">
       <button type="button" class="btn" data-cancel-modal>取消</button>
@@ -9850,7 +9845,6 @@ function openRoleDefinitionModal(roleId = "") {
   modal.classList.remove("asset-create-modal", "asset-flow-modal", "asset-import-modal", "print-preview-modal", "asset-label-print-modal", "location-modal", "profile-center-modal");
   modalBody.innerHTML = roleConfigFormMarkup(state.roleForm, {
     readonly: Boolean(role?.builtIn),
-    permissionsExpanded: Boolean(role),
   });
   openModal();
   refreshRoleModuleState(modal);
