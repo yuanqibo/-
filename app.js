@@ -9893,7 +9893,16 @@ function roleEmployeeOptionLabel(user) {
   return [user.name, user.account, user.department].filter(Boolean).join(" / ");
 }
 
+function roleUserNoun(role) {
+  return role?.type === "employee" ? "员工" : "管理员";
+}
+
+function roleUserNotFoundMessage(role) {
+  return `未找到${roleUserNoun(role)}账号`;
+}
+
 function roleUserFormMarkup(role) {
+  const noun = roleUserNoun(role);
   return `<form id="demoForm" class="role-user-form" data-mode="role-user">
     <div class="role-user-fields">
       <label class="role-user-field required"><span>账号：</span><input name="account" placeholder="请输入" required autocomplete="off"></label>
@@ -9910,7 +9919,7 @@ function roleUserFormMarkup(role) {
     <input type="hidden" name="roleId" value="${escapeHtml(role?.id || "admin")}">
     <div class="modal-actions role-user-actions">
       <button type="button" class="btn" data-cancel-modal>取消</button>
-      <button type="submit" class="btn primary">新增管理员</button>
+      <button type="submit" class="btn primary">新增${noun}</button>
     </div>
   </form>`;
 }
@@ -9951,7 +9960,7 @@ function roleUserResetPasswordMarkup(user) {
 function openRoleUserModal() {
   const currentRole = state.roles.find((role) => role.id === state.selectedRoleId);
   const selectedRole = currentRole || state.roles.find((role) => role.id === "admin") || state.roles.find((role) => role.type === "admin") || state.roles[0];
-  modalTitle.textContent = "新增管理员";
+  modalTitle.textContent = `新增${roleUserNoun(selectedRole)}`;
   modal.classList.add("role-modal", "role-user-modal");
   modal.classList.remove("asset-create-modal", "asset-flow-modal", "asset-import-modal", "print-preview-modal", "asset-label-print-modal", "location-modal", "profile-center-modal");
   modalBody.innerHTML = roleUserFormMarkup(selectedRole);
@@ -9960,15 +9969,16 @@ function openRoleUserModal() {
 
 function openRoleUserActionModal(account, action) {
   const user = state.users.find((item) => item.account === account);
+  const role = state.roles.find((item) => item.id === user?.roleDefinitionId) || { type: user?.roleCode };
   if (!user) {
-    showToast("未找到管理员账号");
+    showToast(roleUserNotFoundMessage(role));
     return;
   }
   if (action === "delete") {
     deleteRoleUser(account);
     return;
   }
-  modalTitle.textContent = action === "reset" ? "重置密码" : "编辑管理员";
+  modalTitle.textContent = action === "reset" ? "重置密码" : `编辑${roleUserNoun(role)}`;
   modal.classList.add("role-modal", "role-user-modal");
   modal.classList.remove("asset-create-modal", "asset-flow-modal", "asset-import-modal", "print-preview-modal", "asset-label-print-modal", "location-modal", "profile-center-modal");
   modalBody.innerHTML = action === "reset" ? roleUserResetPasswordMarkup(user) : roleUserEditFormMarkup(user);
@@ -9977,8 +9987,9 @@ function openRoleUserActionModal(account, action) {
 
 function deleteRoleUser(account) {
   const user = state.users.find((item) => item.account === account);
+  const role = state.roles.find((item) => item.id === user?.roleDefinitionId) || { type: user?.roleCode };
   if (!user) {
-    showToast("未找到管理员账号");
+    showToast(roleUserNotFoundMessage(role));
     return;
   }
   if (user.account === state.currentUser?.account) {
@@ -9989,7 +10000,7 @@ function deleteRoleUser(account) {
     showToast("员工账号请到员工信息中维护");
     return;
   }
-  const confirmed = window.confirm(`确定删除管理员账号“${user.account}”吗？`);
+  const confirmed = window.confirm(`确定删除${roleUserNoun(role)}账号“${user.account}”吗？`);
   if (!confirmed) return;
   state.users = state.users.filter((item) => item.account !== account);
   if (!["本地注册", "角色管理新增"].includes(user.identitySource)) {
@@ -9998,7 +10009,7 @@ function deleteRoleUser(account) {
   }
   saveRegisteredUsers();
   render();
-  showToast("管理员已删除");
+  showToast(`${roleUserNoun(role)}已删除`);
 }
 
 function findRoleEmployee(keyword) {
@@ -10021,6 +10032,7 @@ function saveRoleUserFromForm(form) {
   const data = new FormData(form);
   const roleId = String(data.get("roleId") || "admin");
   const role = state.roles.find((item) => item.id === roleId) || state.roles.find((item) => item.id === "admin");
+  const isEmployeeRole = role?.type === "employee";
   const accountInput = String(data.get("account") || "").trim();
   const password = String(data.get("password") || "");
   const confirmPassword = String(data.get("confirmPassword") || "");
@@ -10056,11 +10068,11 @@ function saveRoleUserFromForm(form) {
     email: employee?.email || "",
     department: employee?.department || "默认部门",
     company: employee?.company || "默认公司",
-    roleCode: role?.type === "employee" ? "employee" : role?.type === "super_admin" ? "super_admin" : "admin",
-    roleName: role?.name || "普通管理员",
+    roleCode: isEmployeeRole ? "employee" : role?.type === "super_admin" ? "super_admin" : "admin",
+    roleName: role?.name || (isEmployeeRole ? "普通员工" : "普通管理员"),
     roleDefinitionId: role?.id || "admin",
     scope: role?.description || role?.scope || "按角色授权",
-    loginType: "超级管理员分配账号",
+    loginType: isEmployeeRole ? "管理员添加员工信息" : "超级管理员分配账号",
     identitySource: "角色管理新增",
     externalSubject: `assigned:${account}`,
     linkedEmployeeAccount: employee?.account || "",
@@ -10076,7 +10088,7 @@ function saveRoleUserEditForm(form) {
   const account = String(data.get("accountKey") || "").trim();
   const user = state.users.find((item) => item.account === account);
   if (!user) {
-    showToast("未找到管理员账号");
+    showToast("未找到账号");
     return false;
   }
   const name = String(data.get("name") || "").trim();
@@ -10098,7 +10110,7 @@ function saveRoleUserResetPasswordForm(form) {
   const account = String(data.get("accountKey") || "").trim();
   const user = state.users.find((item) => item.account === account);
   if (!user) {
-    showToast("未找到管理员账号");
+    showToast("未找到账号");
     return false;
   }
   const password = String(data.get("password") || "");
@@ -10121,6 +10133,7 @@ function renderRoleManagement() {
   const selectedRole = roles.find((role) => role.id === state.selectedRoleId) || roles.find((role) => role.id === "admin") || roles[0] || state.roles[0];
   if (selectedRole && state.selectedRoleId !== selectedRole.id) state.selectedRoleId = selectedRole.id;
   const assignedUsers = filteredRoleUsers(selectedRole);
+  const accountNoun = roleUserNoun(selectedRole);
 
   return `<div class="system-content role-management">
     <aside class="role-side-panel">
@@ -10152,7 +10165,7 @@ function renderRoleManagement() {
     <section class="role-detail-panel">
       <div class="role-table-toolbar">
         <div class="role-toolbar-actions">
-          <button class="btn primary" data-role-user-create>＋ 新增管理员</button>
+          <button class="btn primary" data-role-user-create>＋ 新增${accountNoun}</button>
         </div>
         <label class="role-main-search">
           <input type="search" placeholder="模糊查询" value="${escapeHtml(state.roleUserQueryDraft ?? state.roleUserQuery)}" data-role-user-search>
@@ -13667,17 +13680,21 @@ function openModal() {
       return;
     }
     if (mode === "role-user") {
+      const role = state.roles.find((item) => item.id === String(new FormData(form).get("roleId") || "admin"));
       if (!saveRoleUserFromForm(form)) return;
       closeModal();
       render();
-      showToast("管理员已新增");
+      showToast(`${roleUserNoun(role)}已新增`);
       return;
     }
     if (mode === "role-user-edit") {
+      const account = String(new FormData(form).get("accountKey") || "");
+      const user = state.users.find((item) => item.account === account);
+      const role = state.roles.find((item) => item.id === user?.roleDefinitionId) || { type: user?.roleCode };
       if (!saveRoleUserEditForm(form)) return;
       closeModal();
       render();
-      showToast("管理员信息已保存");
+      showToast(`${roleUserNoun(role)}信息已保存`);
       return;
     }
     if (mode === "role-user-reset-password") {
