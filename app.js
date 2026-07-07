@@ -1513,6 +1513,7 @@ function deleteRoleDefinition(roleId) {
   state.roleForm = null;
   state.pendingRoleDeleteId = "";
   saveRoleDefinitions();
+  closeModal();
   render();
   showToast("角色已删除");
 }
@@ -9597,59 +9598,70 @@ function rolePermissionGroups() {
 
 function roleConfigFormMarkup(form, options = {}) {
   const readonly = Boolean(options.readonly);
+  const permissionsExpanded = Boolean(options.permissionsExpanded);
   const disabled = readonly ? "disabled" : "";
   const formPermissions = new Set(form.permissions || []);
   return `<form id="demoForm" class="role-config-form" data-mode="role-definition">
-    <div class="role-form-grid">
+    <div class="role-modal-fields">
       <div class="role-error" data-role-form-error ${state.roleError ? "" : "hidden"}>${escapeHtml(state.roleError || "")}</div>
-      <label class="field"><span>角色名称</span><input data-role-field="name" value="${escapeHtml(form.name)}" placeholder="如：物料管理员" ${disabled}></label>
-      <label class="field"><span>角色类型</span><input value="普通管理员" disabled><input type="hidden" data-role-field="type" value="admin"></label>
-      <label class="field full"><span>说明</span><input data-role-field="description" value="${escapeHtml(form.description)}" placeholder="描述该角色的管理范围" ${disabled}></label>
+      <input type="hidden" data-role-field="type" value="${escapeHtml(form.type || "admin")}">
+      <label class="role-modal-field required">
+        <span>角色名称：</span>
+        <input data-role-field="name" value="${escapeHtml(form.name)}" placeholder="请输入" ${disabled}>
+      </label>
+      <label class="role-modal-field">
+        <span>描述：</span>
+        <input data-role-field="description" value="${escapeHtml(form.description)}" placeholder="请输入" ${disabled}>
+      </label>
     </div>
 
-    <div class="role-permission-builder">
-      ${rolePermissionGroups()
-        .map(
-          (group) => `<section class="role-permission-group">
-            <div class="role-permission-group-title">${escapeHtml(group.name)}</div>
-            <div class="role-permission-modules">
-              ${group.modules
-                .map((module) => {
-                  const moduleCodes = module.actions.map(([action]) => `${module.code}:${action}`);
-                  const checkedCount = moduleCodes.filter((code) => formPermissions.has(code)).length;
-                  return `<article class="role-permission-module ${checkedCount ? "selected" : ""}">
-                    <label class="role-permission-module-head">
-                      <input type="checkbox" data-role-module="${escapeHtml(module.code)}" ${checkedCount === moduleCodes.length ? "checked" : ""} ${disabled}>
-                      <span>${escapeHtml(module.name)}</span>
-                      <em>${checkedCount}/${moduleCodes.length}</em>
-                    </label>
-                    <div class="role-permission-actions">
-                      ${module.actions
-                        .map(([action, label]) => {
-                          const code = `${module.code}:${action}`;
-                          return `<label class="role-permission-chip ${formPermissions.has(code) ? "checked" : ""}">
-                            <input type="checkbox" data-role-permission="${escapeHtml(code)}" ${formPermissions.has(code) ? "checked" : ""} ${disabled}>
-                            <span>${escapeHtml(label)}</span>
-                          </label>`;
-                        })
-                        .join("")}
-                    </div>
-                  </article>`;
-                })
-                .join("")}
-            </div>
-          </section>`
-        )
-        .join("")}
-    </div>
-
-    <div class="role-summary-card">
-      <div>
-        <h3>已选权限</h3>
-        <p>${rolePermissionSummary({ permissions: form.permissions }) || "未选择权限"}</p>
+    <details class="role-permission-section" ${permissionsExpanded ? "open" : ""}>
+      <summary>
+        <span>权限配置</span>
+        <em>${form.permissions.length} / ${allRolePermissionCodes().length}</em>
+      </summary>
+      <div class="role-permission-builder">
+        ${rolePermissionGroups()
+          .map(
+            (group) => `<section class="role-permission-group">
+              <div class="role-permission-group-title">${escapeHtml(group.name)}</div>
+              <div class="role-permission-modules">
+                ${group.modules
+                  .map((module) => {
+                    const moduleCodes = module.actions.map(([action]) => `${module.code}:${action}`);
+                    const checkedCount = moduleCodes.filter((code) => formPermissions.has(code)).length;
+                    return `<article class="role-permission-module ${checkedCount ? "selected" : ""}">
+                      <label class="role-permission-module-head">
+                        <input type="checkbox" data-role-module="${escapeHtml(module.code)}" ${checkedCount === moduleCodes.length ? "checked" : ""} ${disabled}>
+                        <span>${escapeHtml(module.name)}</span>
+                        <em>${checkedCount}/${moduleCodes.length}</em>
+                      </label>
+                      <div class="role-permission-actions">
+                        ${module.actions
+                          .map(([action, label]) => {
+                            const code = `${module.code}:${action}`;
+                            return `<label class="role-permission-chip ${formPermissions.has(code) ? "checked" : ""}">
+                              <input type="checkbox" data-role-permission="${escapeHtml(code)}" ${formPermissions.has(code) ? "checked" : ""} ${disabled}>
+                              <span>${escapeHtml(label)}</span>
+                            </label>`;
+                          })
+                          .join("")}
+                      </div>
+                    </article>`;
+                  })
+                  .join("")}
+              </div>
+            </section>`
+          )
+          .join("")}
       </div>
-      <span class="tag green">${form.permissions.length} / ${allRolePermissionCodes().length}</span>
-    </div>
+      <div class="role-summary-card">
+        <div>
+          <h3>已选权限</h3>
+          <p>${rolePermissionSummary({ permissions: form.permissions }) || "未选择权限"}</p>
+        </div>
+      </div>
+    </details>
 
     <div class="modal-actions">
       <button type="button" class="btn" data-cancel-modal>取消</button>
@@ -9676,7 +9688,10 @@ function openRoleDefinitionModal(roleId = "") {
   modalTitle.textContent = role ? "编辑角色" : "新增角色";
   modal.classList.add("role-modal");
   modal.classList.remove("asset-create-modal", "asset-flow-modal", "asset-import-modal", "print-preview-modal", "asset-label-print-modal", "location-modal", "profile-center-modal");
-  modalBody.innerHTML = roleConfigFormMarkup(state.roleForm, { readonly: Boolean(role?.builtIn) });
+  modalBody.innerHTML = roleConfigFormMarkup(state.roleForm, {
+    readonly: Boolean(role?.builtIn),
+    permissionsExpanded: Boolean(role),
+  });
   openModal();
   refreshRoleModuleState(modal);
 }
@@ -11227,7 +11242,7 @@ function bindRoleManagementEvents() {
   if (roleEventsBound) return;
   roleEventsBound = true;
   document.addEventListener("click", (event) => {
-    if (!isInsideRoleManagement(event.target)) return;
+    if (!isInsideRoleManagement(event.target) && !event.target.closest?.(".role-modal")) return;
     const tabButton = event.target.closest("[data-role-tab]");
     if (tabButton) {
       state.roleTab = tabButton.dataset.roleTab || "system";
