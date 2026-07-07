@@ -1408,8 +1408,11 @@ function syncRoleFormFromDom(root = document) {
   formRoot.querySelectorAll("[data-role-field]").forEach((field) => {
     state.roleForm[field.dataset.roleField] = field.value.trim();
   });
-  state.roleForm.permissions = Array.from(formRoot.querySelectorAll("[data-role-permission]:checked")).map((input) => input.dataset.rolePermission);
-  if (state.roleForm.name && state.roleForm.permissions.length) {
+  const permissionInputs = Array.from(formRoot.querySelectorAll("[data-role-permission]"));
+  if (permissionInputs.length) {
+    state.roleForm.permissions = permissionInputs.filter((input) => input.checked).map((input) => input.dataset.rolePermission);
+  }
+  if (state.roleForm.name && (state.roleForm.type === "employee" || state.roleForm.permissions.length)) {
     state.roleError = "";
   }
 }
@@ -1425,15 +1428,16 @@ function selectRoleDefinition(roleId) {
 }
 
 function createRoleDefinitionDraft() {
+  const isEmployeeRole = state.roleTab === "employee";
   state.selectedRoleId = "";
   state.pendingRoleDeleteId = "";
   state.roleError = "";
   state.roleForm = {
     id: "",
     name: "",
-    type: "admin",
+    type: isEmployeeRole ? "employee" : "admin",
     description: "",
-    permissions: ["employee:view", "asset:view"],
+    permissions: isEmployeeRole ? ["asset:view", "request:view", "selfService:view"] : ["employee:view", "asset:view"],
   };
   openRoleDefinitionModal();
 }
@@ -1454,6 +1458,9 @@ function saveRoleDefinitionFromForm(root = document) {
   if (!form.name) {
     setRoleFormError("请填写角色名称", root);
     return false;
+  }
+  if (form.type === "employee" && !form.permissions?.length) {
+    form.permissions = ["asset:view", "request:view", "selfService:view"];
   }
   if (!form.permissions?.length) {
     setRoleFormError("请至少选择一个功能权限", root);
@@ -9799,6 +9806,29 @@ function rolePermissionCascadeMarkup(form, disabled) {
 function roleConfigFormMarkup(form, options = {}) {
   const readonly = Boolean(options.readonly);
   const disabled = readonly ? "disabled" : "";
+  const isEmployeeRole = form.type === "employee";
+  if (isEmployeeRole) {
+    return `<form id="demoForm" class="role-config-form employee-role-form" data-mode="role-definition">
+      <div class="role-modal-fields">
+        <div class="role-error" data-role-form-error ${state.roleError ? "" : "hidden"}>${escapeHtml(state.roleError || "")}</div>
+        <input type="hidden" data-role-field="type" value="employee">
+        <label class="role-modal-field required">
+          <span>角色名称：</span>
+          <input data-role-field="name" value="${escapeHtml(form.name)}" placeholder="请输入" ${disabled}>
+        </label>
+        <label class="role-modal-field role-modal-textarea-field">
+          <span>角色描述：</span>
+          <textarea data-role-field="description" placeholder="请输入" ${disabled}>${escapeHtml(form.description)}</textarea>
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn" data-cancel-modal>取消</button>
+        ${!readonly && form.id ? `<button type="button" class="btn role-delete-modal ${state.pendingRoleDeleteId === form.id ? "confirming" : ""}" data-role-delete="${escapeHtml(form.id)}">${state.pendingRoleDeleteId === form.id ? "确认删除" : "删除角色"}</button>` : ""}
+        ${readonly ? "" : `<button type="submit" class="btn primary">确定</button>`}
+      </div>
+    </form>`;
+  }
   return `<form id="demoForm" class="role-config-form" data-mode="role-definition">
     <div class="role-modal-fields">
       <div class="role-error" data-role-form-error ${state.roleError ? "" : "hidden"}>${escapeHtml(state.roleError || "")}</div>
@@ -9830,18 +9860,20 @@ function openRoleDefinitionModal(roleId = "") {
   state.selectedRoleId = role?.id || "";
   state.pendingRoleDeleteId = "";
   state.roleError = "";
-  state.roleForm = role
-    ? roleFormFromRole(role)
+  const draft = state.roleForm && !state.roleForm.id
+    ? state.roleForm
     : {
         id: "",
         name: "",
-        type: "admin",
+        type: state.roleTab === "employee" ? "employee" : "admin",
         description: "",
-        permissions: ["employee:view", "asset:view"],
+        permissions: state.roleTab === "employee" ? ["asset:view", "request:view", "selfService:view"] : ["employee:view", "asset:view"],
       };
+  state.roleForm = role ? roleFormFromRole(role) : draft;
   resetRolePermissionSelection(state.roleForm);
-  modalTitle.textContent = role ? "编辑角色" : "新增角色";
+  modalTitle.textContent = state.roleForm.type === "employee" ? (role ? "编辑员工角色" : "新增员工角色") : role ? "编辑角色" : "新增角色";
   modal.classList.add("role-modal");
+  modal.classList.toggle("role-employee-definition-modal", state.roleForm.type === "employee");
   modal.classList.remove("asset-create-modal", "asset-flow-modal", "asset-import-modal", "print-preview-modal", "asset-label-print-modal", "location-modal", "profile-center-modal");
   modalBody.innerHTML = roleConfigFormMarkup(state.roleForm, {
     readonly: Boolean(role?.builtIn),
@@ -13899,6 +13931,7 @@ function closeModal() {
   modal.classList.remove("location-modal");
   modal.classList.remove("role-modal");
   modal.classList.remove("role-user-modal");
+  modal.classList.remove("role-employee-definition-modal");
   modalBackdrop.classList.remove("open");
   modal.setAttribute("aria-hidden", "true");
 }

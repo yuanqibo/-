@@ -3822,13 +3822,41 @@ button {
   outline: 0;
 }
 
+.role-modal-field textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1.5;
+  outline: 0;
+}
+
+.role-modal-textarea-field {
+  align-items: start;
+}
+
+.role-modal-textarea-field > span {
+  padding-top: 9px;
+}
+
 .role-modal-field input:focus {
   border-color: #9ec5fe;
   box-shadow: 0 0 0 3px rgba(18, 150, 219, 0.1);
 }
 
-.role-modal-field input::placeholder {
+.role-modal-field input::placeholder,
+.role-modal-field textarea::placeholder {
   color: #b7bdc6;
+}
+
+.role-modal-field textarea:focus {
+  border-color: #9ec5fe;
+  box-shadow: 0 0 0 3px rgba(18, 150, 219, 0.1);
 }
 
 .role-permission-panel {
@@ -4041,6 +4069,32 @@ button {
   flex: 0 0 auto;
   margin-top: 0;
   padding-top: 16px;
+}
+
+.modal.role-employee-definition-modal {
+  width: min(680px, calc(100vw - 48px));
+  height: auto;
+  max-height: calc(100vh - 48px);
+}
+
+.modal.role-employee-definition-modal #modalBody {
+  padding: 28px 34px 20px;
+  overflow: auto;
+}
+
+.employee-role-form {
+  min-height: 330px;
+  height: auto;
+}
+
+.employee-role-form .role-modal-fields {
+  gap: 24px;
+  padding: 12px 0 34px;
+  border-bottom: 1px solid #e5eaf1;
+}
+
+.employee-role-form .modal-actions {
+  padding-top: 18px;
 }
 
 .modal.role-user-modal {
