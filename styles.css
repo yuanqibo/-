@@ -3223,7 +3223,9 @@ button {
 
 .employee-home-hero {
   min-height: 92px;
-  padding-bottom: 18px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
 }
 
 .quick-actions {
