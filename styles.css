@@ -3766,6 +3766,13 @@ button {
   background: #eff6ff;
 }
 
+.role-config-shell {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
 .role-config-form {
   display: flex;
   flex-direction: column;
@@ -3776,7 +3783,7 @@ button {
 .role-modal-fields {
   display: grid;
   gap: 22px;
-  padding: 18px 0 26px;
+  padding: 18px 26px 22px;
 }
 
 .role-error {
@@ -3863,8 +3870,8 @@ button {
   flex: 1;
   min-height: 0;
   display: flex;
-  padding-bottom: 18px;
-  border-bottom: 1px solid #e5eaf1;
+  padding: 0 26px 18px;
+  overflow: hidden;
 }
 
 .role-permission-cascade {
@@ -3872,7 +3879,7 @@ button {
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  height: min(420px, calc(100vh - 300px));
+  height: auto;
   overflow: hidden;
   border: 1px solid #dfe5ee;
   border-radius: 2px;
@@ -4061,14 +4068,17 @@ button {
 .modal.role-modal #modalBody {
   flex: 1;
   min-height: 0;
-  padding: 18px 26px 18px;
+  padding: 0;
   overflow: hidden;
 }
 
 .modal.role-modal .modal-actions {
   flex: 0 0 auto;
   margin-top: 0;
-  padding-top: 16px;
+  padding: 16px 26px 18px;
+  border-top: 1px solid #e5eaf1;
+  background: #ffffff;
+  box-shadow: 0 -10px 22px rgba(15, 23, 42, 0.05);
 }
 
 .modal.role-employee-definition-modal {
@@ -4083,6 +4093,8 @@ button {
 }
 
 .employee-role-form {
+  display: flex;
+  flex-direction: column;
   min-height: 330px;
   height: auto;
 }
@@ -4304,7 +4316,7 @@ button {
 
   .role-permission-cascade {
     grid-template-columns: repeat(3, minmax(160px, 1fr));
-    height: min(360px, calc(100vh - 300px));
+    height: auto;
     overflow-x: auto;
   }
 

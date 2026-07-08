@@ -176,22 +176,22 @@ const rolePermissionModules = [
     actions: [
       ["view", "查看资产"],
       ["create", "新增资产"],
-      ["update", "修改资产"],
-      ["delete", "删除资产"],
-      ["copy", "复制资产"],
-      ["batchUpdate", "批量修改"],
       ["receive", "领用"],
       ["return", "退库"],
       ["borrow", "借用"],
       ["borrowReturn", "借用归还"],
       ["handover", "资产交接"],
-      ["transfer", "资产调拨"],
-      ["dispose", "资产处置"],
-      ["import", "导入资产"],
+      ["update", "修改资产"],
+      ["delete", "删除资产"],
+      ["copy", "复制资产"],
+      ["batchUpdate", "批量修改"],
+      ["assetImport", "资产导入"],
+      ["updateImport", "更新导入"],
+      ["receiveImport", "批量领用导入"],
       ["export", "导出资产"],
+      ["printLabel", "打印标签"],
       ["advancedSearch", "高级搜索"],
       ["columnSettings", "列表设置"],
-      ["printLabel", "打印标签"],
     ],
   },
   {
@@ -199,11 +199,13 @@ const rolePermissionModules = [
     name: "资产入库",
     actions: [
       ["view", "查看入库单"],
-      ["create", "新增入库"],
+      ["create", "新增资产"],
       ["import", "批量导入"],
       ["printOrder", "打印入库单"],
       ["printLabel", "打印资产标签"],
       ["export", "导出"],
+      ["advancedSearch", "高级搜索"],
+      ["columnSettings", "列表设置"],
     ],
   },
   {
@@ -218,6 +220,8 @@ const rolePermissionModules = [
       ["cancel", "取消交接"],
       ["print", "打印单据"],
       ["export", "导出"],
+      ["advancedSearch", "高级搜索"],
+      ["columnSettings", "列表设置"],
     ],
   },
   {
@@ -230,28 +234,45 @@ const rolePermissionModules = [
       ["extend", "借用延期"],
       ["print", "打印单据"],
       ["export", "导出"],
+      ["advancedSearch", "高级搜索"],
+      ["columnSettings", "列表设置"],
     ],
   },
-  { code: "assetTransfer", name: "资产调拨", actions: [["view", "查看调拨"], ["create", "发起调拨"], ["process", "处理调拨"], ["export", "导出"]] },
-  { code: "assetDisposal", name: "资产处置", actions: [["view", "查看处置"], ["create", "发起处置"], ["process", "处理处置"], ["export", "导出"]] },
   { code: "request", name: "审批申请", actions: [["view", "查看"], ["review", "审批"], ["export", "导出"]] },
-  { code: "stocktake", name: "资产盘点", actions: [["view", "查看盘点"], ["create", "新建盘点"], ["update", "编辑盘点"], ["review", "复核差异"], ["export", "导出"]] },
-  { code: "assetRepair", name: "资产维修", actions: [["view", "查看工单"], ["create", "新建报修"], ["process", "处理维修"], ["close", "关闭工单"]] },
+  { code: "stocktake", name: "资产盘点", actions: [["view", "查看盘点"], ["create", "新建盘点"]] },
   {
     code: "assetLocationSettings",
     name: "位置管理",
-    actions: [["view", "查看位置"], ["create", "新增位置"], ["update", "编辑位置"], ["delete", "删除位置"], ["import", "导入位置"], ["export", "导出位置"]],
+    actions: [
+      ["view", "查看位置"],
+      ["create", "新增位置"],
+      ["update", "编辑位置"],
+      ["delete", "删除位置"],
+      ["toggleCode", "启停编码"],
+      ["template", "下载模板"],
+      ["import", "导入位置"],
+      ["export", "导出位置"],
+    ],
   },
   {
     code: "assetCategorySettings",
     name: "资产分类",
-    actions: [["view", "查看分类"], ["create", "新增分类"], ["update", "编辑分类"], ["delete", "删除分类"], ["import", "导入分类"], ["export", "导出分类"]],
+    actions: [
+      ["view", "查看分类"],
+      ["create", "新增分类"],
+      ["update", "编辑分类"],
+      ["delete", "删除分类"],
+      ["toggleCode", "启停编码"],
+      ["template", "下载模板"],
+      ["import", "导入分类"],
+      ["export", "导出分类"],
+    ],
   },
   { code: "assetCodeRules", name: "资产编码规则", actions: [["view", "查看规则"], ["update", "配置规则"]] },
   {
     code: "assetLabelTemplateSettings",
     name: "标签模板设置",
-    actions: [["view", "查看模板"], ["create", "新增模板"], ["update", "编辑模板"], ["delete", "删除模板"], ["print", "打印标签"]],
+    actions: [["view", "查看模板"], ["create", "新增模板"], ["update", "编辑模板"], ["delete", "删除模板"], ["save", "保存模板"], ["reset", "重置模板"]],
   },
   { code: "selfService", name: "员工自助", actions: [["view", "查看"], ["update", "配置"]] },
   { code: "integration", name: "系统对接", actions: [["view", "查看"], ["create", "新增"], ["update", "编辑"], ["sync", "同步"]] },
@@ -264,10 +285,7 @@ const assetPermissionModuleCodes = [
   "assetInbound",
   "assetReceiveReturn",
   "assetBorrowReturn",
-  "assetTransfer",
-  "assetDisposal",
   "stocktake",
-  "assetRepair",
   "assetLocationSettings",
   "assetCategorySettings",
   "assetCodeRules",
@@ -9923,30 +9941,32 @@ function roleConfigFormMarkup(form, options = {}) {
       </div>
     </form>`;
   }
-  return `<form id="demoForm" class="role-config-form" data-mode="role-definition">
-    <div class="role-modal-fields">
-      <div class="role-error" data-role-form-error ${state.roleError ? "" : "hidden"}>${escapeHtml(state.roleError || "")}</div>
-      <input type="hidden" data-role-field="type" value="${escapeHtml(form.type || "admin")}">
-      <label class="role-modal-field required">
-        <span>角色名称：</span>
-        <input data-role-field="name" value="${escapeHtml(form.name)}" placeholder="请输入" ${disabled}>
-      </label>
-      <label class="role-modal-field">
-        <span>描述：</span>
-        <input data-role-field="description" value="${escapeHtml(form.description)}" placeholder="请输入" ${disabled}>
-      </label>
-    </div>
+  return `<div class="role-config-shell">
+    <form id="demoForm" class="role-config-form" data-mode="role-definition">
+      <div class="role-modal-fields">
+        <div class="role-error" data-role-form-error ${state.roleError ? "" : "hidden"}>${escapeHtml(state.roleError || "")}</div>
+        <input type="hidden" data-role-field="type" value="${escapeHtml(form.type || "admin")}">
+        <label class="role-modal-field required">
+          <span>角色名称：</span>
+          <input data-role-field="name" value="${escapeHtml(form.name)}" placeholder="请输入" ${disabled}>
+        </label>
+        <label class="role-modal-field">
+          <span>描述：</span>
+          <input data-role-field="description" value="${escapeHtml(form.description)}" placeholder="请输入" ${disabled}>
+        </label>
+      </div>
 
-    <div class="role-permission-panel">
-      ${rolePermissionCascadeMarkup(form, disabled)}
-    </div>
+      <div class="role-permission-panel">
+        ${rolePermissionCascadeMarkup(form, disabled)}
+      </div>
+    </form>
 
     <div class="modal-actions">
       <button type="button" class="btn" data-cancel-modal>取消</button>
       ${!readonly && form.id ? `<button type="button" class="btn role-delete-modal ${state.pendingRoleDeleteId === form.id ? "confirming" : ""}" data-role-delete="${escapeHtml(form.id)}">${state.pendingRoleDeleteId === form.id ? "确认删除" : "删除角色"}</button>` : ""}
-      ${readonly ? "" : `<button type="submit" class="btn primary">${form.id ? "保存角色" : "新增角色"}</button>`}
+      ${readonly ? "" : `<button type="submit" class="btn primary" form="demoForm">确定</button>`}
     </div>
-  </form>`;
+  </div>`;
 }
 
 function openRoleDefinitionModal(roleId = "") {
