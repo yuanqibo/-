@@ -3771,6 +3771,7 @@ button {
   min-height: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
 }
 
 .role-config-form {
@@ -3778,6 +3779,7 @@ button {
   flex-direction: column;
   min-height: 0;
   height: 100%;
+  overflow: hidden;
 }
 
 .role-modal-fields {
@@ -3879,7 +3881,7 @@ button {
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  height: auto;
+  height: 100%;
   overflow: hidden;
   border: 1px solid #dfe5ee;
   border-radius: 2px;
@@ -3888,8 +3890,10 @@ button {
 
 .role-permission-column {
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .role-permission-column + .role-permission-column {
@@ -3937,7 +3941,30 @@ button {
 .role-permission-column-list {
   min-height: 0;
   flex: 1;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #aeb8c5 #f4f7fb;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.role-permission-column-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.role-permission-column-list::-webkit-scrollbar-track {
+  background: #f4f7fb;
+}
+
+.role-permission-column-list::-webkit-scrollbar-thumb {
+  border: 2px solid #f4f7fb;
+  border-radius: 999px;
+  background: #aeb8c5;
+}
+
+.role-permission-column-list::-webkit-scrollbar-thumb:hover {
+  background: #8793a3;
 }
 
 .role-permission-row {
@@ -3990,10 +4017,8 @@ button {
 }
 
 .role-permission-action-panel {
-  min-height: 100%;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: start;
+  min-height: 0;
+  display: block;
 }
 
 .role-permission-row[hidden],
@@ -4007,10 +4032,6 @@ button {
   border-bottom: 1px solid #f1f4f8;
   color: #1f2937;
   font-size: 13px;
-}
-
-.role-permission-action:nth-child(odd) {
-  border-right: 1px solid #f1f4f8;
 }
 
 .role-permission-action.checked,

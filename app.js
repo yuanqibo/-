@@ -1645,6 +1645,13 @@ function setRoleCheckboxState(input, checkedCount, totalCount) {
   input.indeterminate = checkedCount > 0 && checkedCount < totalCount;
 }
 
+function scrollRolePermissionSelectionIntoView(root = document) {
+  const formRoot = root.querySelector?.(".role-config-form") || document.querySelector(".role-config-form");
+  if (!formRoot) return;
+  formRoot.querySelector(`[data-role-permission-group="${cssEscape(state.rolePermissionGroup)}"]`)?.scrollIntoView({ block: "nearest" });
+  formRoot.querySelector(`[data-role-module-row="${cssEscape(state.rolePermissionModule)}"]`)?.scrollIntoView({ block: "nearest" });
+}
+
 function refreshRoleModuleState(root = document) {
   const formRoot = root.querySelector?.(".role-config-form") || document.querySelector(".role-config-form");
   if (!formRoot) return;
@@ -1704,6 +1711,7 @@ function refreshRoleModuleState(root = document) {
   if (activeModuleTitle) activeModuleTitle.textContent = activeModule?.name || "-";
 
   actionInputs.forEach((input) => input.closest(".role-permission-action")?.classList.toggle("checked", input.checked));
+  scrollRolePermissionSelectionIntoView(root);
 }
 
 function setRolePermissionCodes(codes, checked, root = document) {
