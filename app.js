@@ -10062,15 +10062,9 @@ function roleUserFormMarkup(role) {
       <label class="role-user-field required"><span>账号：</span><input name="account" placeholder="请输入" required autocomplete="off"></label>
       <label class="role-user-field required"><span>密码：</span><input name="password" type="password" placeholder="请输入" required autocomplete="new-password"></label>
       <label class="role-user-field required"><span>确认密码：</span><input name="confirmPassword" type="password" placeholder="请输入" required autocomplete="new-password"></label>
-      <label class="role-user-field">
-        <span>关联员工：</span>
-        <div class="role-user-lookup">
-          <input name="employeeKeyword" placeholder="模糊搜索" autocomplete="off">
-          <span class="role-user-lookup-icon" aria-hidden="true"></span>
-        </div>
-      </label>
     </div>
     <input type="hidden" name="roleId" value="${escapeHtml(role?.id || "admin")}">
+    <input type="hidden" name="employeeKeyword" value="">
     <div class="modal-actions role-user-actions">
       <button type="button" class="btn" data-cancel-modal>取消</button>
       <button type="submit" class="btn primary">新增${noun}</button>
