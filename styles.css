@@ -3782,8 +3782,8 @@ button {
 
 .role-modal-fields {
   display: grid;
-  gap: 22px;
-  padding: 18px 26px 22px;
+  gap: 18px;
+  padding: 16px 26px 18px;
 }
 
 .role-error {
@@ -3870,7 +3870,7 @@ button {
   flex: 1;
   min-height: 0;
   display: flex;
-  padding: 0 26px 18px;
+  padding: 0 26px 14px;
   overflow: hidden;
 }
 
@@ -3898,7 +3898,7 @@ button {
 
 .role-permission-column-head {
   flex: 0 0 auto;
-  height: 42px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3941,7 +3941,7 @@ button {
 }
 
 .role-permission-row {
-  min-height: 48px;
+  min-height: 44px;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto 14px;
   align-items: center;
@@ -3991,6 +3991,9 @@ button {
 
 .role-permission-action-panel {
   min-height: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
 }
 
 .role-permission-row[hidden],
@@ -3999,11 +4002,15 @@ button {
 }
 
 .role-permission-action {
-  min-height: 48px;
-  padding: 0 12px;
+  min-height: 42px;
+  padding: 0 10px;
   border-bottom: 1px solid #f1f4f8;
   color: #1f2937;
   font-size: 13px;
+}
+
+.role-permission-action:nth-child(odd) {
+  border-right: 1px solid #f1f4f8;
 }
 
 .role-permission-action.checked,
@@ -4075,7 +4082,7 @@ button {
 .modal.role-modal .modal-actions {
   flex: 0 0 auto;
   margin-top: 0;
-  padding: 16px 26px 18px;
+  padding: 14px 26px 16px;
   border-top: 1px solid #e5eaf1;
   background: #ffffff;
   box-shadow: 0 -10px 22px rgba(15, 23, 42, 0.05);
