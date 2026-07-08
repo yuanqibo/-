@@ -1,0 +1,216 @@
+resources:
+  - code: employee
+    name: 员工信息
+    scopes: [ALL]
+    permissions:
+      - code: employee:view
+        action: view
+        riskLevel: L1
+        approvalRequired: false
+      - code: employee:create
+        action: create
+        riskLevel: L2
+        approvalRequired: false
+      - code: employee:update
+        action: update
+        riskLevel: L2
+        approvalRequired: false
+      - code: employee:delete
+        action: delete
+        riskLevel: L3
+        approvalRequired: false
+  - code: department
+    name: 组织架构
+    scopes: [ALL]
+    permissions:
+      - code: department:view
+        action: view
+        riskLevel: L1
+        approvalRequired: false
+      - code: department:create
+        action: create
+        riskLevel: L2
+        approvalRequired: false
+      - code: department:update
+        action: update
+        riskLevel: L2
+        approvalRequired: false
+      - code: department:delete
+        action: delete
+        riskLevel: L3
+        approvalRequired: false
+  - code: role
+    name: 角色管理
+    scopes: [ALL]
+    permissions:
+      - code: role:view
+        action: view
+        riskLevel: L1
+        approvalRequired: false
+      - code: role:create
+        action: create
+        riskLevel: L2
+        approvalRequired: false
+      - code: role:update
+        action: update
+        riskLevel: L2
+        approvalRequired: false
+      - code: role:delete
+        action: delete
+        riskLevel: L3
+        approvalRequired: false
+  - code: asset
+    name: 资产列表
+    scopes: [ALL]
+    permissions:
+      - { code: asset:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: asset:create, action: create, riskLevel: L2, approvalRequired: false }
+      - { code: asset:receive, action: receive, riskLevel: L2, approvalRequired: false }
+      - { code: asset:return, action: return, riskLevel: L2, approvalRequired: false }
+      - { code: asset:borrow, action: borrow, riskLevel: L2, approvalRequired: false }
+      - { code: asset:borrowReturn, action: borrowReturn, riskLevel: L2, approvalRequired: false }
+      - { code: asset:handover, action: handover, riskLevel: L2, approvalRequired: false }
+      - { code: asset:update, action: update, riskLevel: L2, approvalRequired: false }
+      - { code: asset:delete, action: delete, riskLevel: L3, approvalRequired: false }
+      - { code: asset:copy, action: copy, riskLevel: L2, approvalRequired: false }
+      - { code: asset:batchUpdate, action: batchUpdate, riskLevel: L2, approvalRequired: false }
+      - { code: asset:assetImport, action: assetImport, riskLevel: L2, approvalRequired: false }
+      - { code: asset:updateImport, action: updateImport, riskLevel: L2, approvalRequired: false }
+      - { code: asset:receiveImport, action: receiveImport, riskLevel: L2, approvalRequired: false }
+      - { code: asset:export, action: export, riskLevel: L2, approvalRequired: false }
+      - { code: asset:printLabel, action: printLabel, riskLevel: L1, approvalRequired: false }
+      - { code: asset:advancedSearch, action: advancedSearch, riskLevel: L1, approvalRequired: false }
+      - { code: asset:columnSettings, action: columnSettings, riskLevel: L1, approvalRequired: false }
+  - code: assetInbound
+    name: 资产入库
+    scopes: [ALL]
+    permissions:
+      - { code: assetInbound:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: assetInbound:create, action: create, riskLevel: L2, approvalRequired: false }
+      - { code: assetInbound:import, action: import, riskLevel: L2, approvalRequired: false }
+      - { code: assetInbound:printOrder, action: printOrder, riskLevel: L1, approvalRequired: false }
+      - { code: assetInbound:printLabel, action: printLabel, riskLevel: L1, approvalRequired: false }
+      - { code: assetInbound:export, action: export, riskLevel: L2, approvalRequired: false }
+      - { code: assetInbound:advancedSearch, action: advancedSearch, riskLevel: L1, approvalRequired: false }
+      - { code: assetInbound:columnSettings, action: columnSettings, riskLevel: L1, approvalRequired: false }
+  - code: assetReceiveReturn
+    name: 领用退库
+    scopes: [ALL]
+    permissions:
+      - { code: assetReceiveReturn:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: assetReceiveReturn:receive, action: receive, riskLevel: L2, approvalRequired: false }
+      - { code: assetReceiveReturn:return, action: return, riskLevel: L2, approvalRequired: false }
+      - { code: assetReceiveReturn:handover, action: handover, riskLevel: L2, approvalRequired: false }
+      - { code: assetReceiveReturn:sign, action: sign, riskLevel: L2, approvalRequired: false }
+      - { code: assetReceiveReturn:cancel, action: cancel, riskLevel: L2, approvalRequired: false }
+      - { code: assetReceiveReturn:print, action: print, riskLevel: L1, approvalRequired: false }
+      - { code: assetReceiveReturn:export, action: export, riskLevel: L2, approvalRequired: false }
+      - { code: assetReceiveReturn:advancedSearch, action: advancedSearch, riskLevel: L1, approvalRequired: false }
+      - { code: assetReceiveReturn:columnSettings, action: columnSettings, riskLevel: L1, approvalRequired: false }
+  - code: assetBorrowReturn
+    name: 借用归还
+    scopes: [ALL]
+    permissions:
+      - { code: assetBorrowReturn:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: assetBorrowReturn:borrow, action: borrow, riskLevel: L2, approvalRequired: false }
+      - { code: assetBorrowReturn:return, action: return, riskLevel: L2, approvalRequired: false }
+      - { code: assetBorrowReturn:extend, action: extend, riskLevel: L2, approvalRequired: false }
+      - { code: assetBorrowReturn:print, action: print, riskLevel: L1, approvalRequired: false }
+      - { code: assetBorrowReturn:export, action: export, riskLevel: L2, approvalRequired: false }
+      - { code: assetBorrowReturn:advancedSearch, action: advancedSearch, riskLevel: L1, approvalRequired: false }
+      - { code: assetBorrowReturn:columnSettings, action: columnSettings, riskLevel: L1, approvalRequired: false }
+  - code: request
+    name: 审批申请
+    scopes: [ALL]
+    permissions:
+      - { code: request:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: request:review, action: review, riskLevel: L2, approvalRequired: false }
+      - { code: request:export, action: export, riskLevel: L2, approvalRequired: false }
+  - code: stocktake
+    name: 资产盘点
+    scopes: [ALL]
+    permissions:
+      - { code: stocktake:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: stocktake:create, action: create, riskLevel: L2, approvalRequired: false }
+  - code: assetLocationSettings
+    name: 位置管理
+    scopes: [ALL]
+    permissions:
+      - { code: assetLocationSettings:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: assetLocationSettings:create, action: create, riskLevel: L2, approvalRequired: false }
+      - { code: assetLocationSettings:update, action: update, riskLevel: L2, approvalRequired: false }
+      - { code: assetLocationSettings:delete, action: delete, riskLevel: L3, approvalRequired: false }
+      - { code: assetLocationSettings:toggleCode, action: toggleCode, riskLevel: L2, approvalRequired: false }
+      - { code: assetLocationSettings:template, action: template, riskLevel: L1, approvalRequired: false }
+      - { code: assetLocationSettings:import, action: import, riskLevel: L2, approvalRequired: false }
+      - { code: assetLocationSettings:export, action: export, riskLevel: L2, approvalRequired: false }
+  - code: assetCategorySettings
+    name: 资产分类
+    scopes: [ALL]
+    permissions:
+      - { code: assetCategorySettings:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: assetCategorySettings:create, action: create, riskLevel: L2, approvalRequired: false }
+      - { code: assetCategorySettings:update, action: update, riskLevel: L2, approvalRequired: false }
+      - { code: assetCategorySettings:delete, action: delete, riskLevel: L3, approvalRequired: false }
+      - { code: assetCategorySettings:toggleCode, action: toggleCode, riskLevel: L2, approvalRequired: false }
+      - { code: assetCategorySettings:template, action: template, riskLevel: L1, approvalRequired: false }
+      - { code: assetCategorySettings:import, action: import, riskLevel: L2, approvalRequired: false }
+      - { code: assetCategorySettings:export, action: export, riskLevel: L2, approvalRequired: false }
+  - code: assetCodeRules
+    name: 资产编码规则
+    scopes: [ALL]
+    permissions:
+      - { code: assetCodeRules:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: assetCodeRules:update, action: update, riskLevel: L2, approvalRequired: false }
+  - code: assetLabelTemplateSettings
+    name: 标签模板设置
+    scopes: [ALL]
+    permissions:
+      - { code: assetLabelTemplateSettings:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: assetLabelTemplateSettings:create, action: create, riskLevel: L2, approvalRequired: false }
+      - { code: assetLabelTemplateSettings:update, action: update, riskLevel: L2, approvalRequired: false }
+      - { code: assetLabelTemplateSettings:delete, action: delete, riskLevel: L3, approvalRequired: false }
+      - { code: assetLabelTemplateSettings:save, action: save, riskLevel: L2, approvalRequired: false }
+      - { code: assetLabelTemplateSettings:reset, action: reset, riskLevel: L2, approvalRequired: false }
+  - code: selfService
+    name: 员工自助
+    scopes: [ALL]
+    permissions:
+      - { code: selfService:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: selfService:update, action: update, riskLevel: L2, approvalRequired: false }
+  - code: integration
+    name: 系统对接
+    scopes: [ALL]
+    permissions:
+      - { code: integration:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: integration:create, action: create, riskLevel: L2, approvalRequired: false }
+      - { code: integration:update, action: update, riskLevel: L2, approvalRequired: false }
+      - { code: integration:sync, action: sync, riskLevel: L2, approvalRequired: false }
+  - code: form
+    name: 表单管理
+    scopes: [ALL]
+    permissions:
+      - { code: form:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: form:create, action: create, riskLevel: L2, approvalRequired: false }
+      - { code: form:update, action: update, riskLevel: L2, approvalRequired: false }
+      - { code: form:delete, action: delete, riskLevel: L3, approvalRequired: false }
+  - code: authz:application
+    name: 应用信息
+    scopes: [ALL]
+    permissions:
+      - { code: authz:application:view, action: view, riskLevel: L1, approvalRequired: false }
+  - code: authz:model
+    name: 权限模型
+    scopes: [ALL]
+    permissions:
+      - { code: authz:model:view, action: view, riskLevel: L1, approvalRequired: false }
+  - code: authz:app_role
+    name: 角色与授权
+    scopes: [ALL]
+    permissions:
+      - { code: authz:app_role:view, action: view, riskLevel: L2, approvalRequired: false }
+      - { code: authz:app_role:create, action: create, riskLevel: L2, approvalRequired: false }
+      - { code: authz:app_role:update, action: update, riskLevel: L2, approvalRequired: false }
+      - { code: authz:app_role:delete, action: delete, riskLevel: L3, approvalRequired: false }
+      - { code: authz:app_role:assign, action: assign, riskLevel: L2, approvalRequired: false }
+      - { code: authz:app_role:explain, action: explain, riskLevel: L1, approvalRequired: false }

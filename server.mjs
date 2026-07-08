@@ -13,6 +13,7 @@ const redirectUri = `${publicBaseUrl}/api/auth/feishu/callback`;
 const sessions = new Map();
 const oauthStates = new Map();
 const dataDir = join(root, "data");
+const distRoot = join(root, "dist");
 const dbPath = process.env.DB_PATH || join(dataDir, "app.db");
 const databaseDriver = (process.env.DB_DRIVER || "").toLowerCase();
 const store = await createStore();
@@ -20,12 +21,17 @@ const store = await createStore();
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".svg": "image/svg+xml",
   ".json": "application/json; charset=utf-8",
+  ".ico": "image/x-icon",
+  ".map": "application/json; charset=utf-8",
+  ".woff2": "font/woff2",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
 
 function json(res, status, data, headers = {}) {
@@ -348,15 +354,32 @@ async function handleStoreSet(req, res) {
 }
 
 async function serveStatic(req, res, url) {
+  const staticRoot = existsSync(join(distRoot, "index.html")) ? distRoot : root;
   const rawPath = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
   const safePath = normalize(rawPath).replace(/^(\.\.[/\\])+/, "");
-  const filePath = join(root, safePath);
-  if (!filePath.startsWith(root) || !existsSync(filePath)) {
-    json(res, 404, { error: "Not found" });
-    return;
+  let filePath = join(staticRoot, safePath);
+  const fallbackPath = join(staticRoot, "index.html");
+  const canFallbackToSpa = req.method === "GET" && !url.pathname.startsWith("/api/") && !extname(url.pathname);
+
+  if (!filePath.startsWith(staticRoot) || !existsSync(filePath)) {
+    if (canFallbackToSpa && existsSync(fallbackPath)) {
+      filePath = fallbackPath;
+    } else {
+      json(res, 404, { error: "Not found" });
+      return;
+    }
   }
   const stat = await fs.stat(filePath);
   if (!stat.isFile()) {
+    if (canFallbackToSpa && existsSync(fallbackPath)) {
+      filePath = fallbackPath;
+    } else {
+      json(res, 404, { error: "Not found" });
+      return;
+    }
+  }
+  const finalStat = await fs.stat(filePath);
+  if (!finalStat.isFile()) {
     json(res, 404, { error: "Not found" });
     return;
   }

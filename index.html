@@ -3,62 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>资产云管家 - 原型体验</title>
-    <link rel="stylesheet" href="./styles.css?v=20260708-role-user-link-hidden-v128" />
+    <title>资产管理系统</title>
   </head>
   <body>
-    <div class="app-shell">
-      <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-mark">AM</div>
-          <div>
-            <div class="brand-name">资产云管家</div>
-            <div class="brand-subtitle">ITAM Prototype</div>
-          </div>
-        </div>
-        <nav class="nav" id="nav"></nav>
-        <div class="sidebar-tools" id="sidebarTools"></div>
-      </aside>
-
-      <aside class="secondary-sidebar" id="secondarySidebar" aria-hidden="true"></aside>
-
-      <main class="workspace">
-        <header class="topbar">
-          <div class="topbar-actions">
-            <button class="icon-button" title="消息中心" aria-label="消息中心">◔</button>
-            <button class="icon-button" title="系统设置" aria-label="系统设置">⚙</button>
-            <div class="avatar">验</div>
-          </div>
-        </header>
-
-        <section class="page" id="page"></section>
-      </main>
-    </div>
-
-    <div class="drawer-backdrop" id="drawerBackdrop"></div>
-    <aside class="drawer" id="drawer" aria-hidden="true">
-      <div class="drawer-header">
-        <div>
-          <div class="eyebrow" id="drawerEyebrow">资产详情</div>
-          <h2 id="drawerTitle">-</h2>
-        </div>
-        <button class="icon-button" id="drawerClose" title="关闭" aria-label="关闭">×</button>
-      </div>
-      <div class="drawer-body" id="drawerBody"></div>
-    </aside>
-
-    <div class="modal-backdrop" id="modalBackdrop"></div>
-    <section class="modal" id="modal" aria-hidden="true">
-      <div class="modal-header">
-        <h2 id="modalTitle">新建申请</h2>
-        <button class="icon-button" id="modalClose" title="关闭" aria-label="关闭">×</button>
-      </div>
-      <div id="modalBody"></div>
-    </section>
-
-    <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-    <script src="./assets/jszip.min.js?v=20260708-role-user-link-hidden-v128"></script>
-    <script src="./app.js?v=20260708-role-user-link-hidden-v128"></script>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

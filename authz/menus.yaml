@@ -1,0 +1,25 @@
+menus:
+  - id: asset.portal
+    title: 资产管理
+    icon: Box
+    path: /
+    pageKey: asset.portal
+    file: /src/views/LegacyPortalView.vue
+    order: 10
+    permissionCodes:
+      - asset:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: authz.workspace
+    title: 账号管理
+    icon: Lock
+    path: /workspace
+    pageKey: authz.workspace
+    order: 90
+    permissionMode: ALL
+    permissionCodes:
+      - authz:application:view
+      - authz:model:view
+      - authz:app_role:view
+    featureCodes:
+      - APP_WORKSPACE

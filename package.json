@@ -4,9 +4,29 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "validate:authz": "node scripts/validate-authz.mjs",
+    "preview": "vite preview --host 0.0.0.0",
     "start": "node server.mjs"
   },
   "dependencies": {
+    "@acg/ecp-auth": "file:vendor/ecp-sdk/acg-ecp-auth-0.1.31.tgz",
+    "@acg/ecp-auth-vue": "file:vendor/ecp-sdk/acg-ecp-auth-vue-0.1.31.tgz",
+    "@acg/ecp-core": "file:vendor/ecp-sdk/acg-ecp-core-0.1.31.tgz",
+    "@acg/ecp-sdk": "file:vendor/ecp-sdk/acg-ecp-sdk-0.1.31.tgz",
+    "@acg/ecp-ui": "file:vendor/ecp-sdk/acg-ecp-ui-0.1.31.tgz",
+    "element-plus": "^2.13.2",
     "mysql2": "^3.22.5"
+  },
+  "devDependencies": {
+    "@types/sortablejs": "^1.15.9",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.0.2",
+    "vue": "^3.5.17",
+    "vue-router": "^4.5.1",
+    "vue-tsc": "^3.0.3"
   }
 }

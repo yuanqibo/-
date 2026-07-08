@@ -1,0 +1,52 @@
+features:
+  - code: ASSET_PORTAL_ROOT
+    name: 资产管理系统
+    type: GROUP
+    sort: 10
+    permissions: []
+  - code: PORTAL_HOME
+    name: 首页概览
+    type: FEATURE
+    parentCode: ASSET_PORTAL_ROOT
+    sort: 10
+    permissions:
+      - asset:view
+  - code: PORTAL_ASSETS
+    name: 资产管理
+    type: FEATURE
+    parentCode: ASSET_PORTAL_ROOT
+    sort: 20
+    permissions:
+      - asset:view
+      - assetInbound:view
+      - assetReceiveReturn:view
+      - assetBorrowReturn:view
+      - stocktake:view
+  - code: PORTAL_REQUESTS
+    name: 审批申请
+    type: FEATURE
+    parentCode: ASSET_PORTAL_ROOT
+    sort: 30
+    permissions:
+      - request:view
+  - code: PORTAL_SETTINGS
+    name: 系统设置
+    type: FEATURE
+    parentCode: ASSET_PORTAL_ROOT
+    sort: 40
+    permissions:
+      - employee:view
+      - department:view
+      - role:view
+      - selfService:view
+      - integration:view
+      - form:view
+  - code: APP_WORKSPACE
+    name: 账号管理
+    type: FEATURE
+    parentCode: ASSET_PORTAL_ROOT
+    sort: 90
+    permissions:
+      - authz:application:view
+      - authz:model:view
+      - authz:app_role:view
