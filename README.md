@@ -11,7 +11,7 @@
 
 公司 ECP 前端与 Java SDK 制品保存在 `vendor/`，构建时不依赖浏览器登录态或外部 Nexus 凭据。
 
-仓库根目录的 `pom.xml` 用于公司 GitLab Maven 发布模板的项目识别和依赖检查；Java 21 后端工程位于 `backend/pom.xml`，生产编译由 Dockerfile 的 Java 21 构建阶段完成。
+仓库根目录的 `pom.xml` 用于公司 GitLab Maven 发布模板，并在 Maven `package` 阶段生成前端 `dist/`；Java 21 后端工程位于 `backend/pom.xml`，生产编译由 Dockerfile 的 Java 21 构建阶段完成。
 
 ## 本地运行
 
