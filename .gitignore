@@ -1,0 +1,11 @@
+node_modules/
+data/
+dist/
+backend/target/
+*.log
+*.pid
+.DS_Store
+.env
+.idea/
+.vscode/
+*.iml

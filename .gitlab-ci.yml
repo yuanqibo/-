@@ -1,0 +1,46 @@
+include:
+  - project: "ops/cicd"
+    ref: master
+    file: /templates/NodeJs-18.gitlab-ci.yml
+
+variables:
+  ARTIFACT_PATH: dist
+  BUILD_PATH: dist
+  NPM_REGISTRY: https://repo.huaweicloud.com/repository/npm/
+
+node:build:
+  script:
+    - node --version
+    - npm --version
+    - npm ci --registry=${NPM_REGISTRY}
+    - npm run validate:authz
+    - npm run build
+    - download_dockerfile
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - dist
+      - package.json
+      - package-lock.json
+      - authz
+      - public
+      - src
+      - vendor
+      - backend
+      - index.html
+      - tsconfig.json
+      - vite.config.ts
+      - Dockerfile
+      - docker-compose.yaml
+      - scripts
+
+backend:test:
+  image: maven:3.9.11-eclipse-temurin-21
+  stage: build
+  script:
+    - bash scripts/install-ecp-java-sdk.sh
+    - mvn -B -f backend/pom.xml clean package
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - backend/target/access-assets-server-1.0.0.jar

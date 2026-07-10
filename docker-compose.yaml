@@ -1,0 +1,37 @@
+services:
+  asset-portal:
+    container_name: asset-portal
+    image: asset-platform:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${ASSET_PORTAL_PORT:-5387}:5387"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 5387
+      DATABASE_URL: "${DATABASE_URL:-jdbc:h2:file:/opt/asset-portal/data/app-store;MODE=MySQL;DATABASE_TO_LOWER=TRUE;AUTO_SERVER=TRUE}"
+      DATABASE_USER: "${DATABASE_USER:-sa}"
+      DATABASE_PASSWORD: "${DATABASE_PASSWORD:-}"
+      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://172.20.230.29:5387}"
+      ECP_API_BASE_URL: "${ECP_API_BASE_URL:-https://access.acg.team/api/v1}"
+      ECP_SDK_ENABLED: "${ECP_SDK_ENABLED:-false}"
+      ECP_SDK_BASE_URL: "${ECP_SDK_BASE_URL:-https://access.acg.team/api/v1}"
+      ECP_APP_SECRET: "${ECP_APP_SECRET:-}"
+      ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET: "${ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET:-}"
+      FEISHU_APP_ID: "${FEISHU_APP_ID:-}"
+      FEISHU_APP_SECRET: "${FEISHU_APP_SECRET:-}"
+      LARK_APP_ID: "${LARK_APP_ID:-}"
+      LARK_APP_SECRET: "${LARK_APP_SECRET:-}"
+      ASSET_ADMIN_ACCOUNTS: "${ASSET_ADMIN_ACCOUNTS:-}"
+    volumes:
+      - ./data:/opt/asset-portal/data
+    healthcheck:
+      test: >
+        wget -qO- http://127.0.0.1:5387/actuator/health >/dev/null || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

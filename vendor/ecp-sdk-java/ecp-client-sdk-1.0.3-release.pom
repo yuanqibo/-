@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>com.idanchuang.ecp</groupId>
+    <artifactId>ecp-sdk-java-parent</artifactId>
+    <version>1.0.3-release</version>
+  </parent>
+  <artifactId>ecp-client-sdk</artifactId>
+  <version>1.0.3-release</version>
+  <name>ecp-client-sdk</name>
+  <description>Framework-agnostic client module for the ECP Java SDK</description>
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+    </license>
+  </licenses>
+  <dependencies>
+    <dependency>
+      <groupId>com.idanchuang.ecp</groupId>
+      <artifactId>ecp-sdk-common</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+  <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <resource>
+        <targetPath>META-INF/ecp-sdk-docs</targetPath>
+        <directory>..</directory>
+        <includes>
+          <include>README.md</include>
+        </includes>
+      </resource>
+      <resource>
+        <targetPath>META-INF/ecp-sdk-docs/docs</targetPath>
+        <directory>../docs</directory>
+        <includes>
+          <include>**/*.md</include>
+        </includes>
+      </resource>
+    </resources>
+  </build>
+</project>
