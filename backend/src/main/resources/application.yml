@@ -14,8 +14,8 @@ spring:
   application:
     name: access-assets-server
   datasource:
-    url: ${DATABASE_URL:jdbc:h2:file:./data/app-store;MODE=MySQL;DATABASE_TO_LOWER=TRUE;AUTO_SERVER=TRUE}
-    username: ${DATABASE_USER:sa}
+    url: ${DATABASE_URL:jdbc:mysql://127.0.0.1:3306/asset_portal?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DATABASE_USER:asset_portal}
     password: ${DATABASE_PASSWORD:}
     hikari:
       maximum-pool-size: ${DATABASE_POOL_SIZE:10}
@@ -35,9 +35,6 @@ management:
 asset-portal:
   public-base-url: ${PUBLIC_BASE_URL:http://localhost:${PORT:5387}}
   ecp-api-base-url: ${ECP_API_BASE_URL:https://access.acg.team/api/v1}
-  feishu:
-    app-id: ${FEISHU_APP_ID:${LARK_APP_ID:}}
-    app-secret: ${FEISHU_APP_SECRET:${LARK_APP_SECRET:}}
   admin-accounts: ${ASSET_ADMIN_ACCOUNTS:}
   store:
     max-keys-per-request: ${STORE_MAX_KEYS_PER_REQUEST:100}

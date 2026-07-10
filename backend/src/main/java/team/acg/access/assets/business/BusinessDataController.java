@@ -6,8 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.idanchuang.ecp.sdk.spring.annotation.RequirePermission;
 import jakarta.servlet.http.HttpServletRequest;
-import team.acg.access.assets.auth.EcpIdentityService;
-import org.springframework.beans.factory.ObjectProvider;
+import team.acg.access.assets.auth.RequestIdentityService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,10 +23,10 @@ public class BusinessDataController {
     private static final Set<String> TYPES = Set.of("requests", "stocktakes", "consumables", "repairs", "contracts");
     private final BusinessDataRepository repository;
     private final ObjectMapper mapper;
-    private final ObjectProvider<EcpIdentityService> identityService;
+    private final RequestIdentityService identityService;
 
     public BusinessDataController(BusinessDataRepository repository, ObjectMapper mapper,
-                                  ObjectProvider<EcpIdentityService> identityService) {
+                                  RequestIdentityService identityService) {
         this.repository = repository;
         this.mapper = mapper;
         this.identityService = identityService;
@@ -35,31 +34,31 @@ public class BusinessDataController {
 
     @GetMapping
     @RequirePermission(permissions = "request:view")
-    public Map<String, Object> list() {
+    public Map<String, Object> list(HttpServletRequest request) {
         Map<String, JsonNode> values = new LinkedHashMap<>();
         Map<String, Long> versions = new LinkedHashMap<>();
+        var identity = identityService.current(request);
+        Set<String> visibleTypes = identity.isPresent() && !identity.get().manager() ? Set.of("requests") : TYPES;
+        visibleTypes.forEach(type -> {
+            values.put(type, mapper.createArrayNode());
+            versions.put(type, 0L);
+        });
         repository.findAll().forEach((type, snapshot) -> {
-            if (TYPES.contains(type)) {
-                values.put(type, snapshot.document());
+            if (visibleTypes.contains(type)) {
+                JsonNode document = snapshot.document();
+                if (identity.isPresent() && !identity.get().manager()) {
+                    if (!"requests".equals(type) || !document.isArray()) return;
+                    ArrayNode scoped = mapper.createArrayNode();
+                    document.forEach(item -> {
+                        if (identity.get().name().equals(item.path("applicant").asText())) scoped.add(item);
+                    });
+                    document = scoped;
+                }
+                values.put(type, document);
                 versions.put(type, snapshot.version());
             }
         });
         return Map.of("values", values, "versions", versions);
-    }
-
-    @PutMapping("/{type}")
-    @RequirePermission(permissions = "request:view")
-    public ResponseEntity<?> save(@PathVariable String type, @RequestBody SaveRequest request) {
-        validate(type, request);
-        if (request.expectedVersion() != 0) {
-            throw new IllegalArgumentException("Business snapshots are immutable after migration; use a domain command endpoint");
-        }
-        validateSeedItems(type, request.items());
-        try {
-            return ResponseEntity.status(HttpStatus.CREATED).body(response(type, repository.create(type, request.items())));
-        } catch (DuplicateKeyException race) {
-            return conflict(type);
-        }
     }
 
     @PostMapping("/requests")
@@ -67,7 +66,7 @@ public class BusinessDataController {
     public ResponseEntity<?> createRequest(@RequestBody CreateRequest command, HttpServletRequest request) {
         if (command.type() == null || command.type().isBlank()) throw new IllegalArgumentException("Request type is required");
         if (command.asset() == null || command.asset().isBlank()) throw new IllegalArgumentException("Request asset is required");
-        String applicant = resolveApplicant(request, command.applicant());
+        String applicant = identityService.trustedName(request, command.applicant());
         ObjectNode item = mapper.createObjectNode();
         item.put("id", "REQ" + java.time.format.DateTimeFormatter.ofPattern("yyMMddHHmmssSSS").format(java.time.LocalDateTime.now()));
         item.put("type", command.type().trim());
@@ -106,10 +105,11 @@ public class BusinessDataController {
     }
 
     @PostMapping("/requests/{id}/decision")
-    @RequirePermission(permissions = "request:approve")
-    public ResponseEntity<?> decideRequest(@PathVariable String id, @RequestBody RequestDecision command) {
+    @RequirePermission(permissions = "request:review")
+    public ResponseEntity<?> decideRequest(@PathVariable String id, @RequestBody RequestDecision command,
+                                           HttpServletRequest request) {
         if (!Set.of("approve", "reject", "cancel").contains(command.decision())) throw new IllegalArgumentException("Unsupported request decision");
-        requireText(command.operator(), "Decision operator is required");
+        String operator = identityService.trustedName(request, command.operator());
         return updateItem("requests", id, item -> {
             String current = item.path("status").asText();
             if (!Set.of("审批中", "待执行").contains(current)) throw new IllegalArgumentException("Request is already finalized");
@@ -120,7 +120,7 @@ public class BusinessDataController {
             };
             item.put("status", status);
             item.put("currentNode", "approve".equals(command.decision()) ? "普通管理员执行" : "已归档");
-            item.put("decisionOperator", command.operator().trim());
+            item.put("decisionOperator", operator);
             item.put("decisionReason", command.reason() == null ? "" : command.reason().trim());
             item.put("decisionAt", java.time.Instant.now().toString());
             return item;
@@ -204,7 +204,7 @@ public class BusinessDataController {
         item.put("id", id("RPR"));
         item.put("asset", command.asset().trim());
         item.put("description", command.description().trim());
-        item.put("reporter", resolveApplicant(request, command.reporter()));
+        item.put("reporter", identityService.trustedName(request, command.reporter()));
         item.put("status", "待处理");
         item.put("handler", "-");
         item.put("date", java.time.LocalDate.now().toString());
@@ -286,69 +286,11 @@ public class BusinessDataController {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(message);
     }
 
-    private String resolveApplicant(HttpServletRequest request, String fallback) {
-        EcpIdentityService service = identityService.getIfAvailable();
-        String authorization = request.getHeader(org.springframework.http.HttpHeaders.AUTHORIZATION);
-        if (service != null && authorization != null && authorization.startsWith("Bearer ")) {
-            Object name = service.resolve(authorization.substring(7).trim()).get("name");
-            if (name instanceof String value && !value.isBlank()) return value;
-        }
-        if (fallback == null || fallback.isBlank()) throw new IllegalArgumentException("Request applicant is required");
-        return fallback.trim();
-    }
-
-    private void validate(String type, SaveRequest request) {
-        if (!TYPES.contains(type)) throw new IllegalArgumentException("Unsupported business data type: " + type);
-        if (request.items() == null || !request.items().isArray()) {
-            throw new IllegalArgumentException("Business data items must be an array");
-        }
-        if (request.expectedVersion() < 0) throw new IllegalArgumentException("Expected version cannot be negative");
-    }
-
-    private void validateSeedItems(String type, JsonNode items) {
-        for (JsonNode item : items) {
-            if (!item.isObject()) throw new IllegalArgumentException("Business data entries must be objects");
-            switch (type) {
-                case "requests" -> {
-                    requireNodeText(item, "id"); requireNodeText(item, "type"); requireNodeText(item, "applicant");
-                }
-                case "stocktakes" -> {
-                    requireNodeText(item, "id"); requireNodeText(item, "name");
-                    int total = item.path("total").asInt(-1), checked = item.path("checked").asInt(-1), diff = item.path("diff").asInt(-1);
-                    if (total <= 0 || checked < 0 || checked > total || diff < 0 || diff > checked) throw new IllegalArgumentException("Invalid stocktake seed counts");
-                }
-                case "consumables" -> {
-                    requireNodeText(item, "id"); requireNodeText(item, "name");
-                    if (item.path("stock").asInt(-1) < 0 || item.path("min").asInt(-1) < 0) throw new IllegalArgumentException("Invalid consumable seed quantities");
-                }
-                case "repairs" -> {
-                    requireNodeText(item, "id"); requireNodeText(item, "asset"); requireNodeText(item, "description");
-                }
-                case "contracts" -> {
-                    requireNodeText(item, "id"); requireNodeText(item, "supplier"); requireNodeText(item, "name");
-                    if (item.path("amount").asDouble(-1) < 0) throw new IllegalArgumentException("Invalid contract seed amount");
-                }
-                default -> throw new IllegalArgumentException("Unsupported business data type: " + type);
-            }
-        }
-    }
-
-    private void requireNodeText(JsonNode item, String field) {
-        if (!item.path(field).isTextual() || item.path(field).asText().isBlank()) {
-            throw new IllegalArgumentException("Business seed field is required: " + field);
-        }
-    }
-
-    private Map<String, Object> response(String type, BusinessDataRepository.Snapshot snapshot) {
-        return Map.of("type", type, "items", snapshot.document(), "version", snapshot.version(), "updatedAt", snapshot.updatedAt());
-    }
-
     private ResponseEntity<?> conflict(String type) {
         long version = repository.find(type).map(BusinessDataRepository.Snapshot::version).orElse(0L);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "Business data version conflict", "type", type, "version", version));
     }
 
-    public record SaveRequest(JsonNode items, long expectedVersion) {}
     public record CreateRequest(String type, String applicant, String asset, String reason, JsonNode details) {}
     public record RequestDecision(String decision, String operator, String reason) {}
     public record CreateStocktake(String name, String scope, String owner, int total, String date) {}

@@ -68,7 +68,7 @@ class StoreControllerTest {
     }
 
     @Test
-    void writesProtectedDomainsOnlyThroughDedicatedEndpoints() throws Exception {
+    void writesCatalogThroughDedicatedEndpointButRejectsLocalIdentityWrites() throws Exception {
         mvc.perform(post("/api/store").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"key\":\"assetCategoryTree\",\"value\":[{\"id\":\"cat-1\",\"name\":\"电脑\",\"children\":[]}]}"))
             .andExpect(status().isBadRequest());
@@ -78,6 +78,6 @@ class StoreControllerTest {
             .andExpect(status().isOk());
         mvc.perform(put("/api/config/security/users").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"value\":[{\"account\":\"user\",\"name\":\"用户\",\"roleCode\":\"employee\"}]}"))
-            .andExpect(status().isOk());
+            .andExpect(status().isNotFound());
     }
 }

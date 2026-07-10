@@ -11,7 +11,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -29,31 +28,20 @@ class BusinessDataControllerTest {
     }
 
     @Test
-    void createsAndListsMigratedBusinessDataButRejectsSnapshotOverwrite() throws Exception {
-        mvc.perform(put("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"items\":[{\"id\":\"REQ-1\",\"type\":\"领用\",\"applicant\":\"李雷\"}],\"expectedVersion\":0}"))
-            .andExpect(status().isCreated()).andExpect(jsonPath("$.version").value(1));
-
-        mvc.perform(put("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"items\":[{\"id\":\"REQ-2\",\"type\":\"领用\",\"applicant\":\"李雷\"}],\"expectedVersion\":1}"))
-            .andExpect(status().isBadRequest());
-
+    void createsAndListsBusinessDataThroughDomainCommands() throws Exception {
+        mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"领用\",\"applicant\":\"李雷\",\"asset\":\"电脑\"}"))
+            .andExpect(status().isCreated());
         mvc.perform(get("/api/business-data"))
-            .andExpect(status().isOk()).andExpect(jsonPath("$.values.requests[0].id").value("REQ-1"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.values.requests[0].applicant").value("李雷"))
             .andExpect(jsonPath("$.versions.requests").value(1));
     }
 
     @Test
-    void rejectsStaleWritesAndUnknownTypes() throws Exception {
-        mvc.perform(put("/api/business-data/stocktakes").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"items\":[],\"expectedVersion\":0}"))
-            .andExpect(status().isCreated());
-        mvc.perform(put("/api/business-data/stocktakes").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"items\":[],\"expectedVersion\":5}"))
-            .andExpect(status().isBadRequest());
-        mvc.perform(put("/api/business-data/unknown").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"items\":[],\"expectedVersion\":0}"))
-            .andExpect(status().isBadRequest());
+    void rejectsLegacySnapshotWrites() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/business-data/requests")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"items\":[],\"expectedVersion\":0}"))
+            .andExpect(status().isMethodNotAllowed());
     }
 
     @Test

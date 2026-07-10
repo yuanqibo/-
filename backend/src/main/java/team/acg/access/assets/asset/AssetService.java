@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import team.acg.access.assets.auth.RequestIdentityService;
 
 @Service
 public class AssetService {
@@ -32,6 +33,14 @@ public class AssetService {
 
     public List<JsonNode> list() {
         return repository.findAll();
+    }
+
+    public List<JsonNode> listFor(RequestIdentityService.Identity identity) {
+        if (identity.manager()) return list();
+        return repository.findAll().stream().filter(asset ->
+            identity.name().equals(asset.path("owner").asText())
+                || (!identity.department().isBlank() && identity.department().equals(asset.path("department").asText())))
+            .toList();
     }
 
     @Transactional

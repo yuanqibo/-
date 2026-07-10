@@ -21,7 +21,7 @@ npm run build:all
 npm run start:dev
 ```
 
-访问 [http://127.0.0.1:5387](http://127.0.0.1:5387)。`start:dev` 会关闭 ECP 服务端鉴权，仅用于本地开发，并使用 `data/app-store.mv.db` 文件数据库。
+访问 [http://127.0.0.1:5387](http://127.0.0.1:5387)。`start:dev` 会关闭 ECP 服务端鉴权，仅用于本地开发；启动前仍需配置可访问的 MySQL 数据库。
 
 单独运行前端开发服务器：
 
@@ -70,7 +70,7 @@ GET /actuator/health
 docker compose up -d --build
 ```
 
-生产部署不得使用 `docker-compose.yaml` 中的空密钥默认值，应由环境变量或密钥管理系统提供数据库与 ECP 凭据。
+Compose 会创建 MySQL 8 数据库 `asset_portal`，数据保存在 `mysql-data` 卷中；Java 服务会在首次启动时自动创建业务表。生产部署必须覆盖示例数据库密码，并由环境变量或密钥管理系统提供数据库与 ECP 凭据。
 
 ## 目录
 

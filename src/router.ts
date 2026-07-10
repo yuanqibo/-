@@ -14,8 +14,7 @@ const routes: RouteRecordRaw[] = [
       apiBaseUrl,
       returnTo: typeof route.query.returnTo === 'string' ? route.query.returnTo : '/',
       locale: 'zh-CN',
-      loginVariant: 'INNER',
-      enableDevQuickLogin: import.meta.env.DEV
+      loginVariant: 'INNER'
     }),
     meta: {
       title: '登录',

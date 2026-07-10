@@ -54,4 +54,13 @@ class EcpProxyControllerTest {
         assertThat(response.getHeaders().keySet()).noneMatch(name -> name.startsWith(":"));
         assertThat(new String(response.getBody(), StandardCharsets.UTF_8)).contains("EMAIL_PASSWORD");
     }
+
+    @Test
+    void rejectsPathsOutsideThePublicSdkAllowlist() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/applications/WLY5YG/app-roles");
+
+        ResponseEntity<byte[]> response = controller.proxy(request);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
+    }
 }

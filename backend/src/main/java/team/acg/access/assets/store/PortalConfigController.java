@@ -14,10 +14,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/config")
 public class PortalConfigController {
-    private static final Map<String, String> SECURITY = Map.of(
-        "users", "assetPortalRegisteredUsers",
-        "roles", "assetPortalRoleDefinitionsV3",
-        "deleted-users", "assetPortalDeletedRoleUsersV1");
     private static final Map<String, String> CATALOG = Map.of(
         "categories", "assetCategoryTree",
         "category-version", "assetCategoryTreeVersion",
@@ -32,12 +28,6 @@ public class PortalConfigController {
     public PortalConfigController(AppStoreRepository repository, PortalDocumentValidator validator) {
         this.repository = repository;
         this.validator = validator;
-    }
-
-    @PutMapping("/security/{domain}")
-    @RequirePermission(permissions = "authz:app_role:assign")
-    public Map<String, Object> saveSecurity(@PathVariable String domain, @RequestBody ConfigWrite request) {
-        return save(SECURITY, domain, request);
     }
 
     @PutMapping("/catalog/{domain}")

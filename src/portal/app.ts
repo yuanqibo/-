@@ -29,9 +29,6 @@ const sharedStoreKeys = [
   "assetPortalAssets",
   "assetLabelPrintSettingsV2",
   "assetLabelCustomTemplatesV1",
-  "assetPortalRegisteredUsers",
-  roleDefinitionsStorageKey,
-  deletedRoleUsersStorageKey,
   "assetCategoryTree",
   "assetCategoryTreeVersion",
   "assetLocationTree",
@@ -54,9 +51,6 @@ function isSharedStoreKey(key) {
 }
 
 const portalConfigWritePaths = {
-  assetPortalRegisteredUsers: "/api/config/security/users",
-  assetPortalRoleDefinitionsV3: "/api/config/security/roles",
-  assetPortalDeletedRoleUsersV1: "/api/config/security/deleted-users",
   assetCategoryTree: "/api/config/catalog/categories",
   assetCategoryTreeVersion: "/api/config/catalog/category-version",
   assetLocationTree: "/api/config/catalog/locations",
@@ -2714,8 +2708,8 @@ const state = {
   currentUser: null,
   session: {
     authenticated: false,
-    method: "local",
-    provider: "默认管理后台",
+    method: "ecp",
+    provider: "ECP统一认证",
     terminal: "web_pc",
     lastLoginAt: new Date().toLocaleString("zh-CN", { hour12: false }),
   },
@@ -2888,34 +2882,14 @@ async function fetchBusinessData() {
   return response.json();
 }
 
-async function putBusinessData(type, items, expectedVersion) {
-  return fetch(`/api/business-data/${encodeURIComponent(type)}`, {
-    method: "PUT",
-    headers: ecpSessionHeaders({ "content-type": "application/json; charset=utf-8" }),
-    body: JSON.stringify({ items, expectedVersion }),
-  });
-}
-
 async function hydrateBusinessData() {
   try {
     const payload = await fetchBusinessData();
     const values = payload.values && typeof payload.values === "object" ? payload.values : {};
     const versions = payload.versions && typeof payload.versions === "object" ? payload.versions : {};
     for (const type of persistedBusinessDataTypes) {
-      if (Array.isArray(values[type])) {
-        state[type] = values[type];
-        businessDataVersions[type] = Number(versions[type]) || 0;
-        continue;
-      }
-      const response = await putBusinessData(type, businessDataItems(type), 0);
-      if (response.ok) {
-        const created = await response.json();
-        businessDataVersions[type] = Number(created.version) || 1;
-      } else if (response.status === 409) {
-        const refreshed = await fetchBusinessData();
-        if (Array.isArray(refreshed.values?.[type])) state[type] = refreshed.values[type];
-        businessDataVersions[type] = Number(refreshed.versions?.[type]) || 0;
-      }
+      state[type] = Array.isArray(values[type]) ? values[type] : [];
+      businessDataVersions[type] = Number(versions[type]) || 0;
     }
     return true;
   } catch (error) {
@@ -4028,148 +4002,7 @@ function getScopedFailures() {
   return failures;
 }
 
-function removePendingIdentity(subject) {
-  state.pendingIdentities = state.pendingIdentities.filter((item) => item.subject !== subject);
-}
-
-function createAccountFromEmail(email) {
-  const base = email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "").toLowerCase() || "employee";
-  let account = base;
-  let cursor = 1;
-  while (state.users.some((user) => user.account === account)) {
-    account = `${base}${cursor}`;
-    cursor += 1;
-  }
-  return account;
-}
-
-function createAccountFromName(name) {
-  const base = name.replace(/[^a-zA-Z0-9._-]/g, "").toLowerCase() || `user${Date.now().toString().slice(-6)}`;
-  let account = base;
-  let cursor = 1;
-  while (state.users.some((user) => user.account === account)) {
-    account = `${base}${cursor}`;
-    cursor += 1;
-  }
-  return account;
-}
-
-function demoPasswordForUser(user) {
-  return user?.password || "123456";
-}
-
-function findLoginUser(account = "") {
-  const keyword = account.trim().toLowerCase();
-  if (!keyword) return null;
-  return state.users.find((user) => {
-    return [user.account, user.phone, user.email].some((value) => String(value || "").toLowerCase() === keyword);
-  });
-}
-
-function loginAsAccount(account, method = "local", provider = "本地账号") {
-  const user = state.users.find((item) => item.account === account);
-  if (!user) return;
-  const wasAuthenticated = isAuthenticated();
-  if (wasAuthenticated) persistRoute(state.route, userTerminalMode());
-
-  resetSessionView();
-  state.currentUser = { ...applyProfileOverridesToUser(user) };
-  state.session = {
-    authenticated: true,
-    method,
-    provider,
-    terminal: state.selectedTerminal,
-    lastLoginAt: new Date().toLocaleString("zh-CN", { hour12: false }),
-  };
-  state.authView = "login";
-  state.pendingAuth = null;
-  const nextMode = userTerminalMode();
-  persistTerminalMode(nextMode);
-  state.route = preferredAccessibleRoute(firstAccessibleRoute(), { mode: nextMode, includeHash: !wasAuthenticated });
-  persistRoute(state.route, nextMode);
-  saveLocalSession();
-  scheduleIdleLogout();
-  render();
-  showToast(`${method === "oidc" ? `已通过 ${shortProviderName(provider)} 登录` : "已进入本地账号演示"}：${user.name}`);
-}
-
-function handleLoginSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const account = String(form.elements.account?.value || "").trim();
-  const password = String(form.elements.password?.value || "");
-  const user = findLoginUser(account);
-  if (!user) {
-    showToast("账号不存在，请检查账号、手机号或邮箱");
-    return;
-  }
-  if (password !== demoPasswordForUser(user)) {
-    showToast("密码错误，演示密码为 123456");
-    return;
-  }
-  loginAsAccount(user.account, "local", "账号密码登录");
-}
-
-function handleRegisterSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const name = String(form.elements.name?.value || "").trim();
-  let account = String(form.elements.account?.value || "").trim().toLowerCase();
-  const password = String(form.elements.password?.value || "");
-  if (!name || !password) {
-    showToast("请完整填写注册信息");
-    return;
-  }
-  if (!account) account = createAccountFromName(name);
-  if (password.length < 6) {
-    showToast("密码至少 6 位");
-    return;
-  }
-  if (findLoginUser(account)) {
-    showToast("账号已存在，请换一个账号");
-    return;
-  }
-  const user = {
-    name,
-    account,
-    password,
-    phone: "",
-    email: account.includes("@") ? account : "",
-    department: "默认部门",
-    roleCode: "employee",
-    roleName: "普通员工",
-    scope: "本人资产与申请",
-    loginType: "用户注册",
-    identitySource: "本地注册",
-    externalSubject: `local:${account}`,
-    bindStatus: "已绑定",
-  };
-  state.users.push(user);
-  saveRegisteredUsers();
-  loginAsAccount(account, "local", "本地注册");
-}
-
-async function logout(options = {}) {
-  if (isEcpAuthEnabled()) {
-    if (idleLogoutTimer) {
-      window.clearTimeout(idleLogoutTimer);
-      idleLogoutTimer = null;
-    }
-    clearLocalSession();
-    resetSessionView();
-    state.currentUser = null;
-    state.session = {
-      ...state.session,
-      authenticated: false,
-      method: "ecp",
-      provider: "ECP统一认证",
-    };
-    clearPersistedRoute();
-    await readEcpContext()?.logout?.();
-    return;
-  }
-
-  await logoutBackendSession();
+async function logout() {
   if (idleLogoutTimer) {
     window.clearTimeout(idleLogoutTimer);
     idleLogoutTimer = null;
@@ -4180,169 +4013,11 @@ async function logout(options = {}) {
   state.session = {
     ...state.session,
     authenticated: false,
-    method: "local",
-    provider: "默认管理后台",
+    method: "ecp",
+    provider: "ECP统一认证",
   };
-  state.authView = "login";
-  state.pendingAuth = null;
-  state.route = firstAccessibleRoute();
   clearPersistedRoute();
-  render();
-  showToast(options.reason === "idle" ? "已超过 10 分钟无操作，请重新登录" : "已退出登录");
-}
-
-function beginOidcLogin(subject) {
-  const user = state.users.find((item) => item.externalSubject === subject);
-  if (user) {
-    loginAsAccount(user.account, "oidc", shortProviderName(user.identitySource));
-    return;
-  }
-
-  const pending = state.pendingIdentities.find((item) => item.subject === subject);
-  if (!pending) return;
-  state.authView = "bind";
-  state.pendingAuth = { ...pending };
-  closeDrawer();
-  closeModal();
-  render();
-}
-
-async function beginFeishuOAuthLogin() {
-  try {
-    const response = await fetch("/api/auth/feishu/login", { credentials: "include" });
-    if (!response.ok) throw new Error("无法获取飞书授权地址");
-    const data = await response.json();
-    if (data.authorizationUrl) {
-      window.location.href = data.authorizationUrl;
-    }
-  } catch (error) {
-    console.warn("[asset-portal] feishu oauth unavailable", error);
-    showToast("飞书免登后端未启动或未配置");
-  }
-}
-
-function applyBackendUser(authUser) {
-  const roleCode = authUser.roleCode || "employee";
-  const matched =
-    state.users.find((user) => user.externalSubject === authUser.externalSubject) ||
-    state.users.find((user) => authUser.email && user.email === authUser.email) ||
-    state.users.find((user) => user.account === authUser.account);
-  const user = matched || {
-    name: authUser.name || "飞书用户",
-    account: authUser.account || authUser.email || authUser.externalSubject || "feishu.user",
-    phone: authUser.phone || "",
-    email: authUser.email || "",
-    department: authUser.department || "飞书组织",
-    roleCode,
-    roleName: roleMeta[roleCode]?.name || "普通员工",
-    scope: roleMeta[roleCode]?.scope || "本人资产、个人申请和审批状态",
-    loginType: "飞书免登",
-    identitySource: "Feishu OAuth",
-    externalSubject: authUser.externalSubject || "",
-    bindStatus: "已绑定",
-  };
-
-  if (!matched) state.users.unshift(user);
-  state.currentUser = { ...user };
-  state.session = {
-    authenticated: true,
-    method: "oidc",
-    provider: "Feishu OAuth",
-    terminal: state.selectedTerminal,
-    lastLoginAt: new Date().toLocaleString("zh-CN", { hour12: false }),
-  };
-  state.authView = "login";
-  state.pendingAuth = null;
-  state.route = preferredAccessibleRoute();
-  persistRoute(state.route);
-  saveLocalSession();
-  scheduleIdleLogout();
-}
-
-async function hydrateBackendSession() {
-  try {
-    const response = await fetch("/api/auth/me", { credentials: "include" });
-    if (!response.ok) return false;
-    const data = await response.json();
-    if (!data.authenticated || !data.user) return false;
-    applyBackendUser(data.user);
-    saveLocalSession();
-    scheduleIdleLogout();
-    return true;
-  } catch (error) {
-    console.info("[asset-portal] backend session unavailable");
-    return false;
-  }
-}
-
-async function logoutBackendSession() {
-  try {
-    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-  } catch {
-    // Static preview mode does not have a backend.
-  }
-}
-
-function handlePendingAuth(action) {
-  const pending = state.pendingAuth;
-  if (!pending) return;
-
-  if (action === "back") {
-    state.authView = "login";
-    state.pendingAuth = null;
-    render();
-    return;
-  }
-
-  if (action === "queue") {
-    state.authView = "login";
-    state.pendingAuth = null;
-    render();
-    showToast("该身份已保留在待处理队列");
-    return;
-  }
-
-  if (action === "create") {
-    const account = createAccountFromEmail(pending.email);
-    state.users.unshift({
-      name: pending.name,
-      account,
-      email: pending.email,
-      department: pending.department,
-      roleCode: "employee",
-      roleName: "普通员工",
-      scope: "本人资产与申请",
-      loginType: "OIDC 新用户",
-      identitySource: `OIDC / ${shortProviderName(pending.provider)}`,
-      externalSubject: pending.subject,
-      bindStatus: "已绑定",
-    });
-    state.requests.unshift({
-      id: `REQ${Date.now().toString().slice(-10)}`,
-      type: "资产领用",
-      applicant: pending.name,
-      asset: "新员工办公套餐",
-      reason: "首次 OIDC 登录后自动创建本地用户",
-      status: "审批中",
-      system: "飞书审批",
-      date: todayValue(),
-      currentNode: "普通管理员",
-    });
-    void createBusinessRequest(state.requests[0]);
-    removePendingIdentity(pending.subject);
-    loginAsAccount(account, "oidc", pending.provider);
-    return;
-  }
-
-  if (action === "bind") {
-    const targetUser = state.users.find((item) => item.account === pending.targetAccount);
-    if (!targetUser) return;
-    targetUser.identitySource = `OIDC / ${shortProviderName(pending.provider)}`;
-    targetUser.externalSubject = pending.subject;
-    targetUser.bindStatus = "已绑定";
-    removePendingIdentity(pending.subject);
-    loginAsAccount(targetUser.account, "oidc", pending.provider);
-  }
+  await readEcpContext()?.logout?.();
 }
 
 function renderAccountMenu() {
@@ -10764,8 +10439,6 @@ function roleUserFormMarkup(role) {
   return `<form id="demoForm" class="role-user-form" data-mode="role-user">
     <div class="role-user-fields">
       <label class="role-user-field required"><span>账号：</span><input name="account" placeholder="请输入" required autocomplete="off"></label>
-      <label class="role-user-field required"><span>密码：</span><input name="password" type="password" placeholder="请输入" required autocomplete="new-password"></label>
-      <label class="role-user-field required"><span>确认密码：</span><input name="confirmPassword" type="password" placeholder="请输入" required autocomplete="new-password"></label>
     </div>
     <input type="hidden" name="roleId" value="${escapeHtml(role?.id || "admin")}">
     <input type="hidden" name="employeeKeyword" value="">
@@ -10795,18 +10468,7 @@ function roleUserEditFormMarkup(user) {
 }
 
 function roleUserResetPasswordMarkup(user) {
-  return `<form id="demoForm" class="role-user-form role-user-reset-form" data-mode="role-user-reset-password">
-    <div class="role-user-fields">
-      <label class="role-user-field"><span>账号：</span><input value="${escapeHtml(user.account)}" disabled></label>
-      <label class="role-user-field required"><span>新密码：</span><input name="password" type="password" placeholder="请输入" required autocomplete="new-password"></label>
-      <label class="role-user-field required"><span>确认密码：</span><input name="confirmPassword" type="password" placeholder="请输入" required autocomplete="new-password"></label>
-    </div>
-    <input type="hidden" name="accountKey" value="${escapeHtml(user.account)}">
-    <div class="modal-actions role-user-actions">
-      <button type="button" class="btn" data-cancel-modal>取消</button>
-      <button type="submit" class="btn primary">确定</button>
-    </div>
-  </form>`;
+  return `<div class="empty-note">${escapeHtml(user.account)} 的密码由 ECP 统一管理，本系统不提供密码重置。</div>`;
 }
 
 function openRoleUserModal() {
@@ -10886,19 +10548,9 @@ function saveRoleUserFromForm(form) {
   const role = state.roles.find((item) => item.id === roleId) || state.roles.find((item) => item.id === "admin");
   const isEmployeeRole = role?.type === "employee";
   const accountInput = String(data.get("account") || "").trim();
-  const password = String(data.get("password") || "");
-  const confirmPassword = String(data.get("confirmPassword") || "");
   const employeeKeyword = String(data.get("employeeKeyword") || "").trim();
-  if (!accountInput || !password || !confirmPassword) {
-    showToast("请填写账号、密码和确认密码");
-    return false;
-  }
-  if (password.length < 6) {
-    showToast("密码至少 6 位");
-    return false;
-  }
-  if (password !== confirmPassword) {
-    showToast("两次密码不一致");
+  if (!accountInput) {
+    showToast("请填写账号");
     return false;
   }
   const employeeResult = employeeKeyword ? findRoleEmployee(employeeKeyword) : { user: null, ambiguous: false };
@@ -10915,7 +10567,6 @@ function saveRoleUserFromForm(form) {
   state.users.push({
     name: employee?.name || account,
     account,
-    password,
     phone: employee?.phone || "",
     email: employee?.email || "",
     department: employee?.department || "默认部门",
@@ -10958,77 +10609,28 @@ function saveRoleUserEditForm(form) {
 }
 
 function saveRoleUserResetPasswordForm(form) {
-  const data = new FormData(form);
-  const account = String(data.get("accountKey") || "").trim();
-  const user = state.users.find((item) => item.account === account);
-  if (!user) {
-    showToast("未找到账号");
-    return false;
-  }
-  const password = String(data.get("password") || "");
-  const confirmPassword = String(data.get("confirmPassword") || "");
-  if (password.length < 6) {
-    showToast("密码至少 6 位");
-    return false;
-  }
-  if (password !== confirmPassword) {
-    showToast("两次密码不一致");
-    return false;
-  }
-  user.password = password;
-  saveRegisteredUsers();
-  return true;
+  void form;
+  showToast("密码由 ECP 统一管理");
+  return false;
 }
 
 function renderRoleManagement() {
-  const roles = filteredRoleDefinitions();
-  const selectedRole = roles.find((role) => role.id === state.selectedRoleId) || roles.find((role) => role.id === "admin") || roles[0] || state.roles[0];
-  if (selectedRole && state.selectedRoleId !== selectedRole.id) state.selectedRoleId = selectedRole.id;
-  const assignedUsers = filteredRoleUsers(selectedRole);
-  const accountNoun = roleUserNoun(selectedRole);
-
-  return `<div class="system-content role-management">
-    <aside class="role-side-panel">
-      <div class="role-side-head">
-        <h2>角色管理</h2>
-        <span class="role-pill">超级管理员</span>
-      </div>
-      <div class="role-tabs">
-        <button class="role-tab ${state.roleTab === "system" ? "active" : ""}" type="button" data-role-tab="system">系统角色</button>
-        <button class="role-tab ${state.roleTab === "employee" ? "active" : ""}" type="button" data-role-tab="employee">员工角色</button>
-      </div>
-      <label class="role-search">
-        <input type="search" placeholder="请输入关键字" value="${escapeHtml(state.roleQueryDraft ?? state.roleQuery)}" data-role-search>
-        <button type="button" aria-label="搜索角色" data-role-search-submit>⌕</button>
-      </label>
-      <div class="role-list-title">
-        <span>新增角色</span>
-        <button class="role-inline-add" data-role-create title="新增角色" aria-label="新增角色">＋</button>
-      </div>
-      <div class="role-list">
-        ${
-          roles.length
-            ? roles.map(roleListItemMarkup).join("")
-            : `<div class="empty-note">没有匹配的角色。</div>`
-        }
-      </div>
-    </aside>
-
-    <section class="role-detail-panel">
-      <div class="role-table-toolbar">
-        <div class="role-toolbar-actions">
-          <button class="btn primary" data-role-user-create>＋ 新增${accountNoun}</button>
+  const user = state.currentUser;
+  return `<div class="system-content">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">ECP 角色与权限</h2>
+          <div class="panel-subtitle">当前系统只读取 ECP 服务端身份，不在本地创建账号、保存密码或授予角色。</div>
         </div>
-        <label class="role-main-search">
-          <input type="search" placeholder="模糊查询" value="${escapeHtml(state.roleUserQueryDraft ?? state.roleUserQuery)}" data-role-user-search>
-          <button type="button" aria-label="搜索" data-role-user-search-submit>⌕</button>
-        </label>
       </div>
-      <div class="table-wrap role-account-table">
-        <table>
-          <thead><tr><th><input type="checkbox" aria-label="全选账号"></th><th>账号</th><th>姓名</th><th>所在部门</th><th>所属公司</th><th>手机号</th><th>状态</th><th>操作</th></tr></thead>
-          <tbody>${roleUserRowsMarkup(assignedUsers)}</tbody>
-        </table>
+      <div class="detail-grid">
+        ${detail("账号", user?.account || "-")}
+        ${detail("姓名", user?.name || "-")}
+        ${detail("当前角色", user?.roleName || "普通员工")}
+        ${detail("所在部门", user?.department || "-")}
+        ${detail("身份来源", "ECP统一认证")}
+        ${detail("授权方式", "ECP应用管理后台")}
       </div>
     </section>
   </div>`;
@@ -11553,33 +11155,7 @@ function toolbar(placeholders) {
 }
 
 function renderLogin() {
-  return `<section class="login-replica-shell">
-    <div class="container container-show" data-login-stage>
-      <div class="login-box">
-        <div class="title">Login</div>
-        <form data-auth-login-form>
-          <div class="input"><input name="account" placeholder="Input your username" autocomplete="username"></div>
-          <div class="input"><input name="password" type="password" placeholder="Input your password" autocomplete="current-password"></div>
-          <button class="btn login-btn" type="submit">登录</button>
-        </form>
-        <div class="change-box login-change">
-          <button class="change-btn toSign" type="button" data-auth-flip="register">去注册</button>
-        </div>
-      </div>
-
-      <div class="sign-box">
-        <div class="title">Sign</div>
-        <form data-auth-register-form>
-          <div class="input"><input name="name" placeholder="Have A Good Name?" autocomplete="name"></div>
-          <div class="input"><input name="password" type="password" placeholder="Keep Secret" autocomplete="new-password"></div>
-          <button class="btn sign-btn" type="submit">注册</button>
-        </form>
-        <div class="change-box sign-change">
-          <button class="change-btn toLogin" type="button" data-auth-flip="login">去登陆</button>
-        </div>
-      </div>
-    </div>
-  </section>`;
+  return `<section class="login-page"><article class="login-panel"><p class="panel-subtitle">请通过 ECP 统一认证登录。</p></article></section>`;
 }
 
 function renderBindReview() {
@@ -11664,9 +11240,7 @@ function render() {
   if (!isAuthenticated()) {
     renderNav();
     renderSecondaryNav();
-    page.innerHTML = isEcpAuthEnabled()
-      ? `<section class="login-page"><article class="login-panel"><p class="panel-subtitle">正在同步 ECP 登录态...</p></article></section>`
-      : state.authView === "bind" ? renderBindReview() : renderLogin();
+    page.innerHTML = `<section class="login-page"><article class="login-panel"><p class="panel-subtitle">正在同步 ECP 登录态...</p></article></section>`;
     bindPageEvents();
     return;
   }
@@ -12229,27 +11803,6 @@ function bindPageEvents() {
       render();
     })
   );
-  document.querySelector("[data-auth-login-form]")?.addEventListener("submit", handleLoginSubmit);
-  document.querySelector("[data-auth-register-form]")?.addEventListener("submit", handleRegisterSubmit);
-  document.querySelectorAll("[data-auth-flip]").forEach((el) =>
-    el.addEventListener("click", () => {
-      const showRegister = el.dataset.authFlip === "register";
-      document.querySelector(".login-box")?.classList.toggle("animate_login", showRegister);
-      document.querySelector(".sign-box")?.classList.toggle("animate_sign", showRegister);
-    })
-  );
-  document.querySelectorAll("[data-login-account]").forEach((el) =>
-    el.addEventListener("click", () => loginAsAccount(el.dataset.loginAccount))
-  );
-  document.querySelectorAll("[data-oidc-login]").forEach((el) =>
-    el.addEventListener("click", () => beginOidcLogin(el.dataset.oidcLogin))
-  );
-  document.querySelectorAll("[data-bind-action]").forEach((el) =>
-    el.addEventListener("click", () => handlePendingAuth(el.dataset.bindAction))
-  );
-  document.querySelectorAll("[data-quick-login]").forEach((el) =>
-    el.addEventListener("click", () => loginAsAccount(el.dataset.quickLogin))
-  );
   document.querySelectorAll("[data-terminal]").forEach((el) =>
     el.addEventListener("click", () => {
       state.selectedTerminal = el.dataset.terminal;
@@ -12258,7 +11811,6 @@ function bindPageEvents() {
   );
   document.querySelectorAll("[data-switch-terminal]").forEach((el) => el.addEventListener("click", switchTerminal));
   document.querySelector("[data-open-help]")?.addEventListener("click", openHelpModal);
-  document.querySelector("[data-feishu-login]")?.addEventListener("click", beginFeishuOAuthLogin);
   document.querySelector("[data-account-toggle]")?.addEventListener("click", (event) => {
     event.stopPropagation();
     const menu = event.currentTarget.closest("[data-account-menu]");
@@ -13115,8 +12667,6 @@ function switchTerminal() {
     render();
     return;
   }
-  const targetAccount = state.currentUser.roleCode === "employee" ? "admin" : "lilei";
-  loginAsAccount(targetAccount, "local", "一键切换");
 }
 
 function openHelpModal() {
@@ -14562,7 +14112,7 @@ function formMarkup(type, asset = null, direct = false) {
       <div class="field"><label>关联资产/物品</label><input name="asset" required value="${asset ? `${asset.id} · ${asset.name}` : ""}" placeholder="请选择资产、耗材或标准品" /></div>
       <div class="field"><label>期望日期</label><input type="date" value="${todayValue()}" /></div>
       <div class="field"><label>紧急程度</label><select><option>普通</option><option>紧急</option><option>低优先级</option></select></div>
-      <div class="field"><label>外部身份</label><input value="${escapeHtml(state.session.method === "oidc" ? state.session.provider : "本地账号演示")}" /></div>
+      <div class="field"><label>外部身份</label><input value="${escapeHtml(state.session.provider || "ECP统一认证")}" /></div>
       <div class="field full"><label>${direct ? "操作说明" : "申请说明"}</label><textarea name="reason" required placeholder="${direct ? "填写直办原因，例如普通管理员盘点纠偏、紧急调拨、台账修正。" : "填写申请原因，提交后会创建审批单据。"}"></textarea></div>
     </div>
     <div class="modal-actions">
@@ -14921,8 +14471,6 @@ async function bootApp() {
     render();
     return;
   }
-  const restored = await hydrateBackendSession();
-  if (!restored) restoreLocalSession();
   render();
 }
 
