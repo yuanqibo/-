@@ -10560,13 +10560,12 @@ function updateSearchQuery(value, source = "local", immediate = false) {
     state.query = nextValue;
   }
   clearTimeout(searchRenderTimer);
-  const shouldRender = ["assets", "assetInbound", "assetReceiveReturn", "assetBorrowReturn", "requests", "repair"].includes(state.route);
+  const shouldRender = ["assets", "assetInbound", "assetReceiveReturn", "assetBorrowReturn", "requests", "repair", "settings"].includes(state.route);
   if (!shouldRender) return;
 
   const renderSearchResults = () => {
     render();
-    const selector = ".local-search";
-    const input = document.querySelector(selector);
+    const input = document.querySelector(".local-search");
     if (!input) return;
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
@@ -10936,7 +10935,9 @@ function bindPageEvents() {
   bindPaginationEvents(document);
   document.querySelectorAll("[data-search]").forEach((el) =>
     el.addEventListener("click", () => {
-      updateSearchQuery(document.querySelector(".local-search")?.value || "", "local", true);
+      const scope = el.closest(".toolbar, .asset-list-toolbar, .asset-list-search, .employee-request-list-head") || document;
+      const input = scope.querySelector(".local-search") || document.querySelector(".local-search");
+      updateSearchQuery(input?.value || "", "local", true);
     })
   );
   document.querySelectorAll(".local-search").forEach((el) => {
