@@ -21,7 +21,7 @@ spring:
       maximum-pool-size: ${DATABASE_POOL_SIZE:10}
   web:
     resources:
-      static-locations: file:./dist/
+      static-locations: classpath:/static/,file:./dist/
       cache:
         cachecontrol:
           no-store: true
@@ -35,7 +35,11 @@ management:
 asset-portal:
   public-base-url: ${PUBLIC_BASE_URL:http://localhost:${PORT:5387}}
   ecp-api-base-url: ${ECP_API_BASE_URL:https://access.acg.team/api/v1}
-  admin-accounts: ${ASSET_ADMIN_ACCOUNTS:}
+  system-config:
+    encryption-key: ${ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY:}
+  security:
+    tenant-id: ${ECP_TENANT_ID:}
+    allow-unauthenticated-api-for-tests: ${ALLOW_UNAUTHENTICATED_TEST_MODE:false}
   store:
     max-keys-per-request: ${STORE_MAX_KEYS_PER_REQUEST:100}
     max-value-bytes: ${STORE_MAX_VALUE_BYTES:10485760}

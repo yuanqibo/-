@@ -47,6 +47,11 @@ public class BusinessDataRepository {
             rs.next() ? Optional.of(new Snapshot(read(rs.getString(1)), rs.getLong(2), rs.getTimestamp(3).toInstant())) : Optional.empty(), type);
     }
 
+    public Optional<Snapshot> findForUpdate(String type) {
+        return jdbc.query("SELECT document, version, updated_at FROM business_snapshot WHERE snapshot_type = ? FOR UPDATE", rs ->
+            rs.next() ? Optional.of(new Snapshot(read(rs.getString(1)), rs.getLong(2), rs.getTimestamp(3).toInstant())) : Optional.empty(), type);
+    }
+
     public Snapshot create(String type, JsonNode document) {
         Instant now = Instant.now();
         jdbc.update("INSERT INTO business_snapshot (snapshot_type, document, version, updated_at) VALUES (?, ?, ?, ?)",

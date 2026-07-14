@@ -2,6 +2,7 @@ import { createEcpSdk } from '@acg/ecp-sdk'
 import { createBundleFromGlob } from '@acg/ecp-auth-vue'
 import type { App as VueApp } from 'vue'
 import type { Router } from 'vue-router'
+import type { DoctorReport, EcpAuthConfigSourceMode } from '@acg/ecp-sdk'
 
 export type { AuthzSessionContext } from '@acg/ecp-sdk'
 
@@ -19,6 +20,11 @@ const readEnv = (key: string, fallback: string): string => {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback
 }
 
+const resolveConfigSourceMode = (): EcpAuthConfigSourceMode => {
+  const value = readEnv('VITE_ECP_AUTH_CONFIG_SOURCE_MODE', 'local').toLowerCase()
+  return value === 'local' || value === 'remote-first' || value === 'remote' ? value : 'local'
+}
+
 export const ecp = createEcpSdk({
   appCode: readEnv('VITE_ECP_APP_CODE', 'WLY5YG'),
   baseUrl: readEnv('VITE_ECP_API_BASE_URL', '/api/v1'),
@@ -27,7 +33,7 @@ export const ecp = createEcpSdk({
   },
   auth: {
     bundle: authzBundle,
-    configSourceMode: readEnv('VITE_ECP_AUTH_CONFIG_SOURCE_MODE', 'local') as 'local' | 'remote-first' | 'remote',
+    configSourceMode: resolveConfigSourceMode(),
     defaultSetup: {
       login: {
         loginPath: '/login',
@@ -59,15 +65,24 @@ export const ecp = createEcpSdk({
 })
 
 let ecpReadyPromise: Promise<void> = Promise.resolve()
+let localDoctorReport: DoctorReport | null = null
 
 export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
-  ecpReadyPromise = ecp
-    .setup({
+  ecpReadyPromise = ecp.setup({
       app,
       router,
       locale: 'zh-CN'
     })
-    .then(() => undefined)
+    .then(async () => {
+      localDoctorReport = await ecp.auth?.doctor.run() ?? null
+      if (!localDoctorReport?.ok) {
+        const failures = localDoctorReport?.checks
+          .filter((check) => check.status === 'FAIL')
+          .map((check) => `${check.code}: ${check.message}`)
+          .join('; ')
+        throw new Error(`ECP local doctor failed${failures ? `: ${failures}` : ''}`)
+      }
+    })
     .catch((error) => {
       console.error('[asset-portal] ECP setup failed', error)
       throw error
@@ -77,3 +92,4 @@ export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
 }
 
 export const waitForEcpReady = (): Promise<void> => ecpReadyPromise
+export const getLocalDoctorReport = (): DoctorReport | null => localDoctorReport

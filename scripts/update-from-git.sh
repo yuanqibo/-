@@ -6,9 +6,9 @@ APP_DIR="${APP_DIR:-/opt/asset-portal}"
 cd "$APP_DIR"
 git pull --ff-only
 npm ci
-npm run build
+VITE_ECP_AUTH_CONFIG_SOURCE_MODE=remote-first npm run build
 npm run install:ecp-java-sdk
-mvn -f backend/pom.xml clean package -DskipTests
+mvn -f backend/pom.xml clean package
 sudo systemctl restart asset-portal
 sudo systemctl --no-pager --full status asset-portal
 

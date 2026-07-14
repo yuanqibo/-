@@ -1,15 +1,243 @@
 menus:
-  - id: asset.portal
-    title: 资产管理
-    icon: Box
+  - id: home
+    title: 首页
+    icon: Home
     path: /
-    pageKey: asset.portal
+    pageKey: asset.portal.home
     file: /src/views/PortalView.vue
     order: 10
     permissionCodes:
-      - asset:view
+      - asset:item:view
+      - asset:request:view
+    featureCodes:
+      - PORTAL_HOME
+  - id: assets
+    title: 资产
+    icon: Box
+    path: /assets
+    pageKey: asset.portal.assets
+    file: /src/views/PortalView.vue
+    order: 20
+    permissionCodes:
+      - asset:item:view
     featureCodes:
       - PORTAL_ASSETS
+  - id: assetInbound
+    parentId: assets
+    title: 资产入库
+    path: /assets/inbound
+    pageKey: asset.portal.inbound
+    file: /src/views/PortalView.vue
+    order: 21
+    permissionCodes:
+      - asset:inbound:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: assetReceiveReturn
+    parentId: assets
+    title: 领用退库
+    path: /assets/receive-return
+    pageKey: asset.portal.receive-return
+    file: /src/views/PortalView.vue
+    order: 22
+    permissionCodes:
+      - asset:receive_return:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: assetBorrowReturn
+    parentId: assets
+    title: 借用归还
+    path: /assets/borrow-return
+    pageKey: asset.portal.borrow-return
+    file: /src/views/PortalView.vue
+    order: 23
+    permissionCodes:
+      - asset:borrow_return:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: stocktake
+    parentId: assets
+    title: 资产盘点
+    path: /assets/stocktake
+    pageKey: asset.portal.stocktake
+    file: /src/views/PortalView.vue
+    order: 24
+    permissionCodes:
+      - asset:stocktake:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: consumables
+    parentId: assets
+    title: 耗材库存
+    path: /assets/consumables
+    pageKey: asset.portal.consumables
+    file: /src/views/PortalView.vue
+    order: 25
+    permissionCodes:
+      - asset:consumable:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: repair
+    parentId: assets
+    title: 故障维修
+    path: /assets/repairs
+    pageKey: asset.portal.repairs
+    file: /src/views/PortalView.vue
+    order: 26
+    permissionCodes:
+      - asset:repair:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: contracts
+    parentId: assets
+    title: 合同供应商
+    path: /assets/contracts
+    pageKey: asset.portal.contracts
+    file: /src/views/PortalView.vue
+    order: 27
+    permissionCodes:
+      - asset:contract:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: assetSettings
+    parentId: assets
+    title: 资产设置
+    path: /assets/settings
+    pageKey: asset.portal.settings
+    file: /src/views/PortalView.vue
+    order: 30
+    permissionCodes:
+      - asset:location_settings:view
+      - asset:category_settings:view
+      - asset:code_rules:view
+      - asset:label_template_settings:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: assetLocationSettings
+    parentId: assetSettings
+    title: 位置管理
+    path: /assets/settings/locations
+    pageKey: asset.portal.settings.locations
+    file: /src/views/PortalView.vue
+    order: 31
+    permissionCodes:
+      - asset:location_settings:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: assetCategorySettings
+    parentId: assetSettings
+    title: 资产分类
+    path: /assets/settings/categories
+    pageKey: asset.portal.settings.categories
+    file: /src/views/PortalView.vue
+    order: 32
+    permissionCodes:
+      - asset:category_settings:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: assetCodeRules
+    parentId: assetSettings
+    title: 资产编码规则
+    path: /assets/settings/code-rules
+    pageKey: asset.portal.settings.code-rules
+    file: /src/views/PortalView.vue
+    order: 33
+    permissionCodes:
+      - asset:code_rules:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: assetLabelTemplateSettings
+    parentId: assetSettings
+    title: 标签模板设置
+    path: /assets/settings/label-templates
+    pageKey: asset.portal.settings.label-templates
+    file: /src/views/PortalView.vue
+    order: 34
+    permissionCodes:
+      - asset:label_template_settings:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: requests
+    title: 审批申请
+    icon: Tickets
+    path: /requests
+    pageKey: asset.portal.requests
+    file: /src/views/PortalView.vue
+    order: 40
+    permissionCodes:
+      - asset:request:view
+    featureCodes:
+      - PORTAL_REQUESTS
+  - id: settings
+    title: 系统
+    icon: Setting
+    path: /system
+    pageKey: asset.portal.system
+    file: /src/views/PortalView.vue
+    order: 50
+    permissionCodes:
+      - asset:employee:view
+      - asset:department:view
+      - asset:self_service:view
+      - asset:integration:view
+      - asset:form:view
+    featureCodes:
+      - PORTAL_SETTINGS
+  - id: settingsEmployee
+    parentId: settings
+    title: 员工信息
+    path: /system/employees
+    pageKey: asset.portal.system.employees
+    file: /src/views/PortalView.vue
+    order: 51
+    permissionCodes:
+      - asset:employee:view
+    featureCodes:
+      - PORTAL_SETTINGS
+  - id: settingsDepartment
+    parentId: settings
+    title: 组织架构
+    path: /system/departments
+    pageKey: asset.portal.system.departments
+    file: /src/views/PortalView.vue
+    order: 52
+    permissionCodes:
+      - asset:department:view
+    featureCodes:
+      - PORTAL_SETTINGS
+  - id: settingsSelfService
+    parentId: settings
+    title: 员工自助
+    path: /system/self-service
+    pageKey: asset.portal.system.self-service
+    file: /src/views/PortalView.vue
+    order: 53
+    permissionCodes:
+      - asset:self_service:view
+    featureCodes:
+      - PORTAL_SETTINGS
+  - id: settingsIntegration
+    parentId: settings
+    title: 系统对接
+    path: /system/integrations
+    pageKey: asset.portal.system.integrations
+    file: /src/views/PortalView.vue
+    order: 54
+    permissionCodes:
+      - asset:integration:view
+    featureCodes:
+      - PORTAL_SETTINGS
+  - id: settingsForm
+    parentId: settings
+    title: 表单管理
+    path: /system/forms
+    pageKey: asset.portal.system.forms
+    file: /src/views/PortalView.vue
+    order: 55
+    permissionCodes:
+      - asset:form:view
+    featureCodes:
+      - PORTAL_SETTINGS
   - id: authz.workspace
     title: 账号管理
     icon: Lock

@@ -17,7 +17,25 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:5387',
-        changeOrigin: true
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyRequest, request) => {
+            const host = request.headers.host
+            if (host) proxyRequest.setHeader('x-forwarded-host', host)
+            proxyRequest.setHeader('x-forwarded-proto', 'http')
+          })
+        }
+      },
+      '^/auth(?:/|$)': {
+        target: 'http://127.0.0.1:5387',
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyRequest, request) => {
+            const host = request.headers.host
+            if (host) proxyRequest.setHeader('x-forwarded-host', host)
+            proxyRequest.setHeader('x-forwarded-proto', 'http')
+          })
+        }
       }
     }
   }

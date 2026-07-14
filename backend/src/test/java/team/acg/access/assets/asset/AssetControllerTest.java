@@ -8,8 +8,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import team.acg.access.assets.store.AppStoreRepository;
+
+import java.util.Map;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -19,21 +24,29 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
+@ActiveProfiles("test")
 @TestPropertySource(properties = "spring.datasource.url=jdbc:h2:mem:asset-test;MODE=MySQL;DB_CLOSE_DELAY=-1")
 class AssetControllerTest {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
+    @Autowired AppStoreRepository storeRepository;
+    @Autowired ObjectMapper mapper;
 
     @BeforeEach
     void clearAssets() {
         jdbc.update("DELETE FROM asset_audit_log");
         jdbc.update("DELETE FROM asset_record");
+        storeRepository.saveAll(Map.of(
+            "assetCategoryTree", mapper.createArrayNode().add(mapper.createObjectNode()
+                .put("id", "cat-computer").put("name", "电脑").put("code", "PC").set("children", mapper.createArrayNode())),
+            "assetLocationTree", mapper.createArrayNode().add(mapper.createObjectNode()
+                .put("id", "loc-hq").put("name", "总部").set("children", mapper.createArrayNode()))));
     }
 
     @Test
     void persistsAValidatedAsset() throws Exception {
         mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
-            {"item":{"id":"PC-001","name":"开发电脑","category":"电脑","price":5000}}
+            {"item":{"id":"PC-001","name":"开发电脑","category":"电脑","location":"总部","price":5000}}
             """))
             .andExpect(status().isOk()).andExpect(jsonPath("$.item.status").value("空闲"));
 
@@ -44,12 +57,12 @@ class AssetControllerTest {
     @Test
     void executesLifecycleCommandsWithServerControlledStatusAndHistory() throws Exception {
         mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
-            {"item":{"id":"PC-CMD","name":"命令电脑","category":"电脑"}}
+            {"item":{"id":"PC-CMD","name":"命令电脑","category":"电脑","location":"总部"}}
             """))
             .andExpect(status().isOk());
 
         mvc.perform(post("/api/assets/commands/receive").contentType(MediaType.APPLICATION_JSON).content("""
-            {"assetIds":["PC-CMD"],"fields":{"receiver":"李雷","department":"研发部","company":"默认公司","location":"总部","date":"2026-07-10"}}
+            {"assetIds":["PC-CMD"],"fields":{"receiver":"李雷","receiverSubject":"user-1","department":"研发部","company":"默认公司","location":"总部","date":"2026-07-10"}}
             """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].status").value("在用"))
@@ -65,10 +78,208 @@ class AssetControllerTest {
     @Test
     void createsAssetWithoutTrustingClientStatusOrLifecycle() throws Exception {
         mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
-            {"item":{"id":"PC-NEW","name":"新电脑","category":"电脑","owner":"","status":"已报废","lifecycle":[["x","伪造","伪造"]]}}
+            {"item":{"id":"PC-NEW","name":"新电脑","category":"电脑","location":"总部","owner":"","status":"已报废","lifecycle":[["x","伪造","伪造"]]}}
             """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.item.status").value("空闲"))
             .andExpect(jsonPath("$.item.lifecycle[0][1]").value("资产入库"));
+    }
+
+    @Test
+    void rejectsReferencesOutsideTheServerCatalog() throws Exception {
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-BAD-CATEGORY","name":"未知资产","category":"不存在","location":"总部"}}
+            """))
+            .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-BAD-LOCATION","name":"未知位置资产","category":"电脑","location":"不存在"}}
+            """))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectsPersonAssignmentsWithoutAStableSubject() throws Exception {
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-NO-SUBJECT","name":"人员校验资产","category":"电脑","location":"总部"}}
+            """))
+            .andExpect(status().isOk());
+
+        mvc.perform(post("/api/assets/commands/receive").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-NO-SUBJECT"],"fields":{"receiver":"伪造姓名","location":"总部","date":"2026-07-10"}}
+            """))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void handoverRequiresSignatureAndCancellationRestoresThePreviousOwner() throws Exception {
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-HANDOVER","name":"交接资产","category":"电脑","location":"总部",
+              "owner":"原责任人","ownerSubject":"user-old"}}
+            """))
+            .andExpect(status().isOk());
+
+        mvc.perform(post("/api/assets/commands/handover").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-HANDOVER"],"fields":{"receiver":"新责任人","receiverSubject":"user-new",
+              "location":"总部","handoverType":"员工交接","date":"2026-07-10"}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("交接待签字"))
+            .andExpect(jsonPath("$.items[0].owner").value("新责任人"));
+
+        mvc.perform(post("/api/assets/commands/handover-cancel").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-HANDOVER"],"fields":{"operator":"管理员","date":"2026-07-11"}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("在用"))
+            .andExpect(jsonPath("$.items[0].owner").value("原责任人"))
+            .andExpect(jsonPath("$.items[0].ownerSubject").value("user-old"))
+            .andExpect(jsonPath("$.items[0].handoverPreviousOwner").doesNotExist());
+
+        mvc.perform(post("/api/assets/commands/handover").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-HANDOVER"],"fields":{"receiver":"新责任人","receiverSubject":"user-new",
+              "location":"总部","handoverType":"员工交接","date":"2026-07-12"}}
+            """))
+            .andExpect(status().isOk());
+        mvc.perform(post("/api/assets/commands/handover-sign").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-HANDOVER"],"fields":{"operatorSubject":"user-admin","date":"2026-07-13"}}
+            """))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.error").value("Only the designated handover receiver can sign this asset"));
+        mvc.perform(post("/api/assets/commands/handover-sign").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-HANDOVER"],"fields":{"operatorSubject":"user-new","date":"2026-07-13"}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("在用"))
+            .andExpect(jsonPath("$.items[0].owner").value("新责任人"))
+            .andExpect(jsonPath("$.items[0].handoverPreviousOwner").doesNotExist());
+    }
+
+    @Test
+    void publicAreaHandoverCompletesWithoutAnImpossibleUserSignature() throws Exception {
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-PUBLIC","name":"公共区域资产","category":"电脑","location":"总部",
+              "owner":"原责任人","ownerSubject":"user-old"}}
+            """))
+            .andExpect(status().isOk());
+
+        mvc.perform(post("/api/assets/commands/handover").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-PUBLIC"],"fields":{"receiver":"公共区域","receiverSubject":"asset:public-area",
+              "location":"总部","handoverType":"公共交接","date":"2026-07-13"}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("在用"))
+            .andExpect(jsonPath("$.items[0].ownerSubject").value("asset:public-area"))
+            .andExpect(jsonPath("$.items[0].handoverPreviousOwner").doesNotExist());
+    }
+
+    @Test
+    void generatesUniqueCodesAndCopiesOnlyFromTheServerSource() throws Exception {
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"name":"自动编码一","category":"电脑","location":"总部"}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.item.id").value("PC00001"));
+        mvc.perform(post("/api/assets/import").contentType(MediaType.APPLICATION_JSON).content("""
+            {"items":[
+              {"name":"自动编码二","category":"电脑","location":"总部"},
+              {"name":"自动编码三","category":"电脑","location":"总部"}
+            ]}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].id").value("PC00002"))
+            .andExpect(jsonPath("$.items[1].id").value("PC00003"));
+
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"sourceAssetId":"PC00001","item":{"id":"CLIENT-CONTROLLED","name":"服务端复制"}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.item.id").value("PC00004"))
+            .andExpect(jsonPath("$.item.name").value("服务端复制"))
+            .andExpect(jsonPath("$.item.owner").value("未分配"));
+    }
+
+    @Test
+    void cancelInboundRequiresAnAvailableUnassignedAsset() throws Exception {
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-INBOUND-OK","name":"待取消入库资产","category":"电脑","location":"总部"}}
+            """))
+            .andExpect(status().isOk());
+        mvc.perform(post("/api/assets/commands/cancel-inbound").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-INBOUND-OK"],"fields":{"operator":"管理员","date":"2026-07-13"}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].inboundStatus").value("已取消"));
+
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-INBOUND-ASSIGNED","name":"已分配资产","category":"电脑","location":"总部",
+              "owner":"李雷","ownerSubject":"user-1"}}
+            """))
+            .andExpect(status().isOk());
+        String document = jdbc.queryForObject(
+            "SELECT document FROM asset_record WHERE asset_id = ?", String.class, "PC-INBOUND-ASSIGNED");
+        var corrupted = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(document);
+        corrupted.put("status", "空闲");
+        jdbc.update("UPDATE asset_record SET status = ?, document = ? WHERE asset_id = ?",
+            "空闲", mapper.writeValueAsString(corrupted), "PC-INBOUND-ASSIGNED");
+
+        mvc.perform(post("/api/assets/commands/cancel-inbound").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-INBOUND-ASSIGNED"],"fields":{"operator":"管理员","date":"2026-07-13"}}
+            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Only unassigned assets can have inbound cancelled: PC-INBOUND-ASSIGNED"));
+    }
+
+    @Test
+    void importCommandsUsePerAssetOperationsAndAreAtomic() throws Exception {
+        mvc.perform(post("/api/assets/import").contentType(MediaType.APPLICATION_JSON).content("""
+            {"items":[
+              {"id":"PC-IMPORT-1","name":"导入一","category":"电脑","location":"总部"},
+              {"id":"PC-IMPORT-2","name":"导入二","category":"电脑","location":"总部"}
+            ]}
+            """))
+            .andExpect(status().isOk());
+
+        mvc.perform(post("/api/assets/commands/update-import").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-IMPORT-1","PC-IMPORT-2"],"fields":{"operations":{
+              "PC-IMPORT-1":{"name":"更新一","date":"2026-07-13"},
+              "PC-IMPORT-2":{"name":"更新二","date":"2026-07-13"}
+            }}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-IMPORT-1')].name").value("更新一"))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-IMPORT-2')].name").value("更新二"));
+
+        mvc.perform(post("/api/assets/commands/update-import").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-IMPORT-1","PC-IMPORT-2"],"fields":{"operations":{
+              "PC-IMPORT-1":{"name":"不应写入"},
+              "PC-EXTRA":{"name":"多余记录"}
+            }}}
+            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString("must exactly match asset ids")));
+
+        mvc.perform(post("/api/assets/commands/receive-import").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-IMPORT-1","PC-IMPORT-2"],"fields":{"operations":{
+              "PC-IMPORT-1":{"receiver":"李雷","receiverSubject":"user-1","location":"总部","date":"2026-07-13"},
+              "PC-IMPORT-2":{"receiver":"韩梅梅","receiverSubject":"user-2","location":"不存在","date":"2026-07-13"}
+            }}}
+            """))
+            .andExpect(status().isBadRequest());
+
+        mvc.perform(get("/api/assets"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-IMPORT-1')].status").value("空闲"))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-IMPORT-2')].status").value("空闲"));
+
+        mvc.perform(post("/api/assets/commands/receive-import").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-IMPORT-1","PC-IMPORT-2"],"fields":{"operations":{
+              "PC-IMPORT-1":{"receiver":"李雷","receiverSubject":"user-1","location":"总部","date":"2026-07-13"},
+              "PC-IMPORT-2":{"receiver":"韩梅梅","receiverSubject":"user-2","location":"总部","date":"2026-07-13"}
+            }}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-IMPORT-1')].ownerSubject").value("user-1"))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-IMPORT-2')].ownerSubject").value("user-2"));
     }
 }

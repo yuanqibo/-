@@ -2,13 +2,11 @@ package team.acg.access.assets.auth;
 
 import com.idanchuang.ecp.api.common.model.session.EcpSessionContext;
 import com.idanchuang.ecp.sdk.client.EcpClient;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -16,24 +14,40 @@ import java.util.stream.Collectors;
 @Service
 @ConditionalOnProperty(prefix = "ecp.sdk", name = "enabled", havingValue = "true")
 public class EcpIdentityService {
-    private final EcpClient client;
-    private final Set<String> adminAccounts;
+    private static final Set<String> ADMIN_ROLE_TYPES = Set.of("APP_ADMIN", "OPERATOR", "AUDITOR");
 
-    public EcpIdentityService(EcpClient client, @Value("${asset-portal.admin-accounts}") String adminAccounts) {
+    private final EcpClient client;
+
+    public EcpIdentityService(EcpClient client) {
         this.client = client;
-        this.adminAccounts = Arrays.stream(adminAccounts.split(","))
-            .map(EcpIdentityService::normalize).filter(value -> !value.isBlank()).collect(Collectors.toUnmodifiableSet());
     }
 
     public Map<String, Object> resolve(String token) {
-        return normalize(client.session(token).context(), adminAccounts);
+        return normalize(client.session(token).context());
     }
 
-    static Map<String, Object> normalize(EcpSessionContext context, Set<String> adminAccounts) {
+    static Map<String, Object> normalize(EcpSessionContext context) {
+        if (context == null || context.user() == null) {
+            throw new IllegalStateException("ECP session identity is incomplete");
+        }
         EcpSessionContext.User source = context.user();
         String email = text(source.email());
         String account = first(email, source.accountUnionId(), source.unionId(), source.externalId());
-        String roleCode = roleCode(context, adminAccounts, account, email);
+        String subject = first(source.accountUnionId(), source.unionId(), source.externalId());
+        String directorySubject = first(source.unionId(), source.externalId(), source.accountUnionId());
+        if (subject.isBlank() || directorySubject.isBlank()) {
+            throw new IllegalStateException("ECP session has no stable user subject");
+        }
+        Set<String> permissionCodes = context.permissionCodes() == null
+            ? Set.of()
+            : context.permissionCodes().stream().filter(java.util.Objects::nonNull).collect(Collectors.toUnmodifiableSet());
+        Set<String> roleTypes = context.roles() == null ? Set.of() : context.roles().stream()
+            .map(EcpSessionContext.Role::type).map(EcpIdentityService::text)
+            .map(String::toUpperCase).filter(value -> !value.isBlank()).collect(Collectors.toUnmodifiableSet());
+        Set<String> roleCodes = context.roles() == null ? Set.of() : context.roles().stream()
+            .map(EcpSessionContext.Role::code).map(EcpIdentityService::text)
+            .map(String::toUpperCase).filter(value -> !value.isBlank()).collect(Collectors.toUnmodifiableSet());
+        String roleCode = roleCode(roleTypes, roleCodes);
         String roleName = switch (roleCode) {
             case "super_admin" -> "超级管理员";
             case "admin" -> "普通管理员";
@@ -41,7 +55,7 @@ public class EcpIdentityService {
         };
         String department = source.departments() == null || source.departments().isEmpty()
             ? first(source.companyName(), source.accountSetName(), "ECP组织")
-            : first(source.departments().getFirst().name(), "ECP组织");
+            : first(source.departments().get(0).name(), "ECP组织");
         String company = first(source.companyName(), source.accountSetName(), "默认公司");
 
         Map<String, Object> user = new LinkedHashMap<>();
@@ -58,24 +72,26 @@ public class EcpIdentityService {
         user.put("scope", "employee".equals(roleCode) ? "本人资产、个人申请和审批状态" : "资产与系统管理");
         user.put("loginType", "ECP统一认证");
         user.put("identitySource", "ECP");
-        user.put("externalSubject", "ecp:" + first(source.accountUnionId(), source.unionId(), account));
+        user.put("subject", subject);
+        user.put("directorySubject", directorySubject);
+        user.put("externalSubject", "ecp:" + subject);
+        user.put("tenantId", context.tenant() == null ? "" : text(context.tenant().authzTenantId()));
+        user.put("companyUnionId", context.tenant() == null || context.tenant().selectedCompany() == null
+            ? "" : text(context.tenant().selectedCompany().unionId()));
+        user.put("departmentUnionIds", source.departments() == null ? java.util.List.of() : source.departments().stream()
+            .map(EcpSessionContext.Department::unionId).filter(java.util.Objects::nonNull).toList());
         user.put("bindStatus", "已绑定");
         user.put("avatar", text(source.avatar()));
-        user.put("permissionCodes", context.permissionCodes() == null ? java.util.List.of() : context.permissionCodes());
+        user.put("permissionCodes", permissionCodes);
+        user.put("roleTypes", roleTypes);
+        user.put("roleCodes", roleCodes);
         return user;
     }
 
-    private static String roleCode(EcpSessionContext context, Set<String> adminAccounts, String account, String email) {
-        if (adminAccounts.contains(normalize(account)) || adminAccounts.contains(normalize(email))) return "super_admin";
-        Set<String> roles = context.roles() == null ? Set.of() : context.roles().stream()
-            .flatMap(role -> java.util.stream.Stream.of(role.code(), role.name(), role.type()))
-            .map(EcpIdentityService::normalize).collect(Collectors.toSet());
-        Set<String> permissions = context.permissionCodes() == null ? Set.of() : context.permissionCodes().stream()
-            .map(EcpIdentityService::normalize).collect(Collectors.toSet());
-        if (roles.stream().anyMatch(Set.of("app_admin", "super_admin", "超级管理员", "应用管理员")::contains)
-            || permissions.contains("authz:app_role:assign")) return "super_admin";
-        if (roles.stream().anyMatch(Set.of("operator", "admin", "资产运营", "普通管理员")::contains)
-            || permissions.contains("asset:create") || permissions.contains("asset:update")) return "admin";
+    private static String roleCode(Set<String> roleTypes, Set<String> roleCodes) {
+        if (roleTypes.contains("APP_ADMIN") || roleCodes.contains("APP_ADMIN")) return "super_admin";
+        if (roleTypes.stream().anyMatch(ADMIN_ROLE_TYPES::contains)
+            || roleCodes.contains("OPERATOR") || roleCodes.contains("APP_AUDITOR")) return "admin";
         return "employee";
     }
 
@@ -87,7 +103,4 @@ public class EcpIdentityService {
         return value == null ? "" : value.trim();
     }
 
-    private static String normalize(String value) {
-        return text(value).toLowerCase(Locale.ROOT);
-    }
 }

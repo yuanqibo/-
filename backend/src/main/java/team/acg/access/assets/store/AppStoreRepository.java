@@ -47,6 +47,11 @@ public class AppStoreRepository {
             rs.next() ? Optional.of(new StoreValue(readJson(rs.getString(1)), rs.getTimestamp(2).toInstant())) : Optional.empty(), key);
     }
 
+    public Optional<StoreValue> findForUpdate(String key) {
+        return jdbc.query("SELECT store_value, updated_at FROM app_store WHERE store_key = ? FOR UPDATE", rs ->
+            rs.next() ? Optional.of(new StoreValue(readJson(rs.getString(1)), rs.getTimestamp(2).toInstant())) : Optional.empty(), key);
+    }
+
     public Instant saveAll(Map<String, JsonNode> entries) {
         Instant now = Instant.now();
         entries.forEach((key, value) -> {
@@ -64,6 +69,20 @@ public class AppStoreRepository {
             }
         });
         return now;
+    }
+
+    public int insertMissing(Map<String, JsonNode> entries) {
+        Instant now = Instant.now();
+        int inserted = 0;
+        for (Map.Entry<String, JsonNode> entry : entries.entrySet()) {
+            try {
+                inserted += jdbc.update("INSERT INTO app_store (store_key, store_value, updated_at) VALUES (?, ?, ?)",
+                    entry.getKey(), writeJson(entry.getValue()), Timestamp.from(now));
+            } catch (DuplicateKeyException alreadyInitialized) {
+                // Another application instance or an earlier release already owns this value.
+            }
+        }
+        return inserted;
     }
 
     private JsonNode readJson(String value) {

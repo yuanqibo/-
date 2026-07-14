@@ -13,7 +13,8 @@
     "validate:authz": "node scripts/validate-authz.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "start": "java -jar backend/target/access-assets-server-1.0.0.jar",
-    "start:dev": "ECP_SDK_ENABLED=false java -jar backend/target/access-assets-server-1.0.0.jar",
+    "start:dev": "java -jar backend/target/access-assets-server-1.0.0.jar",
+    "start:test-mode": "SPRING_PROFILES_ACTIVE=test ECP_SDK_ENABLED=false ALLOW_UNAUTHENTICATED_TEST_MODE=true java -jar backend/target/access-assets-server-1.0.0.jar",
     "test:backend": "npm run install:ecp-java-sdk && mvn -f backend/pom.xml test"
   },
   "dependencies": {
@@ -32,6 +33,7 @@
     "vite": "4.5.14",
     "vue": "^3.5.17",
     "vue-router": "^4.5.1",
-    "vue-tsc": "^3.0.3"
+    "vue-tsc": "^3.0.3",
+    "yaml": "^2.9.0"
   }
 }

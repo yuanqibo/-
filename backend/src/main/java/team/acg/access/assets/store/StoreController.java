@@ -2,13 +2,19 @@ package team.acg.access.assets.store;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.idanchuang.ecp.sdk.spring.annotation.PermissionSpec;
+import com.idanchuang.ecp.sdk.spring.annotation.RequireAnyPermission;
 import com.idanchuang.ecp.sdk.spring.annotation.RequirePermission;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import team.acg.access.assets.auth.RequestIdentityService;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -17,47 +23,62 @@ import java.util.Set;
 @RequestMapping("/api/store")
 public class StoreController {
     private static final String MIGRATED_ASSET_KEY = "assetPortalAssets";
-    private static final Set<String> ARRAY_DOCUMENTS = Set.of(
-        "assetLabelCustomTemplatesV1", "assetPortalRegisteredUsers", "assetPortalDeletedRoleUsersV1",
-        "assetCategoryTree", "assetLocationTree");
-    private static final Set<String> OBJECT_DOCUMENTS = Set.of(
-        "assetLabelPrintSettingsV2", "assetPortalRoleDefinitionsV3", "assetPortalAssetCodeRuleSettingsV1",
-        "assetPortalSelfServiceSettingsV9");
-    private static final Set<String> VERSION_DOCUMENTS = Set.of("assetCategoryTreeVersion");
-    private static final Set<String> ALLOWED_DOCUMENTS = Set.of(
+    private static final Set<String> ARRAY_DOCUMENTS = Set.of("assetLabelCustomTemplatesV1");
+    private static final Set<String> OBJECT_DOCUMENTS = Set.of("assetLabelPrintSettingsV2");
+    private static final Map<String, String> DOCUMENT_VIEW_PERMISSIONS = Map.of(
+        "assetCategoryTree", "asset:category_settings:view",
+        "assetCategoryTreeVersion", "asset:category_settings:view",
+        "assetLocationTree", "asset:location_settings:view",
+        "assetPortalAssetCodeRuleSettingsV1", "asset:code_rules:view",
+        "assetLabelPrintSettingsV2", "asset:label_template_settings:view",
+        "assetLabelCustomTemplatesV1", "asset:label_template_settings:view",
+        "assetPortalSelfServiceSettingsV9", "asset:self_service:view");
+    private static final Set<String> LABEL_DOCUMENTS = Set.of(
         "assetLabelPrintSettingsV2", "assetLabelCustomTemplatesV1");
+    private static final String PRINT_SETTINGS_KEY = "assetLabelPrintSettingsV2";
+    private static final String CUSTOM_TEMPLATES_KEY = "assetLabelCustomTemplatesV1";
     private final AppStoreRepository repository;
     private final ObjectMapper mapper;
-    private final int maxKeys;
     private final int maxValueBytes;
     private final PortalDocumentValidator documentValidator;
+    private final RequestIdentityService identityService;
 
     public StoreController(AppStoreRepository repository, ObjectMapper mapper, PortalDocumentValidator documentValidator,
-                           @Value("${asset-portal.store.max-keys-per-request}") int maxKeys,
+                           RequestIdentityService identityService,
                            @Value("${asset-portal.store.max-value-bytes}") int maxValueBytes) {
         this.repository = repository;
         this.mapper = mapper;
         this.documentValidator = documentValidator;
-        this.maxKeys = maxKeys;
+        this.identityService = identityService;
         this.maxValueBytes = maxValueBytes;
     }
 
     @GetMapping
-    @RequirePermission(permissions = "asset:view")
-    public Map<String, Object> list() {
+    @RequireAnyPermission({
+        @PermissionSpec("asset:category_settings:view"),
+        @PermissionSpec("asset:location_settings:view"),
+        @PermissionSpec("asset:code_rules:view"),
+        @PermissionSpec("asset:label_template_settings:view"),
+        @PermissionSpec("asset:self_service:view")
+    })
+    public Map<String, Object> list(HttpServletRequest request) {
         Map<String, JsonNode> values = new LinkedHashMap<>();
         Map<String, Instant> updatedAt = new LinkedHashMap<>();
+        var identity = identityService.current(request);
         repository.findAll().forEach((key, record) -> {
-            values.put(key, record.value());
-            updatedAt.put(key, record.updatedAt());
+            String permission = DOCUMENT_VIEW_PERMISSIONS.get(key);
+            if (permission != null && identity.map(value -> value.hasPermission(permission)).orElse(true)) {
+                values.put(key, record.value());
+                updatedAt.put(key, record.updatedAt());
+            }
         });
         return Map.of("values", values, "updatedAt", updatedAt);
     }
 
     @GetMapping("/item")
-    @RequirePermission(permissions = "asset:view")
+    @RequirePermission(permissions = "asset:label_template_settings:view")
     public ResponseEntity<?> get(@RequestParam String key) {
-        validateKey(key);
+        validateLabelKey(key);
         return repository.find(key)
             .<ResponseEntity<?>>map(value -> ResponseEntity.ok(Map.of(
                 "key", key, "found", true, "value", value.value(), "updatedAt", value.updatedAt())))
@@ -65,32 +86,109 @@ public class StoreController {
     }
 
     @PostMapping
-    @RequirePermission(permissions = "asset:update")
-    public Map<String, Object> save(@RequestBody StoreWriteRequest request) {
-        Map<String, JsonNode> entries = request.entries();
-        if (entries.isEmpty() || entries.size() > maxKeys) {
-            throw new IllegalArgumentException("Store request must contain between 1 and " + maxKeys + " keys");
+    @Transactional
+    @RequireAnyPermission({
+        @PermissionSpec("asset:label_template_settings:create"),
+        @PermissionSpec("asset:label_template_settings:update"),
+        @PermissionSpec("asset:label_template_settings:delete"),
+        @PermissionSpec("asset:label_template_settings:save"),
+        @PermissionSpec("asset:label_template_settings:reset")
+    })
+    public Map<String, Object> save(@RequestBody StoreWriteRequest request, HttpServletRequest servletRequest) {
+        if (request.items() != null) {
+            throw new IllegalArgumentException("Label settings writes must contain exactly one key");
         }
+        Map<String, JsonNode> entries = request.entries();
+        if (entries.size() != 1) {
+            throw new IllegalArgumentException("Label settings writes must contain exactly one key");
+        }
+        LabelOperation operation = LabelOperation.parse(request.operation());
         entries.forEach((key, value) -> {
-            validateKey(key);
+            validateLabelKey(key);
+            validateOperationKey(operation, key);
+            identityService.requirePermission(servletRequest, operation.permission());
             validateDocument(key, value);
             documentValidator.validate(key, value);
             if (value.toString().getBytes(StandardCharsets.UTF_8).length > maxValueBytes) {
                 throw new IllegalArgumentException("Store value is too large: " + key);
             }
+            if (CUSTOM_TEMPLATES_KEY.equals(key)) {
+                JsonNode current = repository.findForUpdate(key)
+                    .map(AppStoreRepository.StoreValue::value)
+                    .orElseGet(mapper::createArrayNode);
+                validateTemplateDifference(operation, current, value);
+            } else {
+                repository.findForUpdate(key);
+            }
         });
         return Map.of("ok", true, "updatedAt", repository.saveAll(entries));
     }
 
-    private void validateKey(String key) {
+    private void validateOperationKey(LabelOperation operation, String key) {
+        boolean customTemplateOperation = switch (operation) {
+            case CREATE, UPDATE, DELETE -> true;
+            case SAVE, RESET -> false;
+        };
+        String expectedKey = customTemplateOperation ? CUSTOM_TEMPLATES_KEY : PRINT_SETTINGS_KEY;
+        if (!expectedKey.equals(key)) {
+            throw new IllegalArgumentException("Operation " + operation.value + " is not allowed for " + key);
+        }
+    }
+
+    private void validateTemplateDifference(LabelOperation operation, JsonNode current, JsonNode replacement) {
+        Map<String, JsonNode> before = templatesByKey(current);
+        Map<String, JsonNode> after = templatesByKey(replacement);
+        Set<String> added = new HashSet<>(after.keySet());
+        added.removeAll(before.keySet());
+        Set<String> removed = new HashSet<>(before.keySet());
+        removed.removeAll(after.keySet());
+        long changed = before.keySet().stream()
+            .filter(after::containsKey)
+            .filter(key -> !before.get(key).equals(after.get(key)))
+            .count();
+
+        boolean valid = switch (operation) {
+            case CREATE -> added.size() == 1 && removed.isEmpty() && changed == 0;
+            case UPDATE -> added.isEmpty() && removed.isEmpty() && changed == 1;
+            case DELETE -> added.isEmpty() && removed.size() == 1 && changed == 0;
+            case SAVE, RESET -> false;
+        };
+        if (!valid) {
+            throw new IllegalArgumentException("Declared label template operation does not match the document change");
+        }
+    }
+
+    private Map<String, JsonNode> templatesByKey(JsonNode templates) {
+        if (templates == null || !templates.isArray()) {
+            throw new IllegalArgumentException("Custom label templates must be an array");
+        }
+        Map<String, JsonNode> values = new LinkedHashMap<>();
+        for (JsonNode template : templates) {
+            if (!template.isObject()) throw new IllegalArgumentException("Custom label templates must be objects");
+            String key = template.path("key").asText("").trim();
+            if (!key.matches("[A-Za-z0-9_-]{1,120}")) {
+                throw new IllegalArgumentException("Custom label template key is invalid");
+            }
+            if (values.putIfAbsent(key, template) != null) {
+                throw new IllegalArgumentException("Duplicate custom label template key: " + key);
+            }
+        }
+        return values;
+    }
+
+    private void validateLabelKey(String key) {
+        validateKeyFormat(key);
+        if (!LABEL_DOCUMENTS.contains(key)) {
+            throw new IllegalArgumentException("Unsupported portal data document: " + key);
+        }
+    }
+
+    private void validateKeyFormat(String key) {
         if (key == null || !key.matches("[A-Za-z0-9_.:-]{1,120}")) {
             throw new IllegalArgumentException("Invalid store key");
         }
         if (MIGRATED_ASSET_KEY.equals(key)) {
             throw new IllegalArgumentException("assetPortalAssets has migrated to /api/assets");
-        }
-        if (!ALLOWED_DOCUMENTS.contains(key)) {
-            throw new IllegalArgumentException("Unsupported portal data document: " + key);
         }
     }
 
@@ -104,12 +202,32 @@ public class StoreController {
         if (OBJECT_DOCUMENTS.contains(key) && !value.isObject()) {
             throw new IllegalArgumentException("Portal data document must be an object: " + key);
         }
-        if (VERSION_DOCUMENTS.contains(key) && !(value.isTextual() || value.isIntegralNumber())) {
-            throw new IllegalArgumentException("Portal data version must be a string or integer: " + key);
+    }
+
+    private enum LabelOperation {
+        CREATE("create"), UPDATE("update"), DELETE("delete"), SAVE("save"), RESET("reset");
+
+        private final String value;
+
+        LabelOperation(String value) {
+            this.value = value;
+        }
+
+        static LabelOperation parse(String value) {
+            if (value != null) {
+                for (LabelOperation operation : values()) {
+                    if (operation.value.equals(value.trim())) return operation;
+                }
+            }
+            throw new IllegalArgumentException("Unsupported label settings operation");
+        }
+
+        String permission() {
+            return "asset:label_template_settings:" + value;
         }
     }
 
-    public record StoreWriteRequest(String key, JsonNode value, Map<String, JsonNode> items) {
+    public record StoreWriteRequest(String operation, String key, JsonNode value, Map<String, JsonNode> items) {
         Map<String, JsonNode> entries() {
             if (items != null) return items;
             return key == null ? Map.of() : Map.of(key, value == null ? mapperNull() : value);

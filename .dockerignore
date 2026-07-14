@@ -1,0 +1,15 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.DS_Store
+node_modules
+dist
+data
+target
+backend/target/*
+!backend/target/access-assets-server-1.0.0.jar
+*.log
+*.pid
+codex-clipboard-*.png

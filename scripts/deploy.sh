@@ -16,6 +16,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 rsync -az --delete \
   --exclude '.DS_Store' \
+  --exclude '.git/' \
   --exclude 'data/' \
   --exclude 'node_modules/' \
   --exclude 'backend/target/' \
@@ -24,6 +25,6 @@ rsync -az --delete \
   --exclude '.env' \
   "$PROJECT_DIR/" "$REMOTE_USER@$SERVER:$REMOTE_DIR/"
 
-ssh "$REMOTE_USER@$SERVER" "cd '$REMOTE_DIR' && npm ci && npm run build && npm run install:ecp-java-sdk && mvn -f backend/pom.xml clean package -DskipTests && sudo systemctl restart asset-portal && sudo systemctl --no-pager --full status asset-portal"
+ssh "$REMOTE_USER@$SERVER" "cd '$REMOTE_DIR' && npm ci && VITE_ECP_AUTH_CONFIG_SOURCE_MODE=remote-first npm run build && npm run install:ecp-java-sdk && mvn -f backend/pom.xml clean package && sudo systemctl restart asset-portal && sudo systemctl --no-pager --full status asset-portal"
 
 echo "Deployed to http://$SERVER:5387/"

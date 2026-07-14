@@ -1,0 +1,247 @@
+{
+  "assetCategoryTree": [
+    {
+      "id": "cat-it",
+      "code": "01",
+      "name": "IT设备",
+      "usefulLife": "0",
+      "unit": "台",
+      "enabled": true,
+      "children": [
+        { "id": "cat-laptop", "code": "0101", "name": "笔记本电脑", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-desktop", "code": "0102", "name": "台式主机", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-imac", "code": "0103", "name": "苹果一体机", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-digitizer", "code": "0104", "name": "数位板", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-display", "code": "0105", "name": "显示器", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-server", "code": "0106", "name": "服务器", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-cloud", "code": "0107", "name": "云主机", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-network", "code": "0108", "name": "网络设备", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-workstation", "code": "0109", "name": "苹果工作站", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-collector", "code": "0110", "name": "数据采集器", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-ssd", "code": "0111", "name": "固态硬盘", "usefulLife": "0", "unit": "块", "enabled": true, "children": [] },
+        { "id": "cat-video", "code": "0505", "name": "视讯设备", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] }
+      ]
+    },
+    {
+      "id": "cat-rent",
+      "code": "02",
+      "name": "租赁设备",
+      "usefulLife": "",
+      "unit": "",
+      "enabled": true,
+      "children": [
+        { "id": "cat-rent-laptop", "code": "0201", "name": "租赁笔记本", "usefulLife": "", "unit": "", "enabled": true, "children": [] }
+      ]
+    },
+    {
+      "id": "cat-mobile",
+      "code": "03",
+      "name": "移动设备",
+      "usefulLife": "0",
+      "unit": "个",
+      "enabled": true,
+      "children": [
+        { "id": "cat-tablet", "code": "0302", "name": "平板", "usefulLife": "", "unit": "", "enabled": true, "children": [] },
+        {
+          "id": "cat-phone",
+          "code": "0303",
+          "name": "手机",
+          "usefulLife": "0",
+          "unit": "台",
+          "enabled": true,
+          "children": [
+            { "id": "cat-android-phone", "code": "030301", "name": "安卓手机", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+            { "id": "cat-iphone", "code": "030303", "name": "苹果手机", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cat-software",
+      "code": "04",
+      "name": "软件权限",
+      "usefulLife": "0",
+      "unit": "套",
+      "enabled": true,
+      "children": [
+        { "id": "cat-office-license", "code": "0401", "name": "办公软件", "usefulLife": "0", "unit": "套", "enabled": true, "children": [] },
+        { "id": "cat-design-license", "code": "0402", "name": "设计软件", "usefulLife": "0", "unit": "套", "enabled": true, "children": [] },
+        { "id": "cat-dev-license", "code": "0403", "name": "研发工具", "usefulLife": "0", "unit": "套", "enabled": true, "children": [] },
+        { "id": "cat-security-license", "code": "0404", "name": "安全软件", "usefulLife": "0", "unit": "套", "enabled": true, "children": [] }
+      ]
+    },
+    {
+      "id": "cat-supply",
+      "code": "05",
+      "name": "供应链设备",
+      "usefulLife": "0",
+      "unit": "台",
+      "enabled": true,
+      "children": [
+        { "id": "cat-printer", "code": "0501", "name": "打印机", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-scanner", "code": "0502", "name": "扫描仪", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-barcode", "code": "0503", "name": "条码设备", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-label", "code": "0504", "name": "标签设备", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] }
+      ]
+    },
+    {
+      "id": "cat-camera",
+      "code": "06",
+      "name": "摄影摄像直播设备",
+      "usefulLife": "0",
+      "unit": "台",
+      "enabled": true,
+      "children": [
+        { "id": "cat-camera-body", "code": "0601", "name": "相机机身", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] },
+        { "id": "cat-lens", "code": "0602", "name": "镜头", "usefulLife": "0", "unit": "个", "enabled": true, "children": [] },
+        { "id": "cat-light", "code": "0603", "name": "灯光设备", "usefulLife": "0", "unit": "台", "enabled": true, "children": [] }
+      ]
+    },
+    { "id": "cat-archive", "code": "07", "name": "封存资产", "usefulLife": "", "unit": "件", "enabled": true, "children": [] },
+    { "id": "cat-admin", "code": "08", "name": "行政资产", "usefulLife": "0", "unit": "件", "enabled": true, "children": [] }
+  ],
+  "assetCategoryTreeVersion": "20260617-reference-category-v1",
+  "assetLocationTree": [
+    {
+      "id": "loc-hangzhou",
+      "name": "杭州公司",
+      "code": "access",
+      "enabled": true,
+      "children": [
+        { "id": "loc-archive", "name": "封存仓库", "code": "FC", "enabled": false, "children": [] },
+        { "id": "loc-19-1", "name": "19幢1楼", "code": "19-1", "enabled": true, "children": [] },
+        { "id": "loc-19-2", "name": "19幢2楼", "code": "19-2", "enabled": true, "children": [] },
+        { "id": "loc-19-3", "name": "19幢3楼", "code": "19-3", "enabled": true, "children": [] },
+        { "id": "loc-19-4", "name": "19幢4楼", "code": "19-4", "enabled": true, "children": [] },
+        { "id": "loc-19-5", "name": "19幢5楼", "code": "19-5", "enabled": true, "children": [] },
+        { "id": "loc-19-6", "name": "19幢6楼", "code": "19-6", "enabled": true, "children": [] },
+        { "id": "loc-11-6", "name": "11幢6楼", "code": "11-6", "enabled": true, "children": [] },
+        { "id": "loc-lhtj", "name": "下沙龙湖天街", "code": "LHTJ", "enabled": true, "children": [] }
+      ]
+    },
+    { "id": "loc-ningbo", "name": "宁波仓库", "code": "CK", "enabled": true, "children": [] },
+    {
+      "id": "loc-sea",
+      "name": "东南亚",
+      "code": "NTX",
+      "enabled": true,
+      "children": [
+        { "id": "loc-malaysia", "name": "马来西亚", "code": "0-1", "enabled": true, "children": [] },
+        { "id": "loc-singapore", "name": "新加坡", "code": "0-2", "enabled": true, "children": [] }
+      ]
+    }
+  ],
+  "assetPortalAssetCodeRuleSettingsV1": {
+    "selectedFields": ["categoryCode"],
+    "serialLength": 5,
+    "fieldOptions": { "categoryCode": "none" },
+    "customTexts": { "customText": "" },
+    "dateFormats": { "purchaseDate": "yyyymmdd" }
+  },
+  "assetPortalSelfServiceSettingsV9": {
+    "receiveAsset": {
+      "enabled": true,
+      "remarkRequired": false,
+      "remarkPrompt": "",
+      "categories": ["IT设备", "笔记本电脑", "台式主机", "苹果一体机", "数位板", "显示器", "服务器", "云主机", "网络设备", "苹果工作站", "数据采集器", "固态硬盘", "视讯设备", "租赁设备", "租赁笔记本", "移动设备", "平板", "手机", "安卓手机", "苹果手机", "软件权限", "办公软件", "设计软件", "研发工具", "安全软件", "供应链设备", "打印机", "扫描仪", "条码设备", "标签设备", "摄影摄像直播设备", "相机机身", "镜头", "灯光设备", "封存资产", "行政资产"]
+    },
+    "borrowAsset": {
+      "enabled": true,
+      "remarkRequired": false,
+      "remarkPrompt": "",
+      "categories": ["IT设备", "笔记本电脑", "台式主机", "苹果一体机", "数位板", "显示器", "服务器", "云主机", "网络设备", "苹果工作站", "数据采集器", "固态硬盘", "视讯设备", "租赁设备", "租赁笔记本", "移动设备", "平板", "手机", "安卓手机", "苹果手机", "软件权限", "办公软件", "设计软件", "研发工具", "安全软件", "供应链设备", "打印机", "扫描仪", "条码设备", "标签设备", "摄影摄像直播设备", "相机机身", "镜头", "灯光设备", "封存资产", "行政资产"]
+    },
+    "giveBackAsset": { "enabled": true, "remarkRequired": false, "remarkPrompt": "" },
+    "handoverAsset": { "enabled": true, "remarkRequired": false, "remarkPrompt": "" },
+    "returnAsset": { "enabled": true, "remarkRequired": false, "remarkPrompt": "" },
+    "deviceRequest": { "enabled": false, "remarkRequired": false, "remarkPrompt": "", "allowEmployeeAddDevice": true },
+    "signSettings": {
+      "assetReceive": {
+        "employeeSign": true,
+        "noticeEnabled": false,
+        "noticeContent": "请核对资产名称、编号、配置和附件状态。确认无误后完成签字，系统将记录为本人领用。",
+        "timings": {}
+      },
+      "selfReceiveAsset": {
+        "employeeSign": true,
+        "noticeEnabled": false,
+        "noticeContent": "请确认申请资产用于真实办公需要，并在接收时核对资产信息。领用后请妥善保管，按公司要求使用。",
+        "timings": { "start": false, "receive": false }
+      },
+      "assetHandover": {
+        "employeeSign": true,
+        "noticeEnabled": false,
+        "noticeContent": "交接双方需确认资产状态、配件和使用责任。接收人签字后，资产责任人将同步变更。",
+        "timings": {}
+      },
+      "selfHandoverAsset": {
+        "employeeSign": true,
+        "noticeEnabled": false,
+        "noticeContent": "请与接收员工确认资产实物、编号和状态。接收方确认后，系统将完成资产交接记录。",
+        "timings": { "receive": true }
+      },
+      "assetBorrow": {
+        "employeeSign": true,
+        "noticeEnabled": false,
+        "noticeContent": "请确认借用资产、预计归还日期和使用责任。借用期间请妥善保管，并按时归还。",
+        "timings": {}
+      },
+      "selfBorrowAsset": {
+        "employeeSign": true,
+        "noticeEnabled": false,
+        "noticeContent": "请根据实际办公需要发起借用申请，填写预计归还时间。借用资产仅限本人使用，不得私自转借。",
+        "timings": { "start": false, "receive": false }
+      },
+      "assetGiveBack": {
+        "employeeSign": true,
+        "noticeEnabled": false,
+        "noticeContent": "归还前请清点资产及配件，确认外观和功能状态。管理员确认后，资产将恢复为可用状态。",
+        "timings": {}
+      },
+      "selfGiveBackAsset": {
+        "employeeSign": true,
+        "noticeEnabled": false,
+        "noticeContent": "请选择本人名下借用资产并确认归还信息。归还前请清理个人数据并交回相关配件。",
+        "timings": { "return": true }
+      },
+      "materialReceive": {
+        "employeeSign": true,
+        "noticeEnabled": false,
+        "noticeContent": "请核对物料名称、规格和数量。确认无误后完成签字，系统将记录本次物料领用。",
+        "timings": {}
+      },
+      "selfMaterialReceive": {
+        "employeeSign": true,
+        "noticeEnabled": false,
+        "noticeContent": "请按实际办公消耗申请物料，确认名称、规格和数量。领取后请合理使用，避免浪费。",
+        "timings": { "start": false, "receive": false }
+      }
+    }
+  },
+  "assetLabelCustomTemplatesV1": [],
+  "assetLabelPrintSettingsV2": {
+    "templateKey": "standard",
+    "labelWidth": 40,
+    "labelHeight": 30,
+    "logoWidth": 14,
+    "logoHeight": 8,
+    "logoScale": 80,
+    "logoText": "AM",
+    "logoImage": "",
+    "qrSize": 13,
+    "qrTextGap": 2,
+    "contentScale": 80,
+    "offsetX": 0,
+    "offsetY": 0,
+    "fontSize": 12,
+    "fieldFontSizes": [],
+    "columns": 1,
+    "rows": 1,
+    "columnGap": 0,
+    "rowGap": 0,
+    "fields": ["name", "id", "category"],
+    "scanFields": [],
+    "customFields": "",
+    "showLogo": false
+  }
+}

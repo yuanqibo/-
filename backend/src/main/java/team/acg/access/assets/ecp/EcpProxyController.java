@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -15,6 +16,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Set;
 import java.util.Map;
+import java.util.Locale;
 
 @RestController
 public class EcpProxyController {
@@ -24,7 +26,10 @@ public class EcpProxyController {
         "/public/permissions", Set.of("GET"),
         "/public/session/logout", Set.of("POST"),
         "/public/session/permissions/check", Set.of("POST"),
-        "/scopes/profiles", Set.of("GET"));
+        "/scopes", Set.of("GET"),
+        "/scopes/profiles", Set.of("GET"),
+        "/role-types", Set.of("GET"),
+        "/authz/decisions/explain", Set.of("POST"));
     private static final Set<String> EXCLUDED_REQUEST_HEADERS = Set.of(
         "accept-encoding", "connection", "content-length", "host", "origin", "referer", "transfer-encoding");
     private static final Set<String> EXCLUDED_RESPONSE_HEADERS = Set.of(
@@ -35,9 +40,15 @@ public class EcpProxyController {
         .followRedirects(HttpClient.Redirect.NEVER)
         .build();
     private final String baseUrl;
+    private final String appCode;
 
-    public EcpProxyController(@Value("${asset-portal.ecp-api-base-url}") String baseUrl) {
+    public EcpProxyController(@Value("${asset-portal.ecp-api-base-url}") String baseUrl,
+                              @Value("${ecp.sdk.app-code}") String appCode) {
         this.baseUrl = baseUrl.replaceAll("/$", "");
+        if (!EcpSecurityPolicy.APP_CODE.equals(appCode)) {
+            throw new IllegalArgumentException("ECP proxy app-code must be " + EcpSecurityPolicy.APP_CODE);
+        }
+        this.appCode = appCode;
     }
 
     @RequestMapping({"/api/v1", "/api/v1/**"})
@@ -46,6 +57,9 @@ public class EcpProxyController {
         String path = suffix.isEmpty() ? "/" : suffix;
         if (!isAllowed(path, servletRequest.getMethod())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new byte[0]);
+        }
+        if (hasForeignAppCode(servletRequest.getQueryString())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new byte[0]);
         }
         String query = servletRequest.getQueryString() == null ? "" : "?" + servletRequest.getQueryString();
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path + query))
@@ -86,11 +100,46 @@ public class EcpProxyController {
     private boolean isAllowed(String path, String method) {
         if (ALLOWED_ENDPOINTS.getOrDefault(path, Set.of()).contains(method)) return true;
         if ("GET".equals(method) && path.equals("/public/login/domain/context")) return true;
-        if (path.matches("/public/login/apps/[A-Za-z0-9_-]{1,64}(/menus)?")) return "GET".equals(method);
-        if (path.matches("/public/login/apps/[A-Za-z0-9_-]{1,64}/(feishu-authorizations|sessions|otp-codes|password-resets)")) {
+        String loginAppPath = "/public/login/apps/" + appCode;
+        if (path.equals(loginAppPath) || path.equals(loginAppPath + "/menus")) return "GET".equals(method);
+        if (Set.of("/feishu-authorizations", "/sessions", "/otp-codes", "/password-resets").stream()
+            .anyMatch(suffix -> path.equals(loginAppPath + suffix))) {
+            return "POST".equals(method);
+        }
+        String applicationPath = "/applications/" + appCode;
+        if (path.equals(applicationPath)
+            || path.equals(applicationPath + "/selectable-accounts")
+            || path.equals(applicationPath + "/selectable-departments")
+            || path.equals(applicationPath + "/catalog/versions")
+            || path.matches(java.util.regex.Pattern.quote(applicationPath) + "/catalog/versions/[0-9]{1,18}")) {
+            return "GET".equals(method);
+        }
+        if (path.equals(applicationPath + "/app-roles")) {
+            return "GET".equals(method) || "POST".equals(method);
+        }
+        if (path.matches(java.util.regex.Pattern.quote(applicationPath) + "/app-roles/[A-Za-z0-9_-]{1,64}")) {
+            return "PUT".equals(method) || "DELETE".equals(method);
+        }
+        if (path.equals(applicationPath + "/app-role-assignments")) {
+            return "GET".equals(method) || "POST".equals(method);
+        }
+        if (path.equals(applicationPath + "/app-role-assignment-subjects")) {
+            return "PUT".equals(method);
+        }
+        if (path.equals(applicationPath + "/app-role-assignments/batch-remove")) {
             return "POST".equals(method);
         }
         return path.matches("/public/password-resets/[A-Za-z0-9._~-]{1,512}")
             && ("GET".equals(method) || "POST".equals(method));
+    }
+
+    private boolean hasForeignAppCode(String query) {
+        if (query == null || query.isBlank()) return false;
+        var parameters = UriComponentsBuilder.fromUriString("/?" + query).build().getQueryParams();
+        return parameters.entrySet().stream().anyMatch(entry -> {
+            String key = entry.getKey().replace("_", "").replace("-", "").toLowerCase(Locale.ROOT);
+            if (!Set.of("appcode", "applicationcode").contains(key)) return false;
+            return entry.getValue().isEmpty() || entry.getValue().stream().anyMatch(value -> !appCode.equals(value));
+        });
     }
 }

@@ -1,0 +1,7 @@
+ecp:
+  sdk:
+    enabled: false
+
+asset-portal:
+  security:
+    allow-unauthenticated-api-for-tests: true

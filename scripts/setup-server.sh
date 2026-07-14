@@ -18,19 +18,36 @@ if [[ -z "${ECP_APP_SECRET:-}" || -z "${ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECR
   exit 1
 fi
 
+if [[ -z "${ECP_TENANT_ID:-}" ]]; then
+  echo "ECP_TENANT_ID is required and must match the ECP tenant served by this deployment."
+  exit 1
+fi
+
+if [[ -z "${ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY:-}" ]]; then
+  echo "ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY is required. Generate one with: openssl rand -base64 32"
+  exit 1
+fi
+
 sudo mkdir -p "$APP_DIR"
 sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
 cat > "$APP_DIR/.env" <<EOF
 HOST=0.0.0.0
 PORT=$PORT
+VITE_ECP_APP_CODE=WLY5YG
+VITE_ECP_API_BASE_URL=/api/v1
+VITE_ECP_AUTH_CONFIG_SOURCE_MODE=remote-first
 DATABASE_URL=$DATABASE_URL
 DATABASE_USER=$DATABASE_USER
 DATABASE_PASSWORD=$DATABASE_PASSWORD
 ECP_SDK_ENABLED=true
 ECP_APP_SECRET=$ECP_APP_SECRET
 ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET=$ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET
+ECP_TENANT_ID=$ECP_TENANT_ID
+ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY=$ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY
 EOF
+sudo chown "$APP_USER:$APP_USER" "$APP_DIR/.env"
+sudo chmod 600 "$APP_DIR/.env"
 
 sudo tee /etc/systemd/system/asset-portal.service >/dev/null <<EOF
 [Unit]

@@ -10,13 +10,20 @@
   <packaging>pom</packaging>
 
   <name>Asset Platform Build</name>
-  <description>Root project metadata for the GitLab Maven release pipeline.</description>
+  <description>Builds the frontend and the executable Java artifact for the GitLab Maven release pipeline.</description>
+
+  <modules>
+    <module>backend</module>
+  </modules>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
-    <node.version>v16.20.2</node.version>
-    <npm.version>8.19.4</npm.version>
+    <node.version>v14.21.3</node.version>
+    <npm.version>9.9.4</npm.version>
+    <vite.ecp.app-code>WLY5YG</vite.ecp.app-code>
+    <vite.ecp.api-base-url>/api/v1</vite.ecp.api-base-url>
+    <vite.ecp.config-source-mode>remote-first</vite.ecp.config-source-mode>
   </properties>
 
   <build>
@@ -28,10 +35,16 @@
         <configuration>
           <workingDirectory>${project.basedir}</workingDirectory>
           <installDirectory>${project.build.directory}/frontend</installDirectory>
+          <environmentVariables>
+            <VITE_ECP_APP_CODE>${vite.ecp.app-code}</VITE_ECP_APP_CODE>
+            <VITE_ECP_API_BASE_URL>${vite.ecp.api-base-url}</VITE_ECP_API_BASE_URL>
+            <VITE_ECP_AUTH_CONFIG_SOURCE_MODE>${vite.ecp.config-source-mode}</VITE_ECP_AUTH_CONFIG_SOURCE_MODE>
+          </environmentVariables>
         </configuration>
         <executions>
           <execution>
             <id>install-node-and-npm</id>
+            <phase>generate-resources</phase>
             <goals>
               <goal>install-node-and-npm</goal>
             </goals>
@@ -42,6 +55,7 @@
           </execution>
           <execution>
             <id>npm-ci</id>
+            <phase>generate-resources</phase>
             <goals>
               <goal>npm</goal>
             </goals>
@@ -50,7 +64,18 @@
             </configuration>
           </execution>
           <execution>
+            <id>npm-validate-authz</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>npm</goal>
+            </goals>
+            <configuration>
+              <arguments>run validate:authz</arguments>
+            </configuration>
+          </execution>
+          <execution>
             <id>npm-build</id>
+            <phase>generate-resources</phase>
             <goals>
               <goal>npm</goal>
             </goals>
@@ -62,4 +87,5 @@
       </plugin>
     </plugins>
   </build>
+
 </project>

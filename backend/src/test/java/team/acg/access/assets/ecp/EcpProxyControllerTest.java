@@ -31,8 +31,15 @@ class EcpProxyControllerTest {
             exchange.getResponseBody().write(body);
             exchange.close();
         });
+        upstream.createContext("/applications/WLY5YG/app-roles", exchange -> {
+            byte[] body = "[]".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
         upstream.start();
-        controller = new EcpProxyController("http://127.0.0.1:" + upstream.getAddress().getPort());
+        controller = new EcpProxyController("http://127.0.0.1:" + upstream.getAddress().getPort(), "WLY5YG");
     }
 
     @AfterEach
@@ -56,11 +63,49 @@ class EcpProxyControllerTest {
     }
 
     @Test
-    void rejectsPathsOutsideThePublicSdkAllowlist() throws Exception {
+    void proxiesTheCurrentApplicationsPublicWorkspaceContract() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/applications/WLY5YG/app-roles");
 
         ResponseEntity<byte[]> response = controller.proxy(request);
 
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+    }
+
+    @Test
+    void rejectsApplicationPathsOutsideTheWorkspaceContract() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/applications/WLY5YG/secrets");
+
+        ResponseEntity<byte[]> response = controller.proxy(request);
+
         assertThat(response.getStatusCode().value()).isEqualTo(404);
+    }
+
+    @Test
+    void rejectsLoginRequestsForAnotherApplication() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/public/login/apps/OTHER_APP");
+
+        ResponseEntity<byte[]> response = controller.proxy(request);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
+    }
+
+    @Test
+    void rejectsForeignApplicationCodesInPublicEndpointQueries() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/public/login/apps/WLY5YG");
+        request.setQueryString("appCode=OTHER_APP");
+
+        ResponseEntity<byte[]> response = controller.proxy(request);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+    }
+
+    @Test
+    void acceptsTheBoundApplicationCodeInPublicEndpointQueries() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/public/login/apps/WLY5YG");
+        request.setQueryString("appCode=WLY5YG");
+
+        ResponseEntity<byte[]> response = controller.proxy(request);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
     }
 }

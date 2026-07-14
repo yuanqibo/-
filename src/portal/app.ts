@@ -1,32 +1,7 @@
 // @ts-nocheck
-// Transitional portal runtime. Keep behavior stable while features move into typed Vue modules.
-const roleMeta = {
-  super_admin: {
-    name: "超级管理员",
-    policy: "手机号注册",
-    scope: "系统初始化、管理员分配、全量资产与系统配置",
-    tone: "green",
-  },
-  admin: {
-    name: "普通管理员",
-    policy: "超管分配",
-    scope: "资产台账、员工信息、审批处理和盘点执行",
-    tone: "blue",
-  },
-  employee: {
-    name: "普通员工",
-    policy: "管理员添加",
-    scope: "本人资产、个人申请和审批状态",
-    tone: "amber",
-  },
-};
-
-const roleDefinitionsStorageKey = "assetPortalRoleDefinitionsV3";
 const selfServiceSettingsStorageKey = "assetPortalSelfServiceSettingsV9";
 const assetCodeRuleStorageKey = "assetPortalAssetCodeRuleSettingsV1";
-const deletedRoleUsersStorageKey = "assetPortalDeletedRoleUsersV1";
 const sharedStoreKeys = [
-  "assetPortalAssets",
   "assetLabelPrintSettingsV2",
   "assetLabelCustomTemplatesV1",
   "assetCategoryTree",
@@ -35,15 +10,143 @@ const sharedStoreKeys = [
   assetCodeRuleStorageKey,
   selfServiceSettingsStorageKey,
 ];
-let sharedStoreReady = false;
 let sharedStoreLoaded = false;
-let sharedStoreServerKeys = new Set();
-let sharedStoreServerValues = {};
 const selfServiceNoticeContentLimit = 500;
 
 function ecpSessionHeaders(headers = {}) {
-  const token = String(localStorage.getItem("authzAppSessionToken") || "").trim();
+  const token = String(readEcpContext()?.session?.sessionToken || "").trim();
   return token ? { ...headers, authorization: `Bearer ${token}` } : headers;
+}
+
+let ecpDirectoryUsers = [];
+let systemIntegrations = [];
+let systemForms = [];
+let assetOperationRecords = [];
+
+async function systemConfigApiRequest(path, options = {}) {
+  const method = options.method || "GET";
+  const hasBody = options.body !== undefined;
+  const response = await fetch(path, {
+    method,
+    cache: method === "GET" ? "no-store" : undefined,
+    headers: ecpSessionHeaders(hasBody ? { "content-type": "application/json; charset=utf-8" } : {}),
+    body: hasBody ? JSON.stringify(options.body) : undefined,
+  });
+  const payload = response.status === 204 ? null : await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = payload?.error || payload?.message || payload?.detail || payload?.title;
+    const error = new Error(message || `系统配置请求失败（HTTP ${response.status}）`);
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+async function hydrateSystemIntegrations() {
+  try {
+    const payload = await systemConfigApiRequest("/api/system/integrations");
+    systemIntegrations = Array.isArray(payload?.items) ? payload.items : [];
+    return true;
+  } catch (error) {
+    console.warn("[asset-portal] system integrations unavailable", error);
+    systemIntegrations = [];
+    return false;
+  }
+}
+
+async function hydrateSystemForms() {
+  try {
+    const payload = await systemConfigApiRequest("/api/system/forms");
+    systemForms = Array.isArray(payload?.items) ? payload.items : [];
+    return true;
+  } catch (error) {
+    console.warn("[asset-portal] system forms unavailable", error);
+    systemForms = [];
+    return false;
+  }
+}
+
+async function hydrateSystemConfigs() {
+  await Promise.all([hydrateSystemIntegrations(), hydrateSystemForms()]);
+}
+
+function currentDirectoryUser() {
+  const user = readEcpContext()?.getUser?.() || state?.currentUser;
+  const subject = String(user?.externalSubject || "").replace(/^ecp:/, "").trim() || String(user?.account || "").trim();
+  if (!subject) return null;
+  return {
+    subject,
+    name: user?.name || user?.account || subject,
+    company: user?.company || "",
+    department: user?.department || "",
+  };
+}
+
+async function hydrateEcpDirectoryUsers() {
+  const fallback = currentDirectoryUser();
+  try {
+    const loadPage = async (page) => {
+      const response = await fetch(`/api/ecp/directory/users?page=${page}&size=100`, {
+        cache: "no-store",
+        headers: ecpSessionHeaders(),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    };
+    const firstPage = await loadPage(1);
+    const totalPages = Math.min(Math.max(Number(firstPage.totalPages) || 1, 1), 20);
+    const remainingPages = await Promise.all(
+      Array.from({ length: totalPages - 1 }, (_, index) => loadPage(index + 2))
+    );
+    const items = [firstPage, ...remainingPages].flatMap((page) => Array.isArray(page.items) ? page.items : []);
+    ecpDirectoryUsers = items
+      .map((user) => ({
+        subject: String(user.subject || "").trim(),
+        name: String(user.name || "").trim(),
+        employeeNo: String(user.employeeNo || "").trim(),
+        jobTitle: String(user.jobTitle || "").trim(),
+        status: String(user.status || "").trim(),
+        company: String(user.company?.name || "").trim(),
+        department: String(user.departments?.[0]?.name || "").trim(),
+        departments: Array.isArray(user.departments)
+          ? user.departments.map((department) => ({
+              id: String(department.unionId || department.externalId || "").trim(),
+              name: String(department.name || "").trim(),
+              path: String(department.path || department.name || "").trim(),
+            })).filter((department) => department.name)
+          : [],
+      }))
+      .filter((user) => user.subject && user.name);
+  } catch (error) {
+    console.warn("[asset-portal] ECP directory unavailable", error);
+    ecpDirectoryUsers = [];
+  }
+  if (fallback && !ecpDirectoryUsers.some((user) => user.subject === fallback.subject)) {
+    ecpDirectoryUsers.unshift(fallback);
+  }
+}
+
+function directoryUserBySubject(subject) {
+  const normalized = String(subject || "").trim();
+  return ecpDirectoryUsers.find((user) => user.subject === normalized) || null;
+}
+
+function directoryUserByName(name) {
+  const normalized = String(name || "").trim();
+  const matches = ecpDirectoryUsers.filter((user) => user.name === normalized);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function directoryPersonSelect(name, selectedSubject = "", required = true) {
+  const options = ecpDirectoryUsers.map((user) => {
+    const context = [user.department, user.company].filter(Boolean).join(" / ");
+    const label = context ? `${user.name} - ${context}` : user.name;
+    return `<option value="${escapeHtml(user.subject)}" ${user.subject === selectedSubject ? "selected" : ""}>${escapeHtml(label)}</option>`;
+  });
+  return `<select name="${escapeHtml(name)}" ${required ? "required" : ""}>
+    <option value="">请选择 ECP 账号</option>
+    ${options.join("")}
+  </select>`;
 }
 
 function isSharedStoreKey(key) {
@@ -64,22 +167,12 @@ async function loadSharedStore() {
     if (!response.ok) return false;
     const data = await response.json();
     const values = data.values && typeof data.values === "object" ? data.values : {};
-    sharedStoreServerValues = values;
-    sharedStoreServerKeys = new Set(Object.keys(values).filter(isSharedStoreKey));
+    sharedStoreKeys.forEach((key) => localStorage.removeItem(key));
     Object.entries(values).forEach(([key, value]) => {
       if (!isSharedStoreKey(key)) return;
       if (value === undefined) return;
-      if (key === "assetPortalAssets" && Array.isArray(value) && value.length === 0) {
-        try {
-          const localAssets = JSON.parse(localStorage.getItem(key) || "[]");
-          if (Array.isArray(localAssets) && localAssets.length) return;
-        } catch {
-          // Ignore malformed local cache and use server value.
-        }
-      }
       localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
     });
-    sharedStoreReady = true;
     sharedStoreLoaded = true;
     return true;
   } catch (error) {
@@ -88,13 +181,13 @@ async function loadSharedStore() {
   }
 }
 
-function saveSharedStoreItem(key, value) {
-  if (!isSharedStoreKey(key) || !sharedStoreLoaded || key === "assetPortalAssets") return Promise.resolve();
+function saveSharedStoreItem(key, value, operation = "") {
+  if (!isSharedStoreKey(key)) return Promise.resolve();
   const configPath = portalConfigWritePaths[key];
   return fetch(configPath || "/api/store", {
     method: configPath ? "PUT" : "POST",
     headers: ecpSessionHeaders({ "content-type": "application/json; charset=utf-8" }),
-    body: JSON.stringify(configPath ? { value } : { key, value }),
+    body: JSON.stringify(configPath ? { value } : { operation, key, value }),
   }).then(async (response) => {
     if (response.ok) return;
     const error = await response.json().catch(() => ({}));
@@ -106,38 +199,19 @@ function saveSharedStoreItem(key, value) {
   });
 }
 
-function saveSharedLocalStorage(key, value) {
-  localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
-  void saveSharedStoreItem(key, value).catch(() => undefined);
-}
-
-function seedSharedStoreFromLocalStorage() {
-  if (!sharedStoreReady || !sharedStoreLoaded) return;
-  const items = {};
-  sharedStoreKeys.forEach((key) => {
-    if (key === "assetPortalAssets") return;
-    const rawValue = localStorage.getItem(key);
-    if (rawValue === null) return;
-    const serverValue = sharedStoreServerValues[key];
-    try {
-      const value = JSON.parse(rawValue);
-      if (key === "assetPortalAssets") {
-        if (!Array.isArray(value) || !value.length) return;
-        if (!sharedStoreServerKeys.has(key) || (Array.isArray(serverValue) && serverValue.length === 0)) {
-          items[key] = value;
-        }
-        return;
-      }
-      if (sharedStoreServerKeys.has(key)) return;
-      items[key] = value;
-    } catch {
-      if (sharedStoreServerKeys.has(key)) return;
-      items[key] = rawValue;
-    }
-  });
-  if (!Object.keys(items).length) return;
-  Promise.all(Object.entries(items).map(([key, value]) => saveSharedStoreItem(key, value)))
-    .catch((error) => console.warn("[asset-portal] shared store seed failed", error));
+function saveSharedLocalStorage(key, value, operation = "") {
+  const serialized = typeof value === "string" ? value : JSON.stringify(value);
+  return saveSharedStoreItem(key, value, operation)
+    .then(() => {
+      localStorage.setItem(key, serialized);
+      return true;
+    })
+    .catch(async () => {
+      const loaded = await loadSharedStore();
+      if (loaded) applySharedStoreState();
+      if (typeof render === "function") render();
+      return false;
+    });
 }
 
 function reloadAssetLabelCustomTemplatesFromStorage() {
@@ -153,350 +227,19 @@ function applySharedStoreState() {
   assetLocationOptions = buildAssetLocationOptions(assetLocationTree);
   assetCategoryTree = loadAssetCategoryTree();
   reloadAssetLabelCustomTemplatesFromStorage();
-  state.deletedRoleUserAccounts = loadDeletedRoleUsers();
-  state.users = loadUsers();
-  state.roles = loadRoleDefinitions();
   state.assetCodeRuleSettings = loadAssetCodeRuleSettings();
   state.assetLabelSettings = loadAssetLabelSettings();
   state.selfServiceSettings = loadSelfServiceSettings();
-  state.assets = loadSavedAssets();
   state.selectedAssetIds = state.selectedAssetIds.filter((id) => state.assets.some((asset) => asset.id === id));
 }
 
-const rolePermissionModules = [
-  { code: "employee", name: "员工信息", actions: [["view", "查看"], ["create", "新增"], ["update", "编辑"], ["delete", "删除"]] },
-  { code: "department", name: "组织架构", actions: [["view", "查看"], ["create", "新增"], ["update", "编辑"], ["delete", "删除"]] },
-  { code: "role", name: "角色管理", actions: [["view", "查看"], ["create", "新增"], ["update", "编辑"], ["delete", "删除"]] },
-  {
-    code: "asset",
-    name: "资产列表",
-    actions: [
-      ["view", "查看资产"],
-      ["create", "新增资产"],
-      ["receive", "领用"],
-      ["return", "退库"],
-      ["borrow", "借用"],
-      ["borrowReturn", "借用归还"],
-      ["handover", "资产交接"],
-      ["update", "修改资产"],
-      ["delete", "删除资产"],
-      ["copy", "复制资产"],
-      ["batchUpdate", "批量修改"],
-      ["assetImport", "资产导入"],
-      ["updateImport", "更新导入"],
-      ["receiveImport", "批量领用导入"],
-      ["export", "导出资产"],
-      ["printLabel", "打印标签"],
-      ["advancedSearch", "高级搜索"],
-      ["columnSettings", "列表设置"],
-    ],
-  },
-  {
-    code: "assetInbound",
-    name: "资产入库",
-    actions: [
-      ["view", "查看入库单"],
-      ["create", "新增资产"],
-      ["import", "批量导入"],
-      ["printOrder", "打印入库单"],
-      ["printLabel", "打印资产标签"],
-      ["export", "导出"],
-      ["advancedSearch", "高级搜索"],
-      ["columnSettings", "列表设置"],
-    ],
-  },
-  {
-    code: "assetReceiveReturn",
-    name: "领用退库",
-    actions: [
-      ["view", "查看单据"],
-      ["receive", "新增领用"],
-      ["return", "新增退库"],
-      ["handover", "新增交接"],
-      ["sign", "交接签字"],
-      ["cancel", "取消交接"],
-      ["print", "打印单据"],
-      ["export", "导出"],
-      ["advancedSearch", "高级搜索"],
-      ["columnSettings", "列表设置"],
-    ],
-  },
-  {
-    code: "assetBorrowReturn",
-    name: "借用归还",
-    actions: [
-      ["view", "查看单据"],
-      ["borrow", "新增借用"],
-      ["return", "办理归还"],
-      ["extend", "借用延期"],
-      ["print", "打印单据"],
-      ["export", "导出"],
-      ["advancedSearch", "高级搜索"],
-      ["columnSettings", "列表设置"],
-    ],
-  },
-  { code: "request", name: "审批申请", actions: [["view", "查看"], ["review", "审批"], ["export", "导出"]] },
-  { code: "stocktake", name: "资产盘点", actions: [["view", "查看盘点"], ["create", "新建盘点"]] },
-  {
-    code: "assetLocationSettings",
-    name: "位置管理",
-    actions: [
-      ["view", "查看位置"],
-      ["create", "新增位置"],
-      ["update", "编辑位置"],
-      ["delete", "删除位置"],
-      ["toggleCode", "启停编码"],
-      ["template", "下载模板"],
-      ["import", "导入位置"],
-      ["export", "导出位置"],
-    ],
-  },
-  {
-    code: "assetCategorySettings",
-    name: "资产分类",
-    actions: [
-      ["view", "查看分类"],
-      ["create", "新增分类"],
-      ["update", "编辑分类"],
-      ["delete", "删除分类"],
-      ["toggleCode", "启停编码"],
-      ["template", "下载模板"],
-      ["import", "导入分类"],
-      ["export", "导出分类"],
-    ],
-  },
-  { code: "assetCodeRules", name: "资产编码规则", actions: [["view", "查看规则"], ["update", "配置规则"]] },
-  {
-    code: "assetLabelTemplateSettings",
-    name: "标签模板设置",
-    actions: [["view", "查看模板"], ["create", "新增模板"], ["update", "编辑模板"], ["delete", "删除模板"], ["save", "保存模板"], ["reset", "重置模板"]],
-  },
-  { code: "selfService", name: "员工自助", actions: [["view", "查看"], ["update", "配置"]] },
-  { code: "integration", name: "系统对接", actions: [["view", "查看"], ["create", "新增"], ["update", "编辑"], ["sync", "同步"]] },
-  { code: "form", name: "表单管理", actions: [["view", "查看"], ["create", "新增"], ["update", "编辑"], ["delete", "删除"]] },
-];
-
-const systemPermissionModuleCodes = ["employee", "department", "role", "selfService", "integration", "form"];
-const assetPermissionModuleCodes = [
-  "asset",
-  "assetInbound",
-  "assetReceiveReturn",
-  "assetBorrowReturn",
-  "stocktake",
-  "assetLocationSettings",
-  "assetCategorySettings",
-  "assetCodeRules",
-  "assetLabelTemplateSettings",
-];
-const approvalPermissionModuleCodes = ["request"];
-
-function allRolePermissionCodes() {
-  return rolePermissionModules.flatMap((module) => module.actions.map(([action]) => `${module.code}:${action}`));
-}
-
-function defaultRoleDefinitions() {
-  const allPermissions = allRolePermissionCodes();
-  return [
-    {
-      id: "super_admin",
-      name: "超级管理员",
-      type: "super_admin",
-      builtIn: true,
-      description: "系统初始化、管理员分配、全量资产与系统配置。",
-      permissions: allPermissions,
-    },
-    {
-      id: "admin",
-      name: "普通管理员",
-      type: "admin",
-      builtIn: true,
-      description: "由超级管理员分配，可处理资产台账、员工信息、审批和盘点。",
-      permissions: allPermissions.filter((code) => code !== "role:delete"),
-    },
-    {
-      id: "employee",
-      name: "普通员工",
-      type: "employee",
-      builtIn: true,
-      description: "管理员添加员工信息后使用，仅查看本人资产和申请状态。",
-      permissions: ["asset:view", "request:view", "selfService:view"],
-    },
-  ];
-}
-
-const terminalMeta = {
-  web_pc: {
-    label: "网页PC端",
-    shortLabel: "PC",
-    icon: "▣",
-    note: "适合资产台账、审批配置和批量管理。",
-  },
-  ios_app: {
-    label: "iOS APP",
-    shortLabel: "iOS",
-    icon: "◌",
-    note: "适合移动扫码、现场盘点和员工自助。",
-  },
-  android_app: {
-    label: "Android APP",
-    shortLabel: "Android",
-    icon: "◍",
-    note: "适合移动扫码、现场盘点和员工自助。",
-  },
-};
-
 const assetCategoryOptions = ["终端设备", "基础设施", "办公外设", "网络设备", "软件与许可", "耗材", "其他"];
 const assetCategoryTreeStorageVersion = "20260617-reference-category-v1";
-const defaultAssetCategoryTree = [
-  {
-    id: "cat-it",
-    code: "01",
-    name: "IT设备",
-    usefulLife: "0",
-    unit: "台",
-    enabled: true,
-    children: [
-      { id: "cat-laptop", code: "0101", name: "笔记本电脑", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-desktop", code: "0102", name: "台式主机", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-imac", code: "0103", name: "苹果一体机", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-digitizer", code: "0104", name: "数位板", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-display", code: "0105", name: "显示器", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-server", code: "0106", name: "服务器", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-cloud", code: "0107", name: "云主机", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-network", code: "0108", name: "网络设备", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-workstation", code: "0109", name: "苹果工作站", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-collector", code: "0110", name: "数据采集器", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-ssd", code: "0111", name: "固态硬盘", usefulLife: "0", unit: "块", enabled: true, children: [] },
-      { id: "cat-video", code: "0505", name: "视讯设备", usefulLife: "0", unit: "台", enabled: true, children: [] },
-    ],
-  },
-  {
-    id: "cat-rent",
-    code: "02",
-    name: "租赁设备",
-    usefulLife: "",
-    unit: "",
-    enabled: true,
-    children: [{ id: "cat-rent-laptop", code: "0201", name: "租赁笔记本", usefulLife: "", unit: "", enabled: true, children: [] }],
-  },
-  {
-    id: "cat-mobile",
-    code: "03",
-    name: "移动设备",
-    usefulLife: "0",
-    unit: "个",
-    enabled: true,
-    children: [
-      { id: "cat-tablet", code: "0302", name: "平板", usefulLife: "", unit: "", enabled: true, children: [] },
-      {
-        id: "cat-phone",
-        code: "0303",
-        name: "手机",
-        usefulLife: "0",
-        unit: "台",
-        enabled: true,
-        children: [
-          { id: "cat-android-phone", code: "030301", name: "安卓手机", usefulLife: "0", unit: "台", enabled: true, children: [] },
-          { id: "cat-iphone", code: "030303", name: "苹果手机", usefulLife: "0", unit: "台", enabled: true, children: [] },
-        ],
-      },
-    ],
-  },
-  {
-    id: "cat-software",
-    code: "04",
-    name: "软件权限",
-    usefulLife: "0",
-    unit: "套",
-    enabled: true,
-    children: [
-      { id: "cat-office-license", code: "0401", name: "办公软件", usefulLife: "0", unit: "套", enabled: true, children: [] },
-      { id: "cat-design-license", code: "0402", name: "设计软件", usefulLife: "0", unit: "套", enabled: true, children: [] },
-      { id: "cat-dev-license", code: "0403", name: "研发工具", usefulLife: "0", unit: "套", enabled: true, children: [] },
-      { id: "cat-security-license", code: "0404", name: "安全软件", usefulLife: "0", unit: "套", enabled: true, children: [] },
-    ],
-  },
-  {
-    id: "cat-supply",
-    code: "05",
-    name: "供应链设备",
-    usefulLife: "0",
-    unit: "台",
-    enabled: true,
-    children: [
-      { id: "cat-printer", code: "0501", name: "打印机", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-scanner", code: "0502", name: "扫描仪", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-barcode", code: "0503", name: "条码设备", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-label", code: "0504", name: "标签设备", usefulLife: "0", unit: "台", enabled: true, children: [] },
-    ],
-  },
-  {
-    id: "cat-camera",
-    code: "06",
-    name: "摄影摄像直播设备",
-    usefulLife: "0",
-    unit: "台",
-    enabled: true,
-    children: [
-      { id: "cat-camera-body", code: "0601", name: "相机机身", usefulLife: "0", unit: "台", enabled: true, children: [] },
-      { id: "cat-lens", code: "0602", name: "镜头", usefulLife: "0", unit: "个", enabled: true, children: [] },
-      { id: "cat-light", code: "0603", name: "灯光设备", usefulLife: "0", unit: "台", enabled: true, children: [] },
-    ],
-  },
-  {
-    id: "cat-archive",
-    code: "07",
-    name: "封存资产",
-    usefulLife: "",
-    unit: "件",
-    enabled: true,
-    children: [],
-  },
-  {
-    id: "cat-admin",
-    code: "08",
-    name: "行政资产",
-    usefulLife: "0",
-    unit: "件",
-    enabled: true,
-    children: [],
-  },
-];
-const defaultAssetLocationTree = [
-  {
-    id: "loc-hangzhou",
-    name: "杭州公司",
-    code: "access",
-    enabled: true,
-    children: [
-      { id: "loc-archive", name: "封存仓库", code: "FC", enabled: false, children: [] },
-      { id: "loc-19-1", name: "19幢1楼", code: "19-1", enabled: true, children: [] },
-      { id: "loc-19-2", name: "19幢2楼", code: "19-2", enabled: true, children: [] },
-      { id: "loc-19-3", name: "19幢3楼", code: "19-3", enabled: true, children: [] },
-      { id: "loc-19-4", name: "19幢4楼", code: "19-4", enabled: true, children: [] },
-      { id: "loc-19-5", name: "19幢5楼", code: "19-5", enabled: true, children: [] },
-      { id: "loc-19-6", name: "19幢6楼", code: "19-6", enabled: true, children: [] },
-      { id: "loc-11-6", name: "11幢6楼", code: "11-6", enabled: true, children: [] },
-      { id: "loc-lhtj", name: "下沙龙湖天街", code: "LHTJ", enabled: true, children: [] },
-    ],
-  },
-  { id: "loc-ningbo", name: "宁波仓库", code: "CK", enabled: true, children: [] },
-  {
-    id: "loc-sea",
-    name: "东南亚",
-    code: "NTX",
-    enabled: true,
-    children: [
-      { id: "loc-malaysia", name: "马来西亚", code: "0-1", enabled: true, children: [] },
-      { id: "loc-singapore", name: "新加坡", code: "0-2", enabled: true, children: [] },
-    ],
-  },
-];
+const defaultAssetCategoryTree = [];
+const defaultAssetLocationTree = [];
 let assetLocationTree = loadAssetLocationTree();
 let assetLocationOptions = buildAssetLocationOptions(assetLocationTree);
-saveAssetLocationTree();
 let assetCategoryTree = loadAssetCategoryTree();
-saveAssetCategoryTree();
 const defaultCompanyOptions = ["默认公司"];
 const defaultDepartmentOptions = ["默认部门"];
 const assetConditionOptions = ["正常", "全新", "良好", "维修中", "待验收"];
@@ -586,76 +329,6 @@ function loadSavedAdvancedAssetFilters() {
   }
 }
 
-function loadRegisteredUsers() {
-  try {
-    return JSON.parse(localStorage.getItem("assetPortalRegisteredUsers") || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function loadDeletedRoleUsers() {
-  try {
-    return JSON.parse(localStorage.getItem(deletedRoleUsersStorageKey) || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveRegisteredUsers() {
-  const registered = state.users.filter((user) => ["本地注册", "角色管理新增"].includes(user.identitySource));
-  saveSharedLocalStorage("assetPortalRegisteredUsers", registered);
-}
-
-function saveDeletedRoleUsers() {
-  saveSharedLocalStorage(deletedRoleUsersStorageKey, state.deletedRoleUserAccounts || []);
-}
-
-function normalizeRoleDefinition(role = {}) {
-  const allPermissions = new Set(allRolePermissionCodes());
-  const id = String(role.id || `role-${Date.now().toString(36)}`).trim();
-  const type = role.type === "super_admin" || role.type === "employee" ? role.type : "admin";
-  return {
-    id,
-    name: String(role.name || role.roleName || "普通管理员").trim(),
-    type,
-    builtIn: Boolean(role.builtIn),
-    description: String(role.description || "").trim(),
-    permissions: Array.from(new Set(role.permissions || [])).filter((permission) => allPermissions.has(permission)),
-  };
-}
-
-function loadRoleDefinitions() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(roleDefinitionsStorageKey) || "null");
-    if (Array.isArray(saved) && saved.length) {
-      const builtinIds = new Set(defaultRoleDefinitions().map((role) => role.id));
-      const merged = [...defaultRoleDefinitions(), ...saved.filter((role) => !builtinIds.has(role.id))];
-      return merged.map(normalizeRoleDefinition);
-    }
-  } catch {
-    // fall back to defaults
-  }
-  return defaultRoleDefinitions().map(normalizeRoleDefinition);
-}
-
-function saveRoleDefinitions() {
-  saveSharedLocalStorage(roleDefinitionsStorageKey, state.roles.filter((role) => !role.builtIn));
-}
-
-function createRoleId() {
-  return `role-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function createUserIdFragment(value = "admin") {
-  return String(value || "admin")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ".")
-    .replace(/^\.+|\.+$/g, "")
-    .slice(0, 24) || "admin";
-}
-
 function createLocationId() {
   return `loc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -682,6 +355,7 @@ function normalizeAssetCategoryTree(tree = defaultAssetCategoryTree) {
 }
 
 function loadAssetCategoryTree() {
+  if (!sharedStoreLoaded) return [];
   try {
     if (localStorage.getItem("assetCategoryTreeVersion") !== assetCategoryTreeStorageVersion) {
       return normalizeAssetCategoryTree(defaultAssetCategoryTree);
@@ -692,9 +366,11 @@ function loadAssetCategoryTree() {
   }
 }
 
-function saveAssetCategoryTree() {
-  saveSharedLocalStorage("assetCategoryTree", assetCategoryTree);
-  saveSharedLocalStorage("assetCategoryTreeVersion", assetCategoryTreeStorageVersion);
+async function saveAssetCategoryTree() {
+  await saveSharedStoreItem("assetCategoryTree", assetCategoryTree);
+  localStorage.setItem("assetCategoryTree", JSON.stringify(assetCategoryTree));
+  localStorage.setItem("assetCategoryTreeVersion", assetCategoryTreeStorageVersion);
+  await hydrateAssetsFromServer();
 }
 
 function flattenAssetCategoryTree(tree = assetCategoryTree, parent = null, parentPath = []) {
@@ -804,6 +480,7 @@ function normalizeAssetCodeRuleSettings(settings = {}) {
 }
 
 function loadAssetCodeRuleSettings() {
+  if (!sharedStoreLoaded) return defaultAssetCodeRuleSettings();
   try {
     return normalizeAssetCodeRuleSettings(JSON.parse(localStorage.getItem(assetCodeRuleStorageKey) || "null") || defaultAssetCodeRuleSettings());
   } catch {
@@ -812,7 +489,7 @@ function loadAssetCodeRuleSettings() {
 }
 
 function saveAssetCodeRuleSettings() {
-  saveSharedLocalStorage(assetCodeRuleStorageKey, state.assetCodeRuleSettings);
+  return saveSharedLocalStorage(assetCodeRuleStorageKey, state.assetCodeRuleSettings);
 }
 
 function selfServiceCategoryOptions() {
@@ -1057,6 +734,12 @@ function normalizeSelfServiceSettings(settings = {}) {
 }
 
 function loadSelfServiceSettings() {
+  if (!sharedStoreLoaded) {
+    const unavailable = defaultSelfServiceSettings();
+    ["receiveAsset", "borrowAsset", "giveBackAsset", "handoverAsset", "returnAsset", "deviceRequest"]
+      .forEach((key) => { unavailable[key].enabled = false; });
+    return unavailable;
+  }
   try {
     const saved = JSON.parse(localStorage.getItem(selfServiceSettingsStorageKey) || "null");
     return normalizeSelfServiceSettings(saved || defaultSelfServiceSettings());
@@ -1066,7 +749,7 @@ function loadSelfServiceSettings() {
 }
 
 function saveSelfServiceSettings() {
-  saveSharedLocalStorage(selfServiceSettingsStorageKey, state.selfServiceSettings);
+  return saveSharedLocalStorage(selfServiceSettingsStorageKey, state.selfServiceSettings);
 }
 
 function descendantCategoryRows(node) {
@@ -1081,11 +764,6 @@ function locationPathById(id) {
   return flattenLocationTree().find((node) => node.id === id)?.path || "";
 }
 
-function locationParentPathById(id) {
-  const found = findLocationNodeById(id);
-  return found?.parent ? locationPathById(found.parent.id).split(" / ").filter(Boolean) : [];
-}
-
 function assetReferencesCategoryNames(names) {
   const targets = new Set(names.filter(Boolean));
   return state.assets.filter((asset) => targets.has(asset.category));
@@ -1094,36 +772,6 @@ function assetReferencesCategoryNames(names) {
 function assetReferencesLocationPaths(paths) {
   const targets = new Set(paths.filter(Boolean));
   return state.assets.filter((asset) => targets.has(normalizeLocationValue(asset.location)));
-}
-
-function updateAssetCategoryReferences(oldName, newName) {
-  if (!oldName || !newName || oldName === newName) return;
-  updateAssetCategoryReferenceMap(new Map([[oldName, newName]]));
-}
-
-function updateAssetCategoryReferenceMap(referenceMap) {
-  if (!referenceMap?.size) return;
-  referenceMap.forEach((newName, oldName) => {
-    const ids = state.assets.filter((asset) => asset.category === oldName && newName !== oldName).map((asset) => asset.id);
-    if (!ids.length) return;
-    void executeAssetCommand("reference-edit", ids, { category: newName, type: newName, date: todayValue(), description: `资产分类由 ${oldName} 更新为 ${newName}` })
-      .then(render).catch(async (error) => { showToast(error?.message || "资产分类联动失败"); await hydrateAssetsFromServer(); render(); });
-  });
-}
-
-function updateAssetLocationReferences(oldPath, newPath) {
-  if (!oldPath || !newPath || oldPath === newPath) return;
-  updateAssetLocationReferenceMap(new Map([[oldPath, newPath]]));
-}
-
-function updateAssetLocationReferenceMap(referenceMap) {
-  if (!referenceMap?.size) return;
-  referenceMap.forEach((newPath, oldPath) => {
-    const ids = state.assets.filter((asset) => normalizeLocationValue(asset.location) === oldPath && newPath !== oldPath).map((asset) => asset.id);
-    if (!ids.length) return;
-    void executeAssetCommand("reference-edit", ids, { location: newPath, date: todayValue(), description: `所在位置由 ${oldPath} 更新为 ${newPath}` })
-      .then(render).catch(async (error) => { showToast(error?.message || "资产位置联动失败"); await hydrateAssetsFromServer(); render(); });
-  });
 }
 
 function cloneLocationTree(tree = defaultAssetLocationTree) {
@@ -1179,6 +827,7 @@ function normalizeLocationHierarchy(tree) {
 }
 
 function loadAssetLocationTree() {
+  if (!sharedStoreLoaded) return [];
   try {
     return normalizeLocationHierarchy(JSON.parse(localStorage.getItem("assetLocationTree") || "null"));
   } catch {
@@ -1186,8 +835,10 @@ function loadAssetLocationTree() {
   }
 }
 
-function saveAssetLocationTree() {
-  saveSharedLocalStorage("assetLocationTree", assetLocationTree);
+async function saveAssetLocationTree() {
+  await saveSharedStoreItem("assetLocationTree", assetLocationTree);
+  localStorage.setItem("assetLocationTree", JSON.stringify(assetLocationTree));
+  await hydrateAssetsFromServer();
 }
 
 function flattenLocationTree(tree = assetLocationTree, parent = null, parentPath = []) {
@@ -1241,7 +892,7 @@ function columnName(index) {
   return name;
 }
 
-function worksheetXml(rows) {
+function worksheetXml(rows, widths = [16, 18, 24, 28]) {
   const shared = new Map();
   const strings = [];
   const sharedIndex = (value) => {
@@ -1262,19 +913,16 @@ function worksheetXml(rows) {
     .join("");
   return {
     strings,
-    sheet: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><cols><col min="1" max="1" width="16" customWidth="1"/><col min="2" max="2" width="18" customWidth="1"/><col min="3" max="3" width="24" customWidth="1"/><col min="4" max="4" width="28" customWidth="1"/></cols><sheetData>${rowXml}</sheetData></worksheet>`,
+    sheet: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><cols>${widths
+      .map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`)
+      .join("")}</cols><sheetData>${rowXml}</sheetData></worksheet>`,
   };
 }
 
-async function buildLocationWorkbookBlob(rows) {
+async function buildXlsxBlob(data, widths) {
   if (!window.JSZip) throw new Error("Excel 组件未加载");
   const zip = new window.JSZip();
-  const data = [
-    ["验证结果", "位置编码", "位置名称*", "上级位置名称"],
-    ["请勿填写", "非必填项，不可重复", "必填项，不可重复", "①请确保上级名称在系统或表格内已存在\n②若新建一级位置，此项为空"],
-    ...rows.map((row) => [row.result || "", row.code || "", row.name || "", row.parent || ""]),
-  ];
-  const { strings, sheet } = worksheetXml(data);
+  const { strings, sheet } = worksheetXml(data, widths);
   zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>`);
   zip.folder("_rels").file(".rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
   zip.folder("xl").file("workbook.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>`);
@@ -1282,6 +930,15 @@ async function buildLocationWorkbookBlob(rows) {
   zip.folder("xl").folder("worksheets").file("sheet1.xml", sheet);
   zip.folder("xl").file("sharedStrings.xml", sharedStringXml(strings));
   return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+async function buildLocationWorkbookBlob(rows) {
+  const data = [
+    ["验证结果", "位置编码", "位置名称*", "上级位置名称"],
+    ["请勿填写", "非必填项，不可重复", "必填项，不可重复", "①请确保上级名称在系统或表格内已存在\n②若新建一级位置，此项为空"],
+    ...rows.map((row) => [row.result || "", row.code || "", row.name || "", row.parent || ""]),
+  ];
+  return buildXlsxBlob(data, [16, 18, 24, 28]);
 }
 
 async function readLocationWorkbookRows(file) {
@@ -1402,7 +1059,7 @@ function validateImportedLocationRows(rows) {
   return errors;
 }
 
-function applyImportedLocationRows(rows) {
+async function applyImportedLocationRows(rows) {
   const errors = validateImportedLocationRows(rows);
   if (errors.length) throw new Error(errors.slice(0, 3).join("；"));
 
@@ -1445,8 +1102,7 @@ function applyImportedLocationRows(rows) {
   assetLocationTree = normalizeLocationHierarchy(nextTree);
   state.locationTreeOpen = {};
   refreshAssetLocationOptions();
-  saveAssetLocationTree();
-  migrateAssetLocations();
+  await saveAssetLocationTree();
   render();
   return rows.length;
 }
@@ -1470,7 +1126,7 @@ async function importLocationWorkbook(file) {
   if (!file) return;
   const rows = await readLocationWorkbookRows(file);
   if (!rows.length) throw new Error("模板中没有可导入的位置");
-  const count = applyImportedLocationRows(rows);
+  const count = await applyImportedLocationRows(rows);
   showToast(`已导入 ${count} 条位置`);
 }
 
@@ -1485,6 +1141,12 @@ function runLocationWorkbookAction(action) {
 
 function triggerLocationWorkbookAction(action) {
   if (state.locationImportBusy) return;
+  const requiredPermission = {
+    template: "asset:location_settings:template",
+    import: "asset:location_settings:import",
+    export: "asset:location_settings:export",
+  }[action];
+  if (!requiredPermission || !ensureAnyPermission([requiredPermission])) return;
   if (action === "template") {
     runLocationWorkbookAction(downloadLocationTemplate);
     return;
@@ -1501,266 +1163,8 @@ function triggerLocationWorkbookAction(action) {
   }
 }
 
-function syncRoleFormFromDom(root = document) {
-  if (!state.roleForm) currentRoleForm();
-  const formRoot = root.querySelector?.(".role-config-form") || document.querySelector(".role-config-form");
-  if (!formRoot || !state.roleForm) return;
-  formRoot.querySelectorAll("[data-role-field]").forEach((field) => {
-    state.roleForm[field.dataset.roleField] = field.value.trim();
-  });
-  const permissionInputs = Array.from(formRoot.querySelectorAll("[data-role-permission]"));
-  if (permissionInputs.length) {
-    state.roleForm.permissions = permissionInputs.filter((input) => input.checked).map((input) => input.dataset.rolePermission);
-  }
-  if (state.roleForm.name && (state.roleForm.type === "employee" || state.roleForm.permissions.length)) {
-    state.roleError = "";
-  }
-}
-
-function selectRoleDefinition(roleId) {
-  const role = state.roles.find((item) => item.id === roleId);
-  if (!role) return;
-  state.selectedRoleId = role.id;
-  state.pendingRoleDeleteId = "";
-  state.roleError = "";
-  state.roleForm = null;
-  render();
-}
-
-function createRoleDefinitionDraft() {
-  const isEmployeeRole = state.roleTab === "employee";
-  state.selectedRoleId = "";
-  state.pendingRoleDeleteId = "";
-  state.roleError = "";
-  state.roleForm = {
-    id: "",
-    name: "",
-    type: isEmployeeRole ? "employee" : "admin",
-    description: "",
-    permissions: [],
-  };
-  openRoleDefinitionModal();
-}
-
-function setRoleFormError(message, root = document) {
-  state.roleError = message;
-  const error = root.querySelector?.("[data-role-form-error]");
-  if (error) {
-    error.textContent = message;
-    error.hidden = false;
-  }
-  showToast(message);
-}
-
-function saveRoleDefinitionFromForm(root = document) {
-  syncRoleFormFromDom(root);
-  const form = state.roleForm || {};
-  if (!form.name) {
-    setRoleFormError("请填写角色名称", root);
-    return false;
-  }
-  if (form.type === "employee" && !form.permissions?.length) {
-    form.permissions = ["asset:view", "request:view", "selfService:view"];
-  }
-  if (!form.permissions?.length) {
-    setRoleFormError("请至少选择一个功能权限", root);
-    return false;
-  }
-  const existing = state.roles.find((role) => role.id === form.id);
-  const duplicate = state.roles.find((role) => role.name === form.name && role.id !== form.id);
-  if (duplicate) {
-    setRoleFormError("角色名称已存在", root);
-    return false;
-  }
-  if (existing) {
-    existing.name = form.name;
-    existing.type = form.type || "admin";
-    existing.description = form.description || "";
-    existing.permissions = [...form.permissions];
-    state.selectedRoleId = existing.id;
-  } else {
-    const role = normalizeRoleDefinition({
-      id: createRoleId(),
-      name: form.name,
-      type: form.type || "admin",
-      builtIn: false,
-      description: form.description || "",
-      permissions: form.permissions,
-    });
-    state.roles.push(role);
-    state.selectedRoleId = role.id;
-  }
-  saveRoleDefinitions();
-  state.roleForm = null;
-  state.roleError = "";
-  state.pendingRoleDeleteId = "";
-  return true;
-}
-
-function deleteRoleDefinition(roleId) {
-  const role = state.roles.find((item) => item.id === roleId);
-  if (!role) return;
-  if (role.builtIn) {
-    showToast("内置角色不能删除");
-    return;
-  }
-  const assigned = roleAssignedUsers(role).length;
-  if (assigned > 0) {
-    showToast("该角色已绑定账号，无法删除");
-    return;
-  }
-  if (state.pendingRoleDeleteId !== roleId) {
-    state.pendingRoleDeleteId = roleId;
-    render();
-    showToast(`再次点击确认删除“${role.name}”`);
-    return;
-  }
-  state.roles = state.roles.filter((item) => item.id !== roleId);
-  state.selectedRoleId = state.roles.find((item) => item.id === "admin")?.id || state.roles[0]?.id || "";
-  state.roleForm = null;
-  state.pendingRoleDeleteId = "";
-  saveRoleDefinitions();
-  closeModal();
-  render();
-  showToast("角色已删除");
-}
-
-function setRoleCheckboxState(input, checkedCount, totalCount) {
-  if (!input) return;
-  input.checked = totalCount > 0 && checkedCount === totalCount;
-  input.indeterminate = checkedCount > 0 && checkedCount < totalCount;
-}
-
-function scrollRolePermissionSelectionIntoView(root = document) {
-  const formRoot = root.querySelector?.(".role-config-form") || document.querySelector(".role-config-form");
-  if (!formRoot) return;
-  formRoot.querySelector(`[data-role-permission-group="${cssEscape(state.rolePermissionGroup)}"]`)?.scrollIntoView({ block: "nearest" });
-  formRoot.querySelector(`[data-role-module-row="${cssEscape(state.rolePermissionModule)}"]`)?.scrollIntoView({ block: "nearest" });
-}
-
-function refreshRoleModuleState(root = document) {
-  const formRoot = root.querySelector?.(".role-config-form") || document.querySelector(".role-config-form");
-  if (!formRoot) return;
-  const groups = rolePermissionGroups();
-  const actionInputs = Array.from(formRoot.querySelectorAll("[data-role-permission]"));
-  const permissions = new Set(actionInputs.filter((input) => input.checked).map((input) => input.dataset.rolePermission));
-  if (state.roleForm) state.roleForm.permissions = Array.from(permissions);
-
-  let activeGroup = groups.find((group) => group.id === state.rolePermissionGroup) || groups[0];
-  if (!activeGroup) return;
-  let activeModule = activeGroup.modules.find((module) => module.code === state.rolePermissionModule);
-  if (!activeModule) activeModule = activeGroup.modules[0];
-  state.rolePermissionGroup = activeGroup.id;
-  state.rolePermissionModule = activeModule?.code || "";
-
-  const allCodes = groups.flatMap(roleGroupCodes);
-  const allChecked = roleCheckedCount(allCodes, permissions);
-  setRoleCheckboxState(formRoot.querySelector("[data-role-all-permissions]"), allChecked, allCodes.length);
-
-  const summaryCount = formRoot.querySelector("[data-role-permission-total]");
-  if (summaryCount) summaryCount.textContent = `${permissions.size} / ${allCodes.length}`;
-
-  groups.forEach((group) => {
-    const codes = roleGroupCodes(group);
-    const checkedCount = roleCheckedCount(codes, permissions);
-    const isActiveGroup = group.id === activeGroup.id;
-    formRoot.querySelectorAll(`[data-role-permission-group="${group.id}"]`).forEach((row) => row.classList.toggle("active", isActiveGroup));
-    formRoot.querySelectorAll(`[data-role-module-group="${group.id}"]`).forEach((row) => {
-      row.hidden = !isActiveGroup;
-    });
-    const count = formRoot.querySelector(`[data-role-group-count="${group.id}"]`);
-    if (count) count.textContent = `(${checkedCount}/${codes.length})`;
-    setRoleCheckboxState(formRoot.querySelector(`[data-role-group-check="${group.id}"]`), checkedCount, codes.length);
-  });
-
-  const activeGroupCodes = roleGroupCodes(activeGroup);
-  setRoleCheckboxState(formRoot.querySelector("[data-role-active-group-check]"), roleCheckedCount(activeGroupCodes, permissions), activeGroupCodes.length);
-  const activeGroupTitle = formRoot.querySelector("[data-role-active-group-title]");
-  if (activeGroupTitle) activeGroupTitle.textContent = activeGroup.name;
-
-  rolePermissionModules.forEach((module) => {
-    const codes = roleModuleCodes(module);
-    const checkedCount = roleCheckedCount(codes, permissions);
-    const isActiveModule = module.code === activeModule?.code;
-    const moduleRow = formRoot.querySelector(`[data-role-module-row="${module.code}"]`);
-    moduleRow?.classList.toggle("active", isActiveModule);
-    const count = formRoot.querySelector(`[data-role-module-count="${module.code}"]`);
-    if (count) count.textContent = `(${checkedCount}/${codes.length})`;
-    setRoleCheckboxState(formRoot.querySelector(`[data-role-module="${module.code}"]`), checkedCount, codes.length);
-    const actionPanel = formRoot.querySelector(`[data-role-action-panel="${module.code}"]`);
-    if (actionPanel) actionPanel.hidden = !isActiveModule;
-  });
-
-  const activeModuleCodes = activeModule ? roleModuleCodes(activeModule) : [];
-  setRoleCheckboxState(formRoot.querySelector("[data-role-active-module-check]"), roleCheckedCount(activeModuleCodes, permissions), activeModuleCodes.length);
-  const activeModuleTitle = formRoot.querySelector("[data-role-active-module-title]");
-  if (activeModuleTitle) activeModuleTitle.textContent = activeModule?.name || "-";
-
-  actionInputs.forEach((input) => input.closest(".role-permission-action")?.classList.toggle("checked", input.checked));
-  scrollRolePermissionSelectionIntoView(root);
-}
-
-function setRolePermissionCodes(codes, checked, root = document) {
-  const formRoot = root.querySelector?.(".role-config-form") || document.querySelector(".role-config-form");
-  if (!formRoot) return;
-  const codeSet = new Set(codes);
-  formRoot.querySelectorAll("[data-role-permission]").forEach((input) => {
-    if (codeSet.has(input.dataset.rolePermission)) input.checked = checked;
-  });
-  syncRoleFormFromDom(root);
-  refreshRoleModuleState(root);
-}
-
-function selectRolePermissionGroup(groupId, root = document) {
-  syncRoleFormFromDom(root);
-  const group = rolePermissionGroups().find((item) => item.id === groupId);
-  if (!group) return;
-  state.rolePermissionGroup = group.id;
-  if (!group.modules.some((module) => module.code === state.rolePermissionModule)) {
-    state.rolePermissionModule = group.modules[0]?.code || "";
-  }
-  refreshRoleModuleState(root);
-}
-
-function selectRolePermissionModule(moduleCode, root = document) {
-  syncRoleFormFromDom(root);
-  const group = rolePermissionGroups().find((item) => item.modules.some((module) => module.code === moduleCode));
-  if (!group) return;
-  state.rolePermissionGroup = group.id;
-  state.rolePermissionModule = moduleCode;
-  refreshRoleModuleState(root);
-}
-
-function toggleRoleGroup(groupId, checked, root = document) {
-  const group = rolePermissionGroups().find((item) => item.id === groupId);
-  if (!group) return;
-  state.rolePermissionGroup = group.id;
-  if (!group.modules.some((module) => module.code === state.rolePermissionModule)) {
-    state.rolePermissionModule = group.modules[0]?.code || "";
-  }
-  setRolePermissionCodes(roleGroupCodes(group), checked, root);
-}
-
-function toggleRoleModule(moduleCode, checked, root = document) {
-  const group = rolePermissionGroups().find((item) => item.modules.some((module) => module.code === moduleCode));
-  const module = group?.modules.find((item) => item.code === moduleCode);
-  if (!module) return;
-  state.rolePermissionGroup = group.id;
-  state.rolePermissionModule = module.code;
-  setRolePermissionCodes(roleModuleCodes(module), checked, root);
-}
-
-function submitRoleSearch(type = "role") {
-  if (type === "user") {
-    state.roleUserQuery = ((state.roleUserQueryDraft ?? state.roleUserQuery) || "").trim();
-  } else {
-    state.roleQuery = ((state.roleQueryDraft ?? state.roleQuery) || "").trim();
-  }
-  state.pendingRoleDeleteId = "";
-  render();
-}
-
 function handleLocationImportFile(file) {
+  if (!ensureAnyPermission(["asset:location_settings:import"])) return;
   if (!file || state.locationImportBusy) return;
   if (!/\.xlsx$/i.test(file.name || "")) {
     showToast("请上传 .xlsx 位置导入模板");
@@ -1811,19 +1215,19 @@ function insertLocationNode(node, parentId = "") {
 
 const assetTableColumns = [
   { key: "status", label: "资产状态", width: 86, minWidth: 62, render: (item) => assetListStatus(item.status) },
-  { key: "code", label: "资产编码", width: 112, minWidth: 82, render: (item) => `<button class="link" data-detail="${item.id}">${item.id}</button>` },
-  { key: "name", label: "资产名称", width: 118, minWidth: 78, render: (item) => item.name },
-  { key: "category", label: "资产分类", width: 92, minWidth: 62, render: (item) => item.category },
-  { key: "phone", label: "手机号", width: 92, minWidth: 68, render: (item) => item.phone || "-" },
-  { key: "email", label: "电子邮箱", width: 118, minWidth: 82, render: (item) => item.email || "-" },
-  { key: "date", label: "领用日期", width: 90, minWidth: 70, render: (item) => item.receiveDate || "-" },
-  { key: "location", label: "所在位置", width: 92, minWidth: 64, render: (item) => item.location || "-" },
-  { key: "price", label: "金额", width: 64, minWidth: 48, render: (item) => item.price },
-  { key: "purchase", label: "购置方式", width: 82, minWidth: 58, render: (item) => item.purchaseMethod || "-" },
-  { key: "rent", label: "租金", width: 56, minWidth: 42, render: (item) => item.rent || 0 },
-  { key: "supplier", label: "供应商", width: 104, minWidth: 68, render: (item) => item.supplier || "-" },
-  { key: "owner", label: "使用人", width: 78, minWidth: 54, render: (item) => item.owner },
-  { key: "usage", label: "使用信息", width: 110, minWidth: 72, render: (item) => `${item.status} / ${item.department}` },
+  { key: "code", label: "资产编码", width: 112, minWidth: 82, render: (item) => `<button class="link" data-detail="${escapeHtml(item.id)}">${escapeHtml(item.id)}</button>` },
+  { key: "name", label: "资产名称", width: 118, minWidth: 78, render: (item) => escapeHtml(item.name) },
+  { key: "category", label: "资产分类", width: 92, minWidth: 62, render: (item) => escapeHtml(item.category) },
+  { key: "phone", label: "手机号", width: 92, minWidth: 68, render: (item) => escapeHtml(item.phone || "-") },
+  { key: "email", label: "电子邮箱", width: 118, minWidth: 82, render: (item) => escapeHtml(item.email || "-") },
+  { key: "date", label: "领用日期", width: 90, minWidth: 70, render: (item) => escapeHtml(item.receiveDate || "-") },
+  { key: "location", label: "所在位置", width: 92, minWidth: 64, render: (item) => escapeHtml(item.location || "-") },
+  { key: "price", label: "金额", width: 64, minWidth: 48, render: (item) => escapeHtml(item.price) },
+  { key: "purchase", label: "购置方式", width: 82, minWidth: 58, render: (item) => escapeHtml(item.purchaseMethod || "-") },
+  { key: "rent", label: "租金", width: 56, minWidth: 42, render: (item) => escapeHtml(item.rent || 0) },
+  { key: "supplier", label: "供应商", width: 104, minWidth: 68, render: (item) => escapeHtml(item.supplier || "-") },
+  { key: "owner", label: "使用人", width: 78, minWidth: 54, render: (item) => escapeHtml(item.owner) },
+  { key: "usage", label: "使用信息", width: 110, minWidth: 72, render: (item) => `${escapeHtml(item.status)} / ${escapeHtml(item.department)}` },
 ];
 
 const defaultAssetTableColumnKeys = assetTableColumns.map((column) => column.key);
@@ -2260,6 +1664,7 @@ function normalizeAssetLabelCustomTemplate(template = {}) {
 }
 
 function loadAssetLabelCustomTemplates() {
+  if (!sharedStoreLoaded) return [];
   try {
     const saved = JSON.parse(localStorage.getItem(assetLabelCustomTemplateStorageKey) || "[]");
     if (!Array.isArray(saved)) return [];
@@ -2269,8 +1674,8 @@ function loadAssetLabelCustomTemplates() {
   }
 }
 
-function saveAssetLabelCustomTemplates() {
-  const customTemplates = assetLabelTemplates
+function assetLabelCustomTemplatesSnapshot() {
+  return assetLabelTemplates
     .filter((template) => template.custom)
     .map((template) => ({
       key: template.key,
@@ -2280,15 +1685,20 @@ function saveAssetLabelCustomTemplates() {
       previewMode: template.previewMode,
       settings: template.settings,
     }));
-  saveSharedLocalStorage(assetLabelCustomTemplateStorageKey, customTemplates);
 }
 
-function persistAssetLabelTemplateSettings(settings) {
-  if (!settings) return;
+function saveAssetLabelCustomTemplates(operation) {
+  return saveSharedLocalStorage(assetLabelCustomTemplateStorageKey, assetLabelCustomTemplatesSnapshot(), operation);
+}
+
+async function persistAssetLabelTemplateSettings(settings) {
+  if (!settings) return true;
   const template = assetLabelTemplates.find((item) => item.key === settings?.templateKey);
-  if (!template?.custom) return;
-  template.settings = assetLabelTemplatePersistedSettings(settings);
-  saveAssetLabelCustomTemplates();
+  if (!template?.custom) return true;
+  const nextSettings = assetLabelTemplatePersistedSettings(settings);
+  if (JSON.stringify(template.settings) === JSON.stringify(nextSettings)) return true;
+  template.settings = nextSettings;
+  return saveAssetLabelCustomTemplates("update");
 }
 
 assetLabelTemplates.push(...loadAssetLabelCustomTemplates());
@@ -2306,7 +1716,7 @@ function nextAssetLabelCustomTemplateName() {
   return `配置${assetLabelTemplates.length + 1}`;
 }
 
-function createAssetLabelCustomTemplate(settings = state.assetLabelSettings) {
+async function createAssetLabelCustomTemplate(settings = state.assetLabelSettings) {
   const sourceTemplate = assetLabelTemplateByKey(settings.templateKey);
   const baseTemplateKey = sourceTemplate.baseTemplateKey || sourceTemplate.key;
   const key = `custom_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -2321,24 +1731,23 @@ function createAssetLabelCustomTemplate(settings = state.assetLabelSettings) {
     settings: assetLabelTemplatePersistedSettings({ ...normalized, templateKey: baseTemplateKey }),
   };
   assetLabelTemplates.push(customTemplate);
-  saveAssetLabelCustomTemplates();
+  if (!(await saveAssetLabelCustomTemplates("create"))) return null;
   state.assetLabelSettings = normalizeAssetLabelSettings({ ...customTemplate.settings, templateKey: key });
-  saveAssetLabelSettings();
   return customTemplate;
 }
 
-function deleteAssetLabelCustomTemplate(templateKey) {
+async function deleteAssetLabelCustomTemplate(templateKey) {
   const index = assetLabelTemplates.findIndex((template) => template.key === templateKey && template.custom);
   if (index === -1) return null;
   const [removed] = assetLabelTemplates.splice(index, 1);
-  saveAssetLabelCustomTemplates();
+  if (!(await saveAssetLabelCustomTemplates("delete"))) return null;
   const fallbackKey = assetLabelTemplates.some((template) => template.key === removed.baseTemplateKey) ? removed.baseTemplateKey : "standard";
   state.assetLabelSettings = normalizeAssetLabelSettings(assetLabelTemplateDefaults(fallbackKey));
-  saveAssetLabelSettings();
   return removed;
 }
 
 function loadAssetLabelSettings() {
+  if (!sharedStoreLoaded) return defaultAssetLabelSettings();
   try {
     const saved = JSON.parse(localStorage.getItem(assetLabelStorageKey) || "null");
     return normalizeAssetLabelSettings(saved || defaultAssetLabelSettings());
@@ -2347,9 +1756,9 @@ function loadAssetLabelSettings() {
   }
 }
 
-function saveAssetLabelSettings() {
-  saveSharedLocalStorage(assetLabelStorageKey, state.assetLabelSettings);
-  persistAssetLabelTemplateSettings(state.assetLabelSettings);
+async function saveAssetLabelSettings(operation = "save", options = {}) {
+  if (options.updateCustomTemplate && !(await persistAssetLabelTemplateSettings(state.assetLabelSettings))) return false;
+  return saveSharedLocalStorage(assetLabelStorageKey, state.assetLabelSettings, operation);
 }
 
 function normalizedLocationText(location = "") {
@@ -2397,28 +1806,21 @@ function normalizeLocationValue(location = "") {
   if (!value) return "";
   const resolved = resolveManagedAssetLocation(value);
   if (resolved.valid) return resolved.value;
-  const legacyMap = [
-    [/北京总部\s*A座|北京|A座/, "杭州公司 / 19幢1楼"],
-    [/北京总部机房|机房/, "杭州公司 / 19幢6楼"],
-    [/上海办公楼|上海办公|办公楼/, "杭州公司 / 19幢2楼"],
-    [/上海机房/, "杭州公司 / 19幢6楼"],
-    [/深圳办公室|深圳/, "杭州公司 / 下沙龙湖天街"],
-    [/云许可池|许可池/, "东南亚 / 新加坡"],
-    [/北京仓|行政仓|运维仓|仓库/, "杭州公司 / 封存仓库"],
-  ];
-  const matched = legacyMap.find(([pattern]) => pattern.test(value));
-  return matched ? matched[1] : value;
+  return value;
 }
 
 function normalizeSavedAsset(asset = {}) {
+  const id = String(asset.id || "").trim();
+  if (!id) throw new Error("Java 资产接口返回了无效的空资产编号");
   return {
-    id: asset.id || `${assetCodePrefix(asset.category)}-${Date.now()}`,
+    id,
     name: asset.name || "未命名资产",
     category: asset.category || "其他",
     type: asset.type || asset.category || "其他",
     model: asset.model || "",
     sn: asset.sn || "",
     owner: asset.owner || "未分配",
+    ownerSubject: asset.ownerSubject || "",
     custodian: asset.custodian || "",
     department: asset.department || "",
     status: asset.status || "空闲",
@@ -2459,15 +1861,6 @@ function normalizeSavedAsset(asset = {}) {
   };
 }
 
-function loadSavedAssets() {
-  try {
-    const saved = JSON.parse(localStorage.getItem("assetPortalAssets") || "[]");
-    return Array.isArray(saved) ? saved.map(normalizeSavedAsset) : [];
-  } catch {
-    return [];
-  }
-}
-
 async function executeAssetCommand(action, assetIds, fields = {}) {
   const response = await fetch(`/api/assets/commands/${encodeURIComponent(action)}`, {
     method: "POST",
@@ -2477,23 +1870,50 @@ async function executeAssetCommand(action, assetIds, fields = {}) {
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || `资产操作失败（HTTP ${response.status}）`);
   const changed = new Map((result.items || []).map((item) => [item.id, normalizeSavedAsset(item)]));
-  state.assets = state.assets.map((item) => changed.get(item.id) || item);
-  localStorage.setItem("assetPortalAssets", JSON.stringify(state.assets));
+  state.assets = action === "cancel-inbound"
+    ? state.assets.filter((item) => !changed.has(item.id))
+    : state.assets.map((item) => changed.get(item.id) || item);
+  await hydrateAssetOperationsFromServer();
   return result.items || [];
 }
 
-async function createAssetCommand(item) {
+async function createAssetCommand(item, sourceAssetId = "") {
   const response = await fetch("/api/assets", {
     method: "POST",
     headers: ecpSessionHeaders({ "content-type": "application/json; charset=utf-8" }),
-    body: JSON.stringify({ item }),
+    body: JSON.stringify({ item, sourceAssetId }),
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || `资产新增失败（HTTP ${response.status}）`);
   const created = normalizeSavedAsset(result.item);
   state.assets.unshift(created);
-  localStorage.setItem("assetPortalAssets", JSON.stringify(state.assets));
+  await hydrateAssetOperationsFromServer();
   return created;
+}
+
+async function hydrateAssetOperationsFromServer() {
+  const records = [];
+  const pageSize = 500;
+  const maximumPages = 20;
+  try {
+    for (let page = 1; page <= maximumPages; page += 1) {
+      const response = await fetch(`/api/asset-operations?page=${page}&size=${pageSize}`, {
+        cache: "no-store",
+        headers: ecpSessionHeaders(),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      records.push(...items);
+      if (records.length >= Number(payload.total || 0) || items.length < pageSize) break;
+    }
+    assetOperationRecords = records;
+    return true;
+  } catch (error) {
+    console.warn("[asset-portal] Java asset operation API unavailable", error);
+    assetOperationRecords = [];
+    return false;
+  }
 }
 
 async function hydrateAssetsFromServer() {
@@ -2502,34 +1922,16 @@ async function hydrateAssetsFromServer() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     const items = Array.isArray(payload.items) ? payload.items.map(normalizeSavedAsset) : [];
-    if (items.length) {
-      state.assets = items;
-      localStorage.setItem("assetPortalAssets", JSON.stringify(items));
-      return true;
-    }
-    state.assets = [];
-    localStorage.setItem("assetPortalAssets", "[]");
+    state.assets = items;
+    await hydrateAssetOperationsFromServer();
     return true;
   } catch (error) {
     console.warn("[asset-portal] Java asset API unavailable", error);
+    state.assets = [];
+    assetOperationRecords = [];
     return false;
   }
 }
-
-function migrateAssetLocations() {
-  const references = new Map();
-  state.assets.forEach((asset) => {
-    const normalized = normalizeLocationValue(asset.location);
-    if (normalized !== asset.location) references.set(asset.location, normalized);
-  });
-  updateAssetLocationReferenceMap(references);
-}
-
-const localSessionStorageKey = "assetPortalSession";
-const routeStorageKey = "assetPortalLastRoute";
-const terminalModeStorageKey = "assetPortalTerminalMode";
-const sessionIdleLimitMs = 10 * 60 * 1000;
-let idleLogoutTimer = null;
 
 function assetCodePrefix(category = "") {
   const categoryCode = assetCategoryCodeForName(category);
@@ -2578,18 +1980,6 @@ function assetCodeRulePrefix(category = "") {
   return assetCodePrefix(category);
 }
 
-function generateAssetCode(category = "") {
-  const prefix = assetCodeRulePrefix(category);
-  const serialLength = Math.round(clampNumber(state?.assetCodeRuleSettings?.serialLength, 5, 3, 7));
-  const next = state?.assets?.length ? state.assets.length + 1 : 1;
-  const formatCode = (serial) => `${prefix}${String(serial).padStart(serialLength, "0")}`;
-  let code = formatCode(next);
-  while (state?.assets?.some((item) => item.id === code)) {
-    code = formatCode(next + Math.floor(Math.random() * 9000) + 1);
-  }
-  return code;
-}
-
 function calculateAssetCompleteness(asset) {
   const fields = [
     asset.id,
@@ -2607,56 +1997,6 @@ function calculateAssetCompleteness(asset) {
     asset.purchaseMethod,
   ];
   return Math.round((fields.filter((value) => String(value || "").trim()).length / fields.length) * 100);
-}
-
-const defaultUsers = [
-  {
-    name: "admin",
-    account: "admin",
-    phone: "13800000001",
-    email: "admin@example.com",
-    department: "管理中心",
-    roleCode: "super_admin",
-    roleName: "超级管理员",
-    scope: "全系统权限",
-    loginType: "手机号注册账号",
-    identitySource: "手机号注册",
-    externalSubject: "phone:13800000001",
-    bindStatus: "已绑定",
-  },
-  {
-    name: "普通管理员A",
-    account: "asset.admin",
-    phone: "13800000002",
-    email: "asset.admin@example.com",
-    department: "信息中心",
-    roleCode: "admin",
-    roleName: "普通管理员",
-    scope: "资产与员工管理",
-    loginType: "超级管理员分配账号",
-    identitySource: "超管分配",
-    externalSubject: "assigned:asset.admin",
-    bindStatus: "已绑定",
-  },
-  {
-    name: "李雷",
-    account: "lilei",
-    phone: "13800000003",
-    email: "lilei@example.com",
-    department: "研发中心",
-    roleCode: "employee",
-    roleName: "普通员工",
-    scope: "本人资产与申请",
-    loginType: "管理员添加员工信息",
-    identitySource: "管理员添加",
-    externalSubject: "employee:lilei",
-    bindStatus: "已绑定",
-  },
-];
-
-function loadUsers() {
-  const deletedAccounts = new Set(loadDeletedRoleUsers());
-  return [...defaultUsers.filter((user) => !deletedAccounts.has(user.account)), ...loadRegisteredUsers()];
 }
 
 const state = {
@@ -2679,21 +2019,10 @@ const state = {
   assetCategoryPageSize: 20,
   assetReceiveReturnTab: "receive",
   assetBorrowReturnTab: "borrow",
-  systemMenu: "角色管理",
-  roleQuery: "",
-  roleQueryDraft: "",
-  roleUserQuery: "",
-  roleUserQueryDraft: "",
+  systemMenu: "员工信息",
   selfServiceMenu: "员工自助管理",
   selfServiceSignOpen: false,
   selfServiceCategoryExpanded: {},
-  roleTab: "system",
-  selectedRoleId: "super_admin",
-  roleForm: null,
-  roleError: "",
-  pendingRoleDeleteId: "",
-  rolePermissionGroup: "system",
-  rolePermissionModule: "employee",
   navOpen: {},
   assetSubnavScrollTop: 0,
   assetDistributionMode: "organization",
@@ -2704,18 +2033,15 @@ const state = {
   locationTreeOpen: {},
   assetCategoryTreeOpen: {},
   locationImportBusy: false,
+  assetCategoryImportBusy: false,
   locationSettingsQuery: "",
   currentUser: null,
   session: {
     authenticated: false,
     method: "ecp",
     provider: "ECP统一认证",
-    terminal: "web_pc",
     lastLoginAt: new Date().toLocaleString("zh-CN", { hour12: false }),
   },
-  selectedTerminal: "web_pc",
-  authView: "login",
-  pendingAuth: null,
   assetFilters: {
     category: "全部",
     status: "全部",
@@ -2738,135 +2064,12 @@ const state = {
   selectedAssetIds: [],
   selectedInboundOrderIds: [],
   hasBootstrapped: false,
-  assets: loadSavedAssets(),
-  roles: loadRoleDefinitions(),
-  requests: [
-    {
-      id: "REQ2604298639",
-      type: "资产领用",
-      applicant: "李雷",
-      asset: "IT 设备",
-      reason: "员工入职",
-      status: "审批中",
-      system: "飞书审批",
-      date: "2026-04-29",
-      currentNode: "部门负责人",
-    },
-    {
-      id: "REQ2604301088",
-      type: "资产报废",
-      applicant: "韩梅梅",
-      asset: "旧款办公台式机",
-      reason: "设备老化无法维修",
-      status: "待执行",
-      system: "泛微OA",
-      date: "2026-04-30",
-      currentNode: "普通管理员执行",
-    },
-    {
-      id: "REQ2604302190",
-      type: "资产借用",
-      applicant: "王五",
-      asset: "投影仪",
-      reason: "客户会议临时使用",
-      status: "已完成",
-      system: "飞书审批",
-      date: "2026-04-30",
-      currentNode: "已归档",
-    },
-  ],
-  stocktakes: [
-    {
-      id: "STK-26043001",
-      name: "杭州公司 Q2 资产盘点",
-      scope: "杭州公司 / 19幢办公区 / IT设备",
-      owner: "普通管理员",
-      progress: "盘点中",
-      total: 328,
-      checked: 217,
-      diff: 6,
-      date: "2026-04-30",
-    },
-    {
-      id: "STK-26042109",
-      name: "杭州公司显示器盘点",
-      scope: "杭州公司 / 19幢办公区 / 显示器",
-      owner: "普通管理员",
-      progress: "已完成",
-      total: 86,
-      checked: 86,
-      diff: 2,
-      date: "2026-04-21",
-    },
-  ],
-  consumables: [
-    { id: "CON-001", name: "HP 12A 黑色硒鼓", model: "Q2612A", stock: 25, min: 5, warehouse: "杭州公司 / 封存仓库" },
-    { id: "CON-002", name: "A4 复印纸 80g", model: "A4-80G", stock: 120, min: 30, warehouse: "杭州公司 / 19幢1楼" },
-    { id: "CON-003", name: "超五类网线 3米", model: "CAT5E-3M", stock: 40, min: 10, warehouse: "杭州公司 / 19幢6楼" },
-    { id: "CON-004", name: "尼龙扎带 200mm", model: "ZIP-200", stock: 15, min: 20, warehouse: "杭州公司 / 19幢6楼" },
-  ],
-  repairs: [
-    { id: "RPR-001", asset: "显示器 A-10086", description: "屏幕闪烁，影响办公", reporter: "李雷", status: "维修中", handler: "普通管理员", date: "2026-04-30" },
-  ],
-  contracts: [
-    { id: "CTR-001", supplier: "京东供应商", name: "办公设备年度采购合同", endDate: "2026-12-31", amount: 280000, status: "在用" },
-    { id: "CTR-002", supplier: "微软代理商", name: "软件许可服务合同", endDate: "2027-03-31", amount: 96000, status: "在用" },
-  ],
-  deletedRoleUserAccounts: loadDeletedRoleUsers(),
-  users: loadUsers(),
-  oidcProviders: [
-    {
-      name: "Feishu OIDC",
-      issuer: "https://passport.feishu.cn/suite/passport/oauth",
-      clientId: "asset-portal-feishu",
-      status: "启用",
-      strategy: "按 email 自动绑定，未匹配则待管理员确认",
-    },
-    {
-      name: "Microsoft Entra ID",
-      issuer: "https://login.microsoftonline.com/{tenant}/v2.0",
-      clientId: "access-assets-portal",
-      status: "启用",
-      strategy: "按 sub 优先绑定，其次 email 匹配",
-    },
-    {
-      name: "企业自建 IdP",
-      issuer: "https://idp.example.com",
-      clientId: "asset-portal",
-      status: "未启用",
-      strategy: "仅允许手动绑定",
-    },
-  ],
-  oidcClaims: [
-    ["sub", "externalSubject", "外部身份唯一 ID，优先用于绑定"],
-    ["email", "email", "匹配本地用户邮箱，未命中时可自动新增"],
-    ["name", "name", "用户姓名"],
-    ["preferred_username", "account", "系统登录账号"],
-    ["department", "department", "部门，可来自 IdP 或通讯录同步"],
-    ["groups / roles", "role", "仅可映射为普通管理员或普通员工，超级管理员必须手机号注册"],
-  ],
-  pendingIdentities: [
-    {
-      provider: "Feishu OIDC",
-      subject: "feishu:ou_new_7788",
-      email: "chenjie@example.com",
-      name: "陈杰",
-      department: "销售部",
-      suggestion: "新增普通员工",
-      suggestedAction: "create_employee",
-      targetAccount: "",
-    },
-    {
-      provider: "Microsoft Entra ID",
-      subject: "aad:assigned-admin",
-      email: "asset.admin@example.com",
-      name: "普通管理员A",
-      department: "信息中心",
-      suggestion: "绑定到普通管理员",
-      suggestedAction: "bind_existing",
-      targetAccount: "asset.admin",
-    },
-  ],
+  assets: [],
+  requests: [],
+  stocktakes: [],
+  consumables: [],
+  repairs: [],
+  contracts: [],
 };
 
 const businessDataVersions = {};
@@ -2894,12 +2097,17 @@ async function hydrateBusinessData() {
     return true;
   } catch (error) {
     console.warn("[asset-portal] business data API unavailable", error);
+    for (const type of persistedBusinessDataTypes) {
+      state[type] = [];
+      businessDataVersions[type] = 0;
+    }
     return false;
   }
 }
 
 
 async function createBusinessRequest(draft) {
+  if (!ensureAnyPermission(["asset:request:create"])) return null;
   try {
     const response = await fetch("/api/business-data/requests", {
       method: "POST",
@@ -2912,24 +2120,26 @@ async function createBusinessRequest(draft) {
         details: draft,
       }),
     });
-    if (!response.ok) throw new Error(`申请创建失败（HTTP ${response.status}）`);
+    const errorPayload = response.ok ? null : await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(errorPayload?.error || `申请创建失败（HTTP ${response.status}）`);
     const created = await response.json();
-    const index = state.requests.findIndex((item) => item === draft || item.id === draft.id);
-    if (index >= 0) state.requests[index] = { ...draft, ...created.item };
+    const item = { ...draft, ...created.item };
+    state.requests.unshift(item);
     businessDataVersions.requests = Number(created.version) || businessDataVersions.requests;
     render();
+    return item;
   } catch (error) {
-    state.requests = state.requests.filter((item) => item !== draft && item.id !== draft.id);
     showToast(error?.message || "申请创建失败");
-    render();
+    return null;
   }
 }
 
 async function submitAdHocBusinessRequest(form) {
+  if (!ensureAnyPermission(["asset:request:create"])) return null;
   const data = new FormData(form);
   const draft = {
     type: String(data.get("businessType") || "新建申请"),
-    applicant: state.currentUser?.name || "体验用户",
+    applicant: state.currentUser?.name || "",
     asset: String(data.get("asset") || "未指定物品"),
     reason: String(data.get("reason") || ""),
   };
@@ -2962,24 +2172,28 @@ async function runBusinessCommand(path, method, payload, type) {
 const assetSettingSections = [
   {
     id: "assetLocationSettings",
+    permissionCode: "asset:location_settings:view",
     label: "位置管理",
     metric: `${assetLocationOptions.length} 个位置`,
     description: "维护公司、仓库、楼层等资产存放位置。",
   },
   {
     id: "assetCategorySettings",
+    permissionCode: "asset:category_settings:view",
     label: "资产分类",
     metric: `${flattenAssetCategoryTree().length} 个分类`,
     description: "维护资产大类、默认字段和分类启用状态。",
   },
   {
     id: "assetCodeRules",
+    permissionCode: "asset:code_rules:view",
     label: "资产编码规则",
     metric: "自动编号",
     description: "配置资产编码前缀、流水号位数和生成规则。",
   },
   {
     id: "assetLabelTemplateSettings",
+    permissionCode: "asset:label_template_settings:view",
     label: "标签模板设置",
     metric: `${assetLabelTemplates.length} 套模板`,
     description: "配置资产标签尺寸、打印字段和二维码内容。",
@@ -3033,29 +2247,28 @@ const nav = [
     id: "home",
     label: "首页",
     icon: homeNavIcon,
-    roles: ["super_admin", "admin", "employee"],
   },
   {
     id: "assets",
     label: "资产",
     icon: assetNavIcon,
     landingRoute: "assets",
-    roles: ["super_admin", "admin", "employee"],
     children: [
-      { id: "assets", label: "资产列表", roles: ["super_admin", "admin", "employee"] },
-      { id: "assetInbound", label: "资产入库", roles: ["super_admin", "admin"] },
-      { id: "assetReceiveReturn", label: "领用退库", roles: ["super_admin", "admin"] },
-      { id: "assetBorrowReturn", label: "借用归还", roles: ["super_admin", "admin"] },
-      { id: "stocktake", label: "资产盘点", roles: ["super_admin", "admin"] },
+      { id: "assets", label: "资产列表" },
+      { id: "assetInbound", label: "资产入库" },
+      { id: "assetReceiveReturn", label: "领用退库" },
+      { id: "assetBorrowReturn", label: "借用归还" },
+      { id: "stocktake", label: "资产盘点" },
+      { id: "consumables", label: "耗材库存" },
+      { id: "repair", label: "故障维修" },
+      { id: "contracts", label: "合同供应商" },
       {
         id: "assetSettings",
         label: "资产设置",
         landingRoute: "assetLocationSettings",
-        roles: ["super_admin", "admin"],
         children: assetSettingSections.map((section) => ({
           id: section.id,
           label: section.label,
-          roles: ["super_admin", "admin"],
         })),
       },
     ],
@@ -3064,13 +2277,16 @@ const nav = [
     id: "requests",
     label: "审批",
     icon: approvalNavIcon,
-    roles: ["super_admin", "admin", "employee"],
   },
   {
     id: "settings",
     label: "系统",
     icon: systemNavIcon,
-    roles: ["super_admin", "admin"],
+  },
+  {
+    id: "authz.workspace",
+    label: "账号管理",
+    icon: systemNavIcon,
   },
 ];
 
@@ -3091,13 +2307,11 @@ const modalBackdrop = document.querySelector("#modalBackdrop");
 const modalClose = document.querySelector("#modalClose");
 const modalTitle = document.querySelector("#modalTitle");
 const modalBody = document.querySelector("#modalBody");
-let roleEventsBound = false;
 const toast = document.querySelector("#toast");
 let searchRenderTimer = null;
 let toastTimer = null;
 let assetPickerState = null;
 let assetLabelPreviewAssets = [];
-let pendingProfileAvatar = "";
 
 function money(value) {
   return new Intl.NumberFormat("zh-CN", {
@@ -3112,7 +2326,18 @@ function escapeHtml(value = "") {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function escapeCssString(value = "") {
+  return String(value)
+    .replaceAll("\\", "\\5c ")
+    .replaceAll("'", "\\27 ")
+    .replaceAll('"', "\\22 ")
+    .replaceAll("\r", "\\d ")
+    .replaceAll("\n", "\\a ")
+    .replaceAll("\f", "\\c ");
 }
 
 function cssEscape(value = "") {
@@ -3142,35 +2367,7 @@ function accountInitial(name = "") {
 function avatarMarkup(user, className = "avatar") {
   const src = user?.avatar || "";
   const label = accountInitial(user?.name || "");
-  return `<span class="${className} avatar" ${src ? `style="background-image:url('${escapeHtml(src)}')"` : ""}>${src ? "" : escapeHtml(label)}</span>`;
-}
-
-function readProfileOverrides() {
-  try {
-    return JSON.parse(localStorage.getItem("assetPortalProfileOverrides") || "{}") || {};
-  } catch {
-    return {};
-  }
-}
-
-function writeProfileOverrides(overrides) {
-  localStorage.setItem("assetPortalProfileOverrides", JSON.stringify(overrides || {}));
-}
-
-function applyProfileOverridesToUser(user) {
-  if (!user?.account) return user;
-  const overrides = readProfileOverrides()[user.account];
-  return overrides ? { ...user, ...overrides } : user;
-}
-
-function saveUserProfileOverride(account, values) {
-  const overrides = readProfileOverrides();
-  overrides[account] = { ...(overrides[account] || {}), ...values };
-  writeProfileOverrides(overrides);
-}
-
-function shortProviderName(provider = "") {
-  return provider.replace("OIDC / ", "").replace(" OIDC", "");
+  return `<span class="${escapeHtml(className)} avatar" ${src ? `style="background-image:url('${escapeHtml(escapeCssString(src))}')"` : ""}>${src ? "" : escapeHtml(label)}</span>`;
 }
 
 function statusTag(status) {
@@ -3189,18 +2386,7 @@ function statusTag(status) {
     盘点中: "amber",
     已驳回: "red",
   };
-  return `<span class="tag ${map[status] || "gray"}">${status}</span>`;
-}
-
-function roleBadge(roleCode) {
-  const meta = roleMeta[roleCode];
-  return `<span class="tag ${meta?.tone || "gray"}">${meta?.name || roleCode}</span>`;
-}
-
-function policyBadge(policy) {
-  const tone =
-    policy === "可免审" ? "green" : policy === "需审批" ? "amber" : policy === "只读" ? "gray" : "blue";
-  return `<span class="tag ${tone}">${policy}</span>`;
+  return `<span class="tag ${map[status] || "gray"}">${escapeHtml(status)}</span>`;
 }
 
 function uniqueAssetValues(key, rows = state.assets) {
@@ -3228,7 +2414,7 @@ function isManagedAssetLocation(location) {
 
 function optionList(values, selected) {
   return values
-    .map((value) => `<option value="${escapeHtml(value)}" ${value === selected ? "selected" : ""}>${value}</option>`)
+    .map((value) => `<option value="${escapeHtml(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(value)}</option>`)
     .join("");
 }
 
@@ -3371,7 +2557,7 @@ function readEcpContext() {
 }
 
 function isEcpAuthEnabled() {
-  return Boolean(readEcpContext()?.enabled || state.session?.method === "ecp");
+  return Boolean(readEcpContext()?.enabled);
 }
 
 function normalizeEcpPortalUserPayload() {
@@ -3380,8 +2566,6 @@ function normalizeEcpPortalUserPayload() {
   if (!rawUser) return null;
   const account = String(rawUser.account || rawUser.email || rawUser.externalSubject || "ecp.user").trim();
   if (!account) return null;
-  const roleCode = roleMeta[rawUser.roleCode] ? rawUser.roleCode : "employee";
-  const roleName = rawUser.roleName || roleMeta[roleCode]?.name || "普通员工";
   return {
     name: rawUser.name || account,
     account,
@@ -3389,158 +2573,155 @@ function normalizeEcpPortalUserPayload() {
     email: rawUser.email || "",
     department: rawUser.department || "ECP组织",
     company: rawUser.company || rawUser.companyName || "默认公司",
-    roleCode,
-    roleName,
-    roleDefinitionId: rawUser.roleDefinitionId || roleCode,
-    managerRoleCode: rawUser.managerRoleCode || (["super_admin", "admin"].includes(roleCode) ? roleCode : ""),
-    managerRoleName: rawUser.managerRoleName || (["super_admin", "admin"].includes(roleCode) ? roleName : ""),
-    scope: rawUser.scope || roleMeta[roleCode]?.scope || "",
-    loginType: rawUser.loginType || "ECP统一认证",
-    identitySource: rawUser.identitySource || "ECP",
-    externalSubject: rawUser.externalSubject || `ecp:${account}`,
-    bindStatus: rawUser.bindStatus || "已绑定",
+    roleCode: rawUser.roleCode || "",
+    roleName: rawUser.roleName || "ECP用户",
+    subject: rawUser.subject || "",
+    directorySubject: rawUser.directorySubject || rawUser.subject || "",
     avatar: rawUser.avatar || "",
+    permissionCodes: Array.isArray(rawUser.permissionCodes) ? rawUser.permissionCodes : [],
   };
 }
 
-function upsertEcpUser(user) {
-  const isEcpUser = user.identitySource === "ECP" || user.loginType === "ECP统一认证" || String(user.externalSubject || "").startsWith("ecp:");
-  const matched =
-    state.users.find((item) => item.externalSubject === user.externalSubject) ||
-    state.users.find((item) => user.email && item.email === user.email) ||
-    state.users.find((item) => item.account === user.account && (!isEcpUser || item.identitySource === "ECP"));
-  const nextUser = matched ? { ...matched, ...user } : user;
-  if (!matched) {
-    state.users.unshift(nextUser);
-  } else {
-    Object.assign(matched, nextUser);
-  }
-  return nextUser;
+function permissionSet() {
+  return new Set(Array.isArray(state.currentUser?.permissionCodes) ? state.currentUser.permissionCodes : []);
 }
 
-function applyTerminalModeToUser(user, mode = readTerminalMode()) {
-  const terminalMode = normalizeTerminalMode(mode);
-  const managerRoleCode = user.managerRoleCode || (["super_admin", "admin"].includes(user.roleCode) ? user.roleCode : "");
-  const managerRoleName = user.managerRoleName || roleMeta[managerRoleCode]?.name || "";
-  const nextUser = {
-    ...user,
-    managerRoleCode,
-    managerRoleName,
-  };
+function hasPermission(code) {
+  return Boolean(code) && permissionSet().has(code);
+}
 
-  if (terminalMode === "employee" && managerRoleCode) {
-    return {
-      ...nextUser,
-      roleCode: "employee",
-      roleName: roleMeta.employee.name,
-      roleDefinitionId: "employee",
-    };
+function hasAnyPermission(codes = []) {
+  const granted = permissionSet();
+  return codes.some((code) => granted.has(code));
+}
+
+function ensureAnyPermission(codes, message = "当前账号没有执行该操作的权限") {
+  if (hasAnyPermission(codes)) return true;
+  showToast(message);
+  return false;
+}
+
+const createPermissionByKind = {
+  asset: "asset:item:create",
+  request: "asset:request:create",
+  stocktake: "asset:stocktake:create",
+  consumable: "asset:consumable:create",
+  repair: "asset:repair:create",
+  contract: "asset:contract:create",
+};
+
+const portalWritePermissions = [
+  "asset:item:create",
+  "asset:item:update",
+  "asset:item:batchUpdate",
+  "asset:inbound:create",
+  "asset:receive_return:receive",
+  "asset:receive_return:return",
+  "asset:receive_return:handover",
+  "asset:borrow_return:borrow",
+  "asset:borrow_return:return",
+  "asset:request:create",
+  "asset:request:review",
+  "asset:stocktake:create",
+  "asset:stocktake:update",
+  "asset:consumable:create",
+  "asset:consumable:adjust",
+  "asset:repair:create",
+  "asset:repair:update",
+  "asset:contract:create",
+];
+
+const managementViewPermissions = [
+  "asset:employee:view",
+  "asset:department:view",
+  "asset:inbound:view",
+  "asset:receive_return:view",
+  "asset:borrow_return:view",
+  "asset:stocktake:view",
+  "asset:request:review",
+  "asset:location_settings:view",
+  "asset:category_settings:view",
+  "asset:code_rules:view",
+  "asset:label_template_settings:view",
+  "asset:self_service:update",
+  "asset:integration:view",
+  "asset:form:view",
+];
+
+function hasManagementExperience() {
+  return hasAnyPermission(managementViewPermissions);
+}
+
+function portalMenuItems() {
+  const items = readEcpContext()?.getMenuItems?.();
+  return Array.isArray(items) ? items : [];
+}
+
+function portalMenuById(id) {
+  return portalMenuItems().find((item) => item.id === id) || null;
+}
+
+function portalMenuForState(route = state.route) {
+  if (route === "settings") {
+    return portalMenuItems().find((item) => item.parentId === "settings" && item.title === state.systemMenu)
+      || portalMenuItems().find((item) => item.parentId === "settings")
+      || portalMenuById("settings");
   }
+  return portalMenuById(route);
+}
 
-  if (terminalMode === "manager" && user.roleCode === "employee" && managerRoleCode) {
-    return {
-      ...nextUser,
-      roleCode: managerRoleCode,
-      roleName: managerRoleName,
-      roleDefinitionId: managerRoleCode,
-    };
+function stateRouteFromPortalMenu(item) {
+  if (!item) return "";
+  if (item.id === "settings" || item.parentId === "settings") return "settings";
+  return item.id;
+}
+
+function applyPortalMenuRoute(item, shouldRender = false) {
+  const nextRoute = stateRouteFromPortalMenu(item);
+  if (!nextRoute) return false;
+  state.route = nextRoute;
+  if (item.parentId === "settings" && item.title) {
+    state.systemMenu = item.title;
+    if (state.systemMenu === "员工自助" && !state.selfServiceMenu) state.selfServiceMenu = "员工自助管理";
   }
-
-  return nextUser;
+  if (shouldRender && isAuthenticated()) render();
+  return true;
 }
 
 function applyEcpSession() {
   if (!isEcpAuthEnabled()) return false;
   const ecpUser = normalizeEcpPortalUserPayload();
   if (!ecpUser) return false;
-  const user = upsertEcpUser(ecpUser);
-
-  if (idleLogoutTimer) {
-    window.clearTimeout(idleLogoutTimer);
-    idleLogoutTimer = null;
-  }
-  clearLocalSession();
   resetSessionView();
-  state.currentUser = applyTerminalModeToUser(applyProfileOverridesToUser(user), readTerminalMode());
-  state.selectedTerminal = state.selectedTerminal || "web_pc";
+  state.currentUser = ecpUser;
   state.session = {
     authenticated: true,
     method: "ecp",
     provider: "ECP统一认证",
-    terminal: state.selectedTerminal,
     lastLoginAt: new Date().toLocaleString("zh-CN", { hour12: false }),
   };
-  state.authView = "login";
-  state.pendingAuth = null;
-  persistTerminalMode(userTerminalMode());
-  state.route = readPersistedRoute(userTerminalMode()) || preferredAccessibleRoute();
-  persistRoute(state.route);
+  if (!applyPortalMenuRoute(readEcpContext()?.getCurrentMenu?.())) {
+    state.route = preferredAccessibleRoute();
+  }
   return true;
 }
 
 window.assetPortalApplyEcpSession = applyEcpSession;
 window.addEventListener("asset-portal-ecp-session", () => {
-  if (applyEcpSession()) render();
+  if (applyEcpSession()) {
+    render();
+    return;
+  }
+  state.currentUser = null;
+  state.session = { ...state.session, authenticated: false };
+  render();
 });
 
-function readLocalSession() {
-  try {
-    return JSON.parse(localStorage.getItem(localSessionStorageKey) || "null");
-  } catch {
-    return null;
-  }
-}
-
-function writeLocalSession(session) {
-  localStorage.setItem(localSessionStorageKey, JSON.stringify(session));
-}
-
-function clearLocalSession() {
-  localStorage.removeItem(localSessionStorageKey);
-}
-
-function routeFromHash() {
-  return decodeURIComponent(window.location.hash.replace(/^#\/?/, "").trim());
-}
-
-function normalizeTerminalMode(mode = "") {
-  return mode === "employee" ? "employee" : "manager";
-}
-
-function userTerminalMode(user = state.currentUser) {
-  return user?.roleCode === "employee" ? "employee" : "manager";
-}
-
-function readTerminalMode() {
-  return normalizeTerminalMode(localStorage.getItem(terminalModeStorageKey) || "manager");
-}
-
-function persistTerminalMode(mode = userTerminalMode()) {
-  localStorage.setItem(terminalModeStorageKey, normalizeTerminalMode(mode));
-}
-
-function terminalRouteStorageKey(mode = userTerminalMode()) {
-  return `${routeStorageKey}:${normalizeTerminalMode(mode)}`;
-}
-
-function readPersistedRoute(mode = userTerminalMode(), options = {}) {
-  const terminalMode = normalizeTerminalMode(mode);
-  const includeHash = options.includeHash !== false;
-  const hashRoute = includeHash ? routeFromHash() : "";
-  const modeRoute = localStorage.getItem(terminalRouteStorageKey(terminalMode)) || "";
-  return hashRoute || modeRoute;
-}
-
-function persistRoute(route = state.route, mode = userTerminalMode()) {
-  if (!route) return;
-  const terminalMode = normalizeTerminalMode(mode);
-  persistTerminalMode(terminalMode);
-  localStorage.setItem(terminalRouteStorageKey(terminalMode), route);
-  if (terminalMode === "manager") localStorage.setItem(routeStorageKey, route);
-  const nextHash = `#${encodeURIComponent(route)}`;
-  if (window.location.hash !== nextHash) {
-    history.replaceState(null, "", `${window.location.pathname}${window.location.search}${nextHash}`);
-  }
+function persistRoute(route = state.route) {
+  const target = portalMenuForState(route);
+  const context = readEcpContext();
+  if (!target || !context?.navigate || context.getCurrentMenu?.()?.id === target.id) return;
+  void context.navigate(target.id).catch((error) => showToast(error?.message || "页面跳转失败"));
 }
 
 function closeAccountMenus() {
@@ -3551,88 +2732,7 @@ function closeAccountMenus() {
 }
 
 function clearPersistedRoute() {
-  localStorage.removeItem(routeStorageKey);
-  localStorage.removeItem(terminalRouteStorageKey("manager"));
-  localStorage.removeItem(terminalRouteStorageKey("employee"));
-  localStorage.removeItem(terminalModeStorageKey);
-  if (window.location.hash) {
-    history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-  }
-}
-
-function saveLocalSession() {
-  if (isEcpAuthEnabled()) return;
-  if (!isAuthenticated()) return;
-  writeLocalSession({
-    account: state.currentUser.account,
-    method: state.session.method || "local",
-    provider: state.session.provider || "本地账号",
-    terminal: state.session.terminal || state.selectedTerminal || "web_pc",
-    lastLoginAt: state.session.lastLoginAt,
-    lastActiveAt: Date.now(),
-    route: state.route,
-    assetSubnavScrollTop: state.assetSubnavScrollTop || 0,
-  });
-}
-
-function scheduleIdleLogout() {
-  if (idleLogoutTimer) window.clearTimeout(idleLogoutTimer);
-  if (isEcpAuthEnabled()) return;
-  if (!isAuthenticated()) return;
-  const session = readLocalSession();
-  const lastActiveAt = Number(session?.lastActiveAt || Date.now());
-  const remaining = Math.max(sessionIdleLimitMs - (Date.now() - lastActiveAt), 0);
-  idleLogoutTimer = window.setTimeout(() => {
-    logout({ reason: "idle" });
-  }, remaining);
-}
-
-function touchSessionActivity() {
-  if (isEcpAuthEnabled()) return;
-  if (!isAuthenticated()) return;
-  const session = readLocalSession();
-  if (!session?.account) return;
-  session.lastActiveAt = Date.now();
-  writeLocalSession(session);
-  scheduleIdleLogout();
-}
-
-function restoreLocalSession() {
-  const session = readLocalSession();
-  if (!session?.account) return false;
-  if (Date.now() - Number(session.lastActiveAt || 0) >= sessionIdleLimitMs) {
-    clearLocalSession();
-    return false;
-  }
-  const user = state.users.find((item) => item.account === session.account);
-  if (!user) {
-    clearLocalSession();
-    return false;
-  }
-  state.currentUser = { ...applyProfileOverridesToUser(user) };
-  state.selectedTerminal = session.terminal || state.selectedTerminal || "web_pc";
-  state.session = {
-    authenticated: true,
-    method: session.method || "local",
-    provider: session.provider || "本地账号",
-    terminal: state.selectedTerminal,
-    lastLoginAt: session.lastLoginAt || new Date().toLocaleString("zh-CN", { hour12: false }),
-  };
-  state.authView = "login";
-  state.pendingAuth = null;
-  persistTerminalMode(userTerminalMode());
-  state.route = readPersistedRoute(userTerminalMode()) || session.route || firstAccessibleRoute();
-  state.assetSubnavScrollTop = Number(session.assetSubnavScrollTop || 0);
-  touchSessionActivity();
-  return true;
-}
-
-function currentRoleMeta() {
-  return state.currentUser ? roleMeta[state.currentUser.roleCode] : null;
-}
-
-function currentTerminalMeta() {
-  return terminalMeta[state.session.terminal] || terminalMeta.web_pc;
+  // ECP/Vue Router owns route state. No local route session is retained.
 }
 
 function resetAssetFilters() {
@@ -3667,13 +2767,16 @@ function resetSessionView() {
 
 function getAccessibleNav(items = nav) {
   if (!isAuthenticated()) return [];
-  const role = state.currentUser.roleCode;
+  const accessibleIds = new Set(portalMenuItems().map((item) => item.id));
   return items
-    .filter((item) => !item.roles || item.roles.includes(role))
     .map((item) => ({
       ...item,
+      label: portalMenuById(item.id)?.title || item.label,
       children: getAccessibleNav(item.children || []),
-    }));
+    }))
+    .filter((item) => accessibleIds.has(item.id)
+      || item.children?.length
+      || (item.id === "settings" && portalMenuItems().some((menu) => menu.parentId === "settings")));
 }
 
 function flattenNav(items = getAccessibleNav()) {
@@ -3681,11 +2784,11 @@ function flattenNav(items = getAccessibleNav()) {
 }
 
 function getPrimaryNavItems() {
-  const items = getAccessibleNav();
-  if (state.currentUser?.roleCode !== "employee") return items;
-  return items
-    .filter((item) => item.id !== "assets")
-    .map((item) => (item.id === "requests" ? { ...item, label: "申请", icon: applicationNavIcon } : item));
+  return getAccessibleNav().map((item) => (
+    item.id === "requests" && !hasPermission("asset:request:review")
+      ? { ...item, label: "申请", icon: applicationNavIcon }
+      : item
+  ));
 }
 
 function normalizeRoute(route) {
@@ -3695,23 +2798,24 @@ function normalizeRoute(route) {
   const accessible = flattenNav(getAccessibleNav());
   const group = accessible.find((item) => item.id === route && (item.landingRoute || item.children?.length));
   if (!group) return route;
-  if (group.landingRoute && accessible.some((item) => item.id === group.landingRoute)) return group.landingRoute;
-  return flattenNav(group.children || [])[0]?.id || group.landingRoute || route;
+  if (group.landingRoute && portalMenuById(group.landingRoute)) return group.landingRoute;
+  return flattenNav(group.children || []).find((item) => portalMenuById(item.id))?.id || route;
 }
 
 function routeAllowed(route) {
   const normalized = normalizeRoute(route);
-  const allowedItems = state.currentUser?.roleCode === "employee" ? flattenNav(getPrimaryNavItems()) : flattenNav();
-  return allowedItems.some((item) => item.id === normalized);
+  if (portalMenuById(normalized)) return true;
+  return normalized === "settings" && portalMenuItems().some((item) => item.parentId === "settings");
 }
 
 function firstAccessibleRoute() {
-  return flattenNav().find((item) => item.id === "home")?.id || flattenNav()[0]?.id || "home";
+  if (portalMenuById("home")) return "home";
+  return flattenNav().find((item) => portalMenuById(item.id))?.id
+    || (portalMenuItems().some((item) => item.parentId === "settings") ? "settings" : "home");
 }
 
 function preferredAccessibleRoute(fallback = firstAccessibleRoute(), options = {}) {
-  const mode = normalizeTerminalMode(options.mode || userTerminalMode());
-  const preferred = normalizeRoute(readPersistedRoute(mode, { includeHash: options.includeHash !== false }));
+  const preferred = normalizeRoute(stateRouteFromPortalMenu(readEcpContext()?.getCurrentMenu?.()));
   return preferred && routeAllowed(preferred) ? preferred : fallback;
 }
 
@@ -3723,7 +2827,6 @@ function ensureAccessibleRoute() {
   if (!routeAllowed(state.route)) {
     state.route = firstAccessibleRoute();
   }
-  persistRoute(state.route);
 }
 
 function ensureNavOpenForRoute() {
@@ -3740,9 +2843,7 @@ function findNavParentByRoute(route) {
 }
 
 function routeTitle() {
-  if (!isAuthenticated()) {
-    return state.authView === "bind" ? "身份绑定确认" : "登录入口";
-  }
+  if (!isAuthenticated()) return "登录入口";
   return flattenNav().find((item) => item.id === state.route)?.label || "首页";
 }
 
@@ -3751,7 +2852,7 @@ function setRoute(route) {
   captureAssetSubnavScroll();
   const normalized = normalizeRoute(route);
   if (!routeAllowed(normalized)) {
-    showToast("当前登录角色没有该页面权限");
+    showToast("当前账号没有该页面权限");
     return;
   }
   state.route = normalized;
@@ -3760,14 +2861,12 @@ function setRoute(route) {
     state.navOpen[parent.id] = true;
   }
   persistRoute(state.route);
-  saveLocalSession();
   render();
 }
 
 function toggleNavGroup(groupId) {
   captureAssetSubnavScroll();
   state.navOpen[groupId] = !state.navOpen[groupId];
-  saveLocalSession();
   render();
 }
 
@@ -3785,7 +2884,6 @@ function isNavGroupOpen(groupId) {
 function toggleAssetSubnavGroup(groupId) {
   captureAssetSubnavScroll();
   state.navOpen[groupId] = !isNavGroupOpen(groupId);
-  saveLocalSession();
   updateAssetSubnavGroupDom(groupId);
 }
 
@@ -3920,10 +3018,7 @@ function applyAssetCategorySelection(form, category) {
   const codeInput = form.querySelector("[data-asset-code-input]");
   if (unitInput && defaults.unit) unitInput.value = defaults.unit;
   if (usefulLifeInput && defaults.usefulLife !== "") usefulLifeInput.value = defaults.usefulLife;
-  if (codeInput && !codeInput.readOnly && (!codeInput.value.trim() || codeInput.dataset.autoGeneratedAssetCode === "true")) {
-    codeInput.value = generateAssetCode(category);
-    codeInput.dataset.autoGeneratedAssetCode = "true";
-  }
+  if (codeInput && codeInput.dataset.autoGeneratedAssetCode === "true") codeInput.value = "";
 }
 
 function bindAssetCodeInputs(root = document) {
@@ -3948,9 +3043,17 @@ function validateInlineSelects(form) {
 }
 
 function canDirectHandle(asset, action = "") {
-  if (!state.currentUser) return false;
-  if (["super_admin", "admin"].includes(state.currentUser.roleCode)) return true;
-  return false;
+  void asset;
+  const requiredPermissions = {
+    领用: ["asset:receive_return:receive"],
+    退库: ["asset:receive_return:return"],
+    借用: ["asset:borrow_return:borrow"],
+    归还: ["asset:borrow_return:return"],
+    交接: ["asset:receive_return:handover"],
+    维修: ["asset:repair:update"],
+    报修: ["asset:repair:create"],
+  }[action] || ["asset:item:update"];
+  return hasAnyPermission(requiredPermissions);
 }
 
 function assetActionLabel(asset, action) {
@@ -3962,52 +3065,22 @@ function getScopedAssets(rows = state.assets) {
 }
 
 function getScopedAllAssets(rows = state.assets) {
-  if (!state.currentUser) return [];
-  const role = state.currentUser.roleCode;
-
-  if (["super_admin", "admin"].includes(role)) return rows;
-
-  if (role === "employee") {
-    return rows.filter(
-      (item) =>
-        item.owner === state.currentUser.name ||
-        item.department === state.currentUser.department ||
-        item.owner === "IT Department"
-    );
-  }
-
-  return rows;
+  return state.currentUser ? rows : [];
 }
 
 function getScopedRequests(rows = state.requests) {
-  if (!state.currentUser) return [];
-  const role = state.currentUser.roleCode;
-
-  if (["super_admin", "admin"].includes(role)) return rows;
-  if (role === "employee") return rows.filter((item) => item.applicant === state.currentUser.name);
-  return rows;
+  return state.currentUser ? rows : [];
 }
 
 function getScopedStocktakes(rows = state.stocktakes) {
-  if (!state.currentUser) return [];
-  if (state.currentUser.roleCode === "employee") return [];
-  return rows;
+  return hasPermission("asset:stocktake:view") ? rows : [];
 }
 
 function getScopedFailures() {
-  const failures = getScopedAssets().filter((item) => item.status === "维修中");
-  if (state.currentUser?.roleCode === "employee") {
-    return failures.filter((item) => item.owner === state.currentUser.name || item.department === state.currentUser.department);
-  }
-  return failures;
+  return getScopedAssets().filter((item) => item.status === "维修中");
 }
 
 async function logout() {
-  if (idleLogoutTimer) {
-    window.clearTimeout(idleLogoutTimer);
-    idleLogoutTimer = null;
-  }
-  clearLocalSession();
   resetSessionView();
   state.currentUser = null;
   state.session = {
@@ -4038,159 +3111,21 @@ function renderAccountMenu() {
         </div>
       </div>
       <div class="account-panel-line"></div>
-      <div class="account-actions-grid">
-        <button type="button" data-account-profile>
-          <span class="account-action-icon account-action-user" aria-hidden="true"></span>
-          <span>个人中心</span>
-        </button>
-      </div>
       <button class="account-logout" type="button" data-logout>退出登录</button>
     </div>
   </div>`;
 }
 
-function profileCenterMarkup() {
-  const user = state.currentUser;
-  if (!user) return "";
-  pendingProfileAvatar = user.avatar || "";
-  return `<form id="demoForm" class="profile-center-form" data-mode="profile-center">
-    <section class="profile-center-head">
-      <label class="profile-avatar-uploader">
-        ${avatarMarkup(user, "profile-avatar-preview")}
-        <input type="file" accept="image/*" data-profile-avatar-input hidden>
-        <span>上传头像</span>
-      </label>
-      <div>
-        <h3>${escapeHtml(user.name)}</h3>
-        <p>${escapeHtml(user.roleName || "-")} · ${escapeHtml(user.department || "默认部门")}</p>
-      </div>
-    </section>
-
-    <section class="profile-center-section">
-      <h4>个人信息</h4>
-      <div class="profile-center-grid">
-        <label class="profile-field">
-          <span>账户名</span>
-          <input name="profileName" value="${escapeHtml(user.name || "")}" autocomplete="name">
-        </label>
-        <label class="profile-field">
-          <span>登录账号</span>
-          <input value="${escapeHtml(user.account || "-")}" readonly>
-        </label>
-        <label class="profile-field">
-          <span>所属部门</span>
-          <input value="${escapeHtml(user.department || "-")}" readonly>
-        </label>
-        <label class="profile-field">
-          <span>邮箱</span>
-          <input value="${escapeHtml(user.email || "-")}" readonly>
-        </label>
-      </div>
-    </section>
-
-    <section class="profile-center-section">
-      <h4>手机号绑定</h4>
-      <div class="profile-phone-row">
-        <label class="profile-field">
-          <span>手机号</span>
-          <input name="profilePhone" inputmode="tel" placeholder="未绑定" value="${escapeHtml(user.phone || "")}">
-        </label>
-        <button class="btn" type="button" data-profile-unbind-phone ${user.phone ? "" : "disabled"}>解绑手机号</button>
-      </div>
-      <p class="profile-center-note">${user.phone ? "修改后保存即可重新绑定手机号。" : "输入手机号并保存即可完成绑定。"}</p>
-    </section>
-
-    <div class="modal-actions profile-center-actions">
-      <button type="button" class="btn" data-cancel-modal>取消</button>
-      <button type="submit" class="btn primary">保存</button>
-    </div>
-  </form>`;
-}
-
-function openProfileCenter() {
-  if (!state.currentUser) return;
-  closeAccountMenus();
-  modalTitle.textContent = "个人中心";
-  modal.classList.add("profile-center-modal");
-  modal.classList.remove("location-modal", "asset-create-modal", "asset-flow-modal", "asset-import-modal", "print-preview-modal", "asset-label-print-modal");
-  modalBody.innerHTML = profileCenterMarkup();
-  openModal();
-}
-
-function bindProfileCenterControls(root = modal) {
-  const form = root.querySelector(".profile-center-form");
-  if (!form || form.dataset.profileBound === "true") return;
-  form.dataset.profileBound = "true";
-  const avatarInput = form.querySelector("[data-profile-avatar-input]");
-  const preview = form.querySelector(".profile-avatar-preview");
-  avatarInput?.addEventListener("change", () => {
-    const file = avatarInput.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      showToast("请选择图片文件");
-      return;
-    }
-    const reader = new FileReader();
-    reader.addEventListener("load", () => {
-      pendingProfileAvatar = String(reader.result || "");
-      if (preview) {
-        preview.style.backgroundImage = `url('${pendingProfileAvatar}')`;
-        preview.textContent = "";
-      }
-    });
-    reader.readAsDataURL(file);
-  });
-  form.querySelector("[data-profile-unbind-phone]")?.addEventListener("click", () => {
-    const input = form.elements.profilePhone;
-    if (input) input.value = "";
-    showToast("手机号已清空，保存后完成解绑");
-  });
-}
-
-function saveProfileCenterForm(form) {
-  const user = state.currentUser;
-  if (!user) return false;
-  const name = formValue(form, "profileName");
-  const phone = formValue(form, "profilePhone");
-  if (!name) {
-    showToast("账户名不能为空");
-    return false;
-  }
-  if (phone && !/^1\d{10}$/.test(phone)) {
-    showToast("请输入 11 位手机号");
-    return false;
-  }
-  const duplicatePhone = phone && state.users.some((item) => item.account !== user.account && item.phone === phone);
-  if (duplicatePhone) {
-    showToast("该手机号已绑定其他账号");
-    return false;
-  }
-  const nextValues = {
-    name,
-    phone,
-    avatar: pendingProfileAvatar || "",
-    bindStatus: phone ? "已绑定" : "未绑定",
-    externalSubject: phone ? `phone:${phone}` : user.externalSubject,
-  };
-  const target = state.users.find((item) => item.account === user.account);
-  if (target) Object.assign(target, nextValues);
-  state.currentUser = { ...state.currentUser, ...nextValues };
-  saveUserProfileOverride(user.account, nextValues);
-  if (target?.identitySource === "本地注册") saveRegisteredUsers();
-  saveLocalSession();
-  return true;
-}
-
 function renderChrome() {
   const authenticated = isAuthenticated();
   document.body.classList.toggle("auth-view", !authenticated);
-  document.body.classList.toggle("employee-terminal-view", authenticated && state.currentUser?.roleCode === "employee");
+  document.body.classList.toggle("employee-terminal-view", authenticated && !hasManagementExperience());
   document.body.classList.toggle("self-service-view", authenticated && state.route === "settings" && state.systemMenu === "员工自助");
   document.title = authenticated ? `资产云管家 - ${routeTitle()}` : "资产云管家 - 登录入口";
 
   if (!authenticated) {
     topbarActions.innerHTML = `
-      <div class="login-topbar-copy">资产云管家 · 登录注册</div>
+      <div class="login-topbar-copy">资产云管家 · ECP 统一认证</div>
     `;
     return;
   }
@@ -4220,9 +3155,9 @@ function renderNav() {
       const children = "";
 
       return `<div class="nav-group ${hasChildren ? "has-children" : ""} ${open ? "open" : ""}">
-        <button class="nav-item ${itemActive ? "active" : ""}" data-route="${targetRoute}" title="${item.label}" aria-label="${item.label}">
+        <button class="nav-item ${itemActive ? "active" : ""}" data-route="${escapeHtml(targetRoute)}" title="${escapeHtml(item.label)}" aria-label="${escapeHtml(item.label)}">
           <span class="nav-icon">${item.icon}</span>
-          <span class="nav-label">${item.label}</span>
+          <span class="nav-label">${escapeHtml(item.label)}</span>
         </button>
         ${children}
       </div>`;
@@ -4242,19 +3177,7 @@ function renderSidebarTools() {
     return;
   }
 
-  const isEmployee = state.currentUser?.roleCode === "employee";
   sidebarTools.innerHTML = `
-    <button class="sidebar-tool sidebar-switch-tool" data-switch-terminal title="${isEmployee ? "切换至管理端" : "切换至员工端"}" aria-label="${isEmployee ? "切换至管理端" : "切换至员工端"}">
-      <span class="sidebar-tool-icon sidebar-switch-icon" aria-hidden="true">
-        <svg class="sidebar-switch-svg" viewBox="0 0 32 32" focusable="false">
-          <circle class="sidebar-switch-head" cx="13.2" cy="9.2" r="5.4"></circle>
-          <path class="sidebar-switch-body" d="M4.8 26.5c1-5.9 4.6-9.3 9.1-9.3 4.3 0 7.7 3.1 8.8 8.7l.1.6H4.8Z"></path>
-          <circle class="sidebar-switch-badge" cx="23.2" cy="23.2" r="5.4"></circle>
-          <path class="sidebar-switch-arrow" d="M20.5 23.2h5.1m-2-2.1 2.1 2.1-2.1 2.1"></path>
-        </svg>
-      </span>
-      <span class="sidebar-tool-tip">${isEmployee ? "切换至管理端" : "切换至员工端"}</span>
-    </button>
     <button class="sidebar-tool" data-open-help title="系统使用说明" aria-label="系统使用说明">
       <span class="sidebar-tool-icon">?</span>
       <span class="sidebar-tool-tip">系统使用说明</span>
@@ -4273,7 +3196,6 @@ function restoreAssetSubnavScroll() {
   scroller.scrollTop = state.assetSubnavScrollTop || 0;
   scroller.addEventListener("scroll", () => {
     state.assetSubnavScrollTop = scroller.scrollTop;
-    saveLocalSession();
   });
 }
 
@@ -4282,7 +3204,6 @@ function getAssetSubnavItems() {
 }
 
 function shouldShowAssetSubnav() {
-  if (state.currentUser?.roleCode === "employee") return false;
   return isAuthenticated() && flattenNav(getAssetSubnavItems()).some((item) => normalizeRoute(item.id) === state.route);
 }
 
@@ -4316,7 +3237,7 @@ function renderSecondaryNav() {
             const open = hasChildren ? isNavGroupOpen(item.id) : false;
             if (!hasChildren) {
               return `
-                <button class="asset-subnav-item ${active ? "active" : ""}" data-route="${item.id}" type="button">
+                <button class="asset-subnav-item ${active ? "active" : ""}" data-route="${escapeHtml(item.id)}" type="button">
                   <span class="asset-subnav-dot" aria-hidden="true"></span>
                   <span class="asset-subnav-label">${escapeHtml(item.label)}</span>
                 </button>
@@ -4324,7 +3245,7 @@ function renderSecondaryNav() {
             }
             return `
               <div class="asset-subnav-group ${open ? "open" : ""}" data-asset-subnav-group="${escapeHtml(item.id)}">
-                <button class="asset-subnav-item asset-subnav-parent ${active ? "active" : ""}" data-asset-subnav-toggle="${item.id}" type="button" aria-expanded="${open ? "true" : "false"}">
+                <button class="asset-subnav-item asset-subnav-parent ${active ? "active" : ""}" data-asset-subnav-toggle="${escapeHtml(item.id)}" type="button" aria-expanded="${open ? "true" : "false"}">
                   <span class="asset-subnav-dot" aria-hidden="true"></span>
                   <span class="asset-subnav-label">${escapeHtml(item.label)}</span>
                   <span class="asset-subnav-caret" aria-hidden="true"></span>
@@ -4335,7 +3256,7 @@ function renderSecondaryNav() {
                       const childRoute = normalizeRoute(child.id);
                       const childSelected = childRoute === state.route;
                       return `
-                        <button class="asset-subnav-child ${childSelected ? "active" : ""}" data-route="${child.id}" type="button">
+                        <button class="asset-subnav-child ${childSelected ? "active" : ""}" data-route="${escapeHtml(child.id)}" type="button">
                           <span>${escapeHtml(child.label)}</span>
                         </button>
                       `;
@@ -4378,21 +3299,21 @@ function syncNavIndicator() {
 
 function renderQuickActionButton(item) {
   const cls = item.variant ? `btn ${item.variant}` : "btn";
-  if (item.route) return `<button class="${cls}" data-route="${item.route}">${item.label}</button>`;
-  if (item.request) return `<button class="${cls}" data-open-request="${item.request}">${item.label}</button>`;
-  if (item.kind) return `<button class="${cls}" data-open-kind="${item.kind}">${item.label}</button>`;
+  if (item.route) return `<button class="${escapeHtml(cls)}" data-route="${escapeHtml(item.route)}">${escapeHtml(item.label)}</button>`;
+  if (item.request) return `<button class="${escapeHtml(cls)}" data-open-request="${escapeHtml(item.request)}">${escapeHtml(item.label)}</button>`;
+  if (item.kind) return `<button class="${escapeHtml(cls)}" data-open-kind="${escapeHtml(item.kind)}">${escapeHtml(item.label)}</button>`;
   return "";
 }
 
 function renderWorkbenchCard(item) {
   const attr = item.route
-    ? `data-route="${item.route}"`
+    ? `data-route="${escapeHtml(item.route)}"`
     : item.request
-      ? `data-open-request="${item.request}"`
-      : `data-open-kind="${item.kind}"`;
+      ? `data-open-request="${escapeHtml(item.request)}"`
+      : `data-open-kind="${escapeHtml(item.kind)}"`;
   return `<button class="action-card" ${attr}>
-    <span class="action-icon">${item.icon}</span>
-    <strong>${item.label}</strong>
+    <span class="action-icon">${escapeHtml(item.icon)}</span>
+    <strong>${escapeHtml(item.label)}</strong>
   </button>`;
 }
 
@@ -4406,8 +3327,8 @@ function renderDeviceOverviewStrip(asset) {
       asset
         ? `<div class="device-overview-body">
             <div class="device-overview-main">
-              <strong>${asset.name}</strong>
-              <div class="panel-subtitle">${asset.model} / ${asset.assetTag}</div>
+              <strong>${escapeHtml(asset.name)}</strong>
+              <div class="panel-subtitle">${escapeHtml(asset.model)} / ${escapeHtml(asset.assetTag)}</div>
             </div>
             <div class="device-overview-meta">
               <span>当前状态</span>
@@ -4415,7 +3336,7 @@ function renderDeviceOverviewStrip(asset) {
             </div>
             <div class="device-overview-meta">
               <span>存放位置</span>
-              <strong>${asset.location}</strong>
+              <strong>${escapeHtml(asset.location)}</strong>
             </div>
             <div class="device-overview-meta">
               <span>资产风险</span>
@@ -4423,9 +3344,9 @@ function renderDeviceOverviewStrip(asset) {
             </div>
             <div class="device-overview-meta">
               <span>保修截止</span>
-              <strong>${asset.warrantyDate}</strong>
+              <strong>${escapeHtml(asset.warrantyDate)}</strong>
             </div>
-            <button class="btn" data-detail="${asset.id}">查看详情</button>
+            <button class="btn" data-detail="${escapeHtml(asset.id)}">查看详情</button>
           </div>`
         : `<div class="device-overview-empty">当前还没有分配到你的设备，建议先发起领用申请。</div>`
     }
@@ -4721,8 +3642,8 @@ function renderRecentRequestPanel(title, rows, subtitle) {
   return `<section class="panel">
     <div class="panel-header">
       <div>
-        <h2 class="panel-title">${title}</h2>
-        <div class="panel-subtitle">${subtitle}</div>
+        <h2 class="panel-title">${escapeHtml(title)}</h2>
+        <div class="panel-subtitle">${escapeHtml(subtitle)}</div>
       </div>
       ${routeAllowed("requests") ? `<button class="btn" data-route="requests">查看全部</button>` : ""}
     </div>
@@ -4732,10 +3653,10 @@ function renderRecentRequestPanel(title, rows, subtitle) {
           ? rows
               .map(
                 (item) => `<div class="timeline-item">
-                  <div class="timeline-date">${item.date}</div>
+                  <div class="timeline-date">${escapeHtml(item.date)}</div>
                   <div>
-                    <div class="timeline-title">${item.id} · ${item.type} ${statusTag(item.status)}</div>
-                    <div class="timeline-desc">${item.asset} / ${item.reason} / ${item.system}</div>
+                    <div class="timeline-title">${escapeHtml(item.id)} · ${escapeHtml(item.type)} ${statusTag(item.status)}</div>
+                    <div class="timeline-desc">${escapeHtml(item.asset)} / ${escapeHtml(item.reason)} / ${escapeHtml(item.system)}</div>
                   </div>
                 </div>`
               )
@@ -4748,7 +3669,7 @@ function renderRecentRequestPanel(title, rows, subtitle) {
 
 function renderHome() {
   if (!state.currentUser) return "";
-  if (state.currentUser.roleCode === "employee") return renderEmployeeHome();
+  if (!hasManagementExperience()) return renderEmployeeHome();
   return renderManagementHome();
 }
 
@@ -4773,7 +3694,7 @@ function renderManagementHome() {
       <article class="stat-card" data-watermark="OA">
         <div class="stat-top"><span>待处理单据</span>${statusTag("审批中")}</div>
         <div class="stat-value">${pendingCount}</div>
-        <div class="stat-note">资产动作发起后等待外部审批回写</div>
+        <div class="stat-note">资产动作等待审批或执行</div>
       </article>
       <article class="stat-card" data-watermark="¥">
         <div class="stat-top"><span>资产原值</span><span class="tag blue">当前范围</span></div>
@@ -4793,7 +3714,7 @@ function renderEmployeeHome() {
 
   return `
     <section class="hero employee-home-hero">
-      <h1>${greeting()}，${state.currentUser.name}</h1>
+      <h1>${escapeHtml(greeting())}，${escapeHtml(state.currentUser.name)}</h1>
     </section>
     ${renderDeviceOverviewStrip(myPrimaryAsset)}
   `;
@@ -4802,17 +3723,19 @@ function renderEmployeeHome() {
 function assetRowActionMarkup(item) {
   if (!state.currentUser) return "";
 
-  if (state.currentUser.roleCode === "employee") {
-    const action = item.owner === state.currentUser.name ? "归还" : "领用";
+  if (!hasAnyPermission(["asset:receive_return:handover", "asset:item:update"])) {
+    const action = item.owner === state.currentUser.name
+      ? item.status === "借用中" ? "归还" : "退还"
+      : "领用";
     return `
-      <button class="btn" data-detail="${item.id}">详情</button>
-      <button class="btn" data-asset-action="${item.id}" data-action="${action}">${assetActionLabel(item, action)}</button>
+      <button class="btn" data-detail="${escapeHtml(item.id)}">详情</button>
+      ${hasPermission("asset:request:create") ? `<button class="btn" data-asset-action="${escapeHtml(item.id)}" data-action="${escapeHtml(action)}">${escapeHtml(assetActionLabel(item, action))}</button>` : ""}
     `;
   }
 
   return `
-    <button class="btn" data-detail="${item.id}">详情</button>
-    <button class="btn" data-asset-action="${item.id}" data-action="调拨">${assetActionLabel(item, "调拨")}</button>
+    <button class="btn" data-detail="${escapeHtml(item.id)}">详情</button>
+    <button class="btn" data-asset-action="${escapeHtml(item.id)}" data-action="交接">${escapeHtml(assetActionLabel(item, "交接"))}</button>
   `;
 }
 
@@ -4896,13 +3819,13 @@ function renderAssets(title, rows) {
     );
   });
 
-  const isEmployee = state.currentUser?.roleCode === "employee";
+  const isEmployee = !hasManagementExperience();
   const categories = uniqueAssetValues("category", scopedRows);
   const activeCount = scopedRows.filter((item) => item.status === "在用").length;
   const riskCount = scopedRows.filter((item) => item.risk !== "正常").length;
   const displayTitle = isEmployee ? `我的${title}` : title;
   const subtitle = isEmployee
-    ? "仅展示本人或本部门可见资产，资产动作通过外部审批发起。"
+    ? "仅展示本人或本部门可见资产，资产动作通过系统申请发起。"
     : "强化 ITAM 能力：分类、标签、责任人、位置、风险、字段完整度和免审直办。";
 
   return `
@@ -4919,18 +3842,18 @@ function renderAssets(title, rows) {
           ${categories
             .map((category) => {
               const count = category === "全部" ? scopedRows.length : scopedRows.filter((item) => item.category === category).length;
-              return `<button class="category-item ${filters.category === category ? "active" : ""}" data-asset-filter="category" data-value="${category}">
-                <span>${category}</span><strong>${count}</strong>
+              return `<button class="category-item ${filters.category === category ? "active" : ""}" data-asset-filter="category" data-value="${escapeHtml(category)}">
+                <span>${escapeHtml(category)}</span><strong>${count}</strong>
               </button>`;
             })
             .join("")}
         </div>
         <div class="role-switch">
           <div>
-            <strong>当前登录角色</strong>
-            <div class="panel-subtitle">${state.currentUser.name} / ${state.currentUser.roleName}</div>
+            <strong>当前 ECP 身份</strong>
+            <div class="panel-subtitle">${escapeHtml(state.currentUser.name)} / ${escapeHtml(state.currentUser.roleName)}</div>
           </div>
-          <span class="tag blue">${state.currentUser.account}</span>
+          <span class="tag blue">${escapeHtml(state.currentUser.account)}</span>
         </div>
       </article>
 
@@ -4944,7 +3867,7 @@ function renderAssets(title, rows) {
         ${assetToolbar(scopedRows)}
         <div class="asset-tags">
           ${uniqueTags(scopedRows)
-            .map((tag) => `<button class="tag-filter ${filters.tag === tag ? "active" : ""}" data-asset-filter="tag" data-value="${tag}">${tag}</button>`)
+            .map((tag) => `<button class="tag-filter ${filters.tag === tag ? "active" : ""}" data-asset-filter="tag" data-value="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`)
             .join("")}
         </div>
         <div class="table-wrap">
@@ -4956,10 +3879,10 @@ function renderAssets(title, rows) {
                   ? filtered
                       .map(
                         (item) => `<tr>
-                          <td><button class="link" data-detail="${item.id}">${item.id}</button><div class="panel-subtitle">${item.assetTag || "-"}</div></td>
-                          <td>${item.name}<div class="panel-subtitle">${item.model} / ${item.sn}</div></td>
-                          <td><strong>${item.category}</strong><div class="row-tags">${(item.tags || []).map((tag) => `<span>${tag}</span>`).join("")}</div></td>
-                          <td>${item.owner}<div class="panel-subtitle">${item.department} / ${item.custodian}</div></td>
+                          <td><button class="link" data-detail="${escapeHtml(item.id)}">${escapeHtml(item.id)}</button><div class="panel-subtitle">${escapeHtml(item.assetTag || "-")}</div></td>
+                          <td>${escapeHtml(item.name)}<div class="panel-subtitle">${escapeHtml(item.model)} / ${escapeHtml(item.sn)}</div></td>
+                          <td><strong>${escapeHtml(item.category)}</strong><div class="row-tags">${(item.tags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div></td>
+                          <td>${escapeHtml(item.owner)}<div class="panel-subtitle">${escapeHtml(item.department)} / ${escapeHtml(item.custodian)}</div></td>
                           <td>${statusTag(item.status)}</td>
                           <td>${riskBadge(item.risk)}</td>
                           <td>${completeness(item.completeness)}</td>
@@ -5081,8 +4004,9 @@ function renderPagination(pagination, context) {
 }
 
 function assetListStatus(status) {
-  const tone = status.includes("审批") ? "green" : status === "空闲" ? "blue" : status === "交接待签字" ? "red" : "violet";
-  return `<span class="asset-status-pill ${tone}">${status}</span>`;
+  const normalizedStatus = String(status || "");
+  const tone = normalizedStatus.includes("审批") ? "green" : normalizedStatus === "空闲" ? "blue" : normalizedStatus === "交接待签字" ? "red" : "violet";
+  return `<span class="asset-status-pill ${tone}">${escapeHtml(normalizedStatus)}</span>`;
 }
 
 function visibleAssetColumns() {
@@ -5904,7 +4828,7 @@ function assetLabelTemplatePreviewCard(template, selected = false) {
                 ${assetLabelCardMarkup(assetLabelTemplateDemoAsset(), settings)}
               </div>
             </div>`
-          : `<div class="asset-label-template-ticket${sampleLayoutClass}">
+          : `<div class="asset-label-template-ticket${escapeHtml(sampleLayoutClass)}">
               <div class="asset-label-template-qr">
                 ${assetLabelQrMarkup(`模板:${template.name}\n尺寸:${sizeText}`)}
               </div>
@@ -6055,7 +4979,7 @@ function assetLabelTemplateConfigPanel(settings) {
   const isDefaultTemplate = baseTemplateKey === "defaultAsset";
   const currentTemplate = assetLabelTemplateByKey(settings.templateKey);
   const logoScale = assetLabelLogoScale(settings);
-  const deleteButtonMarkup = currentTemplate.custom
+  const deleteButtonMarkup = currentTemplate.custom && hasPermission("asset:label_template_settings:delete")
     ? `<button class="asset-label-template-delete" type="button" data-label-template-delete="${escapeHtml(currentTemplate.key)}">删除模板</button>`
     : "";
   const sizeText = `${Math.round(settings.labelWidth)}*${Math.round(settings.labelHeight)}mm`;
@@ -6103,7 +5027,7 @@ function assetLabelTemplateConfigPanel(settings) {
         <button class="asset-label-template-config-tab active" type="button">配置1 <span aria-hidden="true">✎</span></button>
         <div class="asset-label-template-tab-actions">
           ${deleteButtonMarkup}
-          <button class="asset-label-template-add" type="button" data-label-template-add>＋新增</button>
+          ${hasPermission("asset:label_template_settings:create") ? '<button class="asset-label-template-add" type="button" data-label-template-add>＋新增</button>' : ""}
         </div>
       </div>
 
@@ -6215,8 +5139,8 @@ function assetLabelTemplateConfigPanel(settings) {
       </section>
 
       <div class="first-template-actions">
-        <button type="button" class="btn" data-label-template-reset>重 置</button>
-        <button type="button" class="btn primary" data-label-template-save>保 存</button>
+        ${hasPermission("asset:label_template_settings:reset") ? '<button type="button" class="btn" data-label-template-reset>重 置</button>' : ""}
+        ${hasPermission("asset:label_template_settings:save") ? '<button type="button" class="btn primary" data-label-template-save>保 存</button>' : ""}
       </div>
     </form>`;
   }
@@ -6240,7 +5164,7 @@ function assetLabelTemplateConfigPanel(settings) {
       <button class="asset-label-template-config-tab active" type="button">配置1 <span aria-hidden="true">✎</span></button>
       <div class="asset-label-template-tab-actions">
         ${deleteButtonMarkup}
-        <button class="asset-label-template-add" type="button" data-label-template-add>＋新增</button>
+        ${hasPermission("asset:label_template_settings:create") ? '<button class="asset-label-template-add" type="button" data-label-template-add>＋新增</button>' : ""}
       </div>
     </div>
 
@@ -6313,8 +5237,8 @@ function defaultAssetLabelEditForm(settings, options = {}) {
   const actionMarkup =
     mode === "template"
       ? `<div class="modal-actions label-print-actions default-label-editor-actions">
-          <button type="button" class="btn" data-label-template-reset>重 置</button>
-          <button type="button" class="btn primary" data-label-template-save>保 存</button>
+          ${hasPermission("asset:label_template_settings:reset") ? '<button type="button" class="btn" data-label-template-reset>重 置</button>' : ""}
+          ${hasPermission("asset:label_template_settings:save") ? '<button type="button" class="btn primary" data-label-template-save>保 存</button>' : ""}
         </div>`
       : `<div class="modal-actions label-print-actions default-label-editor-actions">
           <button type="button" class="btn" data-cancel-modal>取消</button>
@@ -6555,16 +5479,15 @@ function bindAssetLabelPrintControls(root = modal) {
     input.addEventListener("change", () => refreshAssetLabelPreview(form));
   });
 
-  form.querySelector("[data-save-label-settings]")?.addEventListener("click", () => {
+  form.querySelector("[data-save-label-settings]")?.addEventListener("click", async () => {
     state.assetLabelSettings = readAssetLabelSettingsForm(form);
-    saveAssetLabelSettings();
+    const saved = await saveAssetLabelSettings("save");
     refreshAssetLabelPreview(form);
-    showToast("标签打印配置已保存");
+    if (saved) showToast("标签打印配置已保存");
   });
 
   form.querySelector("[data-print-asset-labels-now]")?.addEventListener("click", () => {
     state.assetLabelSettings = readAssetLabelSettingsForm(form);
-    saveAssetLabelSettings();
     refreshAssetLabelPreview(form);
     openAssetLabelPrintDialog();
   });
@@ -6589,27 +5512,45 @@ function openAssetLabelPrintModal() {
   openModal();
 }
 
-function inboundOrderId(asset, index = 0) {
-  const sourceDate = asset.purchaseDate || asset.receiveDate || asset.borrowDate || todayValue();
-  const compactDate = sourceDate.replace(/\D/g, "").slice(0, 8) || todayValue().replace(/\D/g, "");
-  const suffix = String(index + 1).padStart(4, "0");
-  return `ZCRK${compactDate}${suffix}`;
+function operationAsset(record) {
+  const current = state.assets.find((asset) => asset.id === record.assetId);
+  const snapshot = {
+    id: record.assetId || "",
+    name: record.assetName || "-",
+    category: record.assetCategory || "-",
+    brand: record.assetBrand || "",
+    model: record.assetModel || "",
+    sn: record.assetSn || "",
+    price: Number(record.assetPrice) || 0,
+    owner: record.party || "未分配",
+    ownerSubject: record.partySubject || "",
+    custodian: record.operator || "",
+    company: record.company || "",
+    department: record.department || "",
+    location: record.location || "",
+    note: record.note || "",
+  };
+  return current ? { ...current, ...snapshot } : snapshot;
+}
+
+function operationRecordsByType(type) {
+  return assetOperationRecords.filter((record) => record?.type === type && record?.id && record?.assetId);
 }
 
 function buildInboundOrders() {
-  return getScopedAllAssets().map((asset, index) => {
-    const date = asset.purchaseDate || asset.receiveDate || asset.borrowDate || todayValue();
+  return operationRecordsByType("INBOUND").map((record) => {
+    const asset = operationAsset(record);
     const inferredType = asset.purchaseMethod && asset.purchaseMethod.includes("导入") ? "excel批量导入" : "新增资产";
     return {
-      id: inboundOrderId(asset, index),
-      status: asset.inboundStatus || "已完成",
-      type: asset.inboundType || inferredType,
-      date,
-      createdDate: date,
-      operator: asset.custodian || state.currentUser?.name || "admin",
+      id: record.id,
+      status: record.status,
+      type: record.sourceType || inferredType,
+      date: record.date,
+      createdDate: record.date,
+      operator: record.operator || "-",
       purchaser: asset.purchaser || "",
-      company: asset.ownerCompany || asset.company || "默认公司",
-      note: asset.inboundNote || asset.note || "",
+      company: record.company || asset.ownerCompany || asset.company || "默认公司",
+      note: record.note || "",
       asset,
     };
   });
@@ -6722,6 +5663,27 @@ function excelCell(value, styleId = "") {
   return `<Cell${style}><Data ss:Type="String">${escapeXml(value)}</Data></Cell>`;
 }
 
+function spreadsheetWorkbookXml(sheetName, columns, rows) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:x="urn:schemas-microsoft-com:office:excel"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Styles>
+    <Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#D9EAF7" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="Body"><Alignment ss:Vertical="Center"/></Style>
+  </Styles>
+  <Worksheet ss:Name="${escapeXml(sheetName)}">
+    <Table>
+      ${columns.map(([, , width]) => `<Column ss:Width="${width}"/>`).join("")}
+      <Row>${columns.map(([, label]) => excelCell(label, "Header")).join("")}</Row>
+      ${rows.map((row) => `<Row>${columns.map(([key]) => excelCell(row[key] ?? "", "Body")).join("")}</Row>`).join("")}
+    </Table>
+  </Worksheet>
+</Workbook>`;
+}
+
 function downloadBlob(filename, content, type) {
   const blob = content instanceof Blob ? content : new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -6732,6 +5694,45 @@ function downloadBlob(filename, content, type) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function exportAssetWorkbook() {
+  const filtered = getScopedAssets(state.assets).filter(matchesAssetQuery);
+  const selectedIds = new Set(state.selectedAssetIds || []);
+  const selected = filtered.filter((asset) => selectedIds.has(asset.id));
+  const assets = selected.length ? selected : filtered;
+  if (!assets.length) {
+    showToast("当前没有可导出的资产");
+    return;
+  }
+  const columns = [
+    ["id", "资产编码", 110],
+    ["name", "资产名称", 130],
+    ["category", "资产分类", 100],
+    ["brand", "品牌", 80],
+    ["model", "型号", 100],
+    ["sn", "设备序列号", 120],
+    ["status", "状态", 72],
+    ["owner", "使用人", 90],
+    ["ownerSubject", "ECP人员Subject", 150],
+    ["company", "使用公司", 110],
+    ["department", "使用部门", 110],
+    ["location", "所在位置", 160],
+    ["custodian", "管理员", 90],
+    ["ownerCompany", "所属/承租公司", 120],
+    ["price", "金额", 80],
+    ["rent", "租金", 80],
+    ["purchaseDate", "购置/起租日期", 100],
+    ["receiveDate", "领用日期", 100],
+    ["purchaseMethod", "购置方式", 90],
+    ["orderNo", "订单号", 110],
+    ["unit", "计量单位", 72],
+    ["supplier", "供应商", 110],
+    ["note", "备注", 180],
+  ];
+  const workbook = spreadsheetWorkbookXml("资产列表", columns, assets);
+  downloadBlob(`资产列表_${todayValue()}_${assets.length}条.xls`, workbook, "application/vnd.ms-excel;charset=utf-8");
+  showToast(`已导出 ${assets.length} 条资产`);
 }
 
 function exportSelectedInboundOrders() {
@@ -6879,7 +5880,7 @@ function flowAssetRows(assets, options = {}) {
         <td>${escapeHtml(asset.brand || "-")}</td>
         <td>${escapeHtml(asset.model || "-")}</td>
         <td>${escapeHtml(asset.sn || "-")}</td>
-        <td>${asset.price || 0}</td>
+        <td>${escapeHtml(asset.price || 0)}</td>
         <td>${escapeHtml(asset.ownerCompany || asset.company || "默认公司")}</td>
         <td>${escapeHtml(asset.company || "默认公司")}</td>
         <td>${escapeHtml(asset.department || "默认部门")}</td>
@@ -6943,15 +5944,15 @@ function advancedFilterOptionList(filters, name, values, fallback = "全部") {
 
 function advancedTextInput(label, name, placeholder = label, filters = {}) {
   return `<label class="advanced-filter-field">
-    <span>${label}</span>
-    <input name="${name}" value="${advancedFilterValue(filters, name)}" placeholder="${placeholder}">
+    <span>${escapeHtml(label)}</span>
+    <input name="${escapeHtml(name)}" value="${advancedFilterValue(filters, name)}" placeholder="${escapeHtml(placeholder)}">
   </label>`;
 }
 
 function advancedSelect(label, name, values, filters = {}, fallback = "全部") {
   return `<label class="advanced-filter-field">
-    <span>${label}</span>
-    <select name="${name}">${advancedFilterOptionList(filters, name, values, fallback)}</select>
+    <span>${escapeHtml(label)}</span>
+    <select name="${escapeHtml(name)}">${advancedFilterOptionList(filters, name, values, fallback)}</select>
   </label>`;
 }
 
@@ -6959,8 +5960,8 @@ function advancedPlaceholderSelect(label, name, placeholder, values, filters = {
   const selected = filters?.[name] || "";
   const optionsMarkup = values === assetLocationOptions ? locationOptionList(selected, { placeholder }) : values.map((value) => `<option value="${escapeHtml(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(value)}</option>`).join("");
   return `<label class="advanced-filter-field">
-    <span>${label}</span>
-    <select name="${name}" class="${selected ? "" : "placeholder-select"}" data-placeholder-select>
+    <span>${escapeHtml(label)}</span>
+    <select name="${escapeHtml(name)}" class="${selected ? "" : "placeholder-select"}" data-placeholder-select>
       ${optionsMarkup}
     </select>
   </label>`;
@@ -6976,11 +5977,11 @@ function advancedAssetSelect(label, name, values) {
 
 function advancedDateRange(label, startName, endName, filters = {}) {
   return `<label class="advanced-filter-field advanced-filter-date-range">
-    <span>${label}</span>
+    <span>${escapeHtml(label)}</span>
     <div class="advanced-date-range-control">
-      <input name="${startName}" type="date" value="${advancedFilterValue(filters, startName)}" aria-label="${label}开始日期">
+      <input name="${escapeHtml(startName)}" type="date" value="${advancedFilterValue(filters, startName)}" aria-label="${escapeHtml(label)}开始日期">
       <span>→</span>
-      <input name="${endName}" type="date" value="${advancedFilterValue(filters, endName)}" aria-label="${label}结束日期">
+      <input name="${escapeHtml(endName)}" type="date" value="${advancedFilterValue(filters, endName)}" aria-label="${escapeHtml(label)}结束日期">
     </div>
   </label>`;
 }
@@ -7357,7 +6358,9 @@ function renderAssetInbound() {
 
 function renderInboundOrderRow(order) {
   const checked = state.selectedInboundOrderIds.includes(order.id);
-  const canCancel = order.status !== "已取消";
+  const canCancel = order.status !== "已取消"
+    && ["空闲", "闲置", "上架", "待验收"].includes(order.asset.status)
+    && (!order.asset.owner || order.asset.owner === "未分配");
   return `<tr>${inboundOrderTableColumns
     .map((column) => {
       const className = column.key === "select" ? ` class="inbound-select-cell"` : "";
@@ -7398,8 +6401,8 @@ function inboundPrintSummary(orders) {
     <div class="print-summary-grid">
       ${detail("入库单数", orders.length)}
       ${detail("资产数量", orders.length)}
-      ${detail("资产分类", escapeHtml(categories))}
-      ${detail("所属公司", escapeHtml(companies))}
+      ${detail("资产分类", categories)}
+      ${detail("所属公司", companies)}
       ${detail("入库总金额", money(totalPrice))}
       ${detail("打印日期", todayValue())}
     </div>
@@ -7487,12 +6490,6 @@ function inboundStatusPill(status) {
   return `<span class="inbound-status-pill ${tone}">${escapeHtml(status)}</span>`;
 }
 
-function receiveReturnOrderId(asset, index = 0, prefix = "LY", overrideDate = "") {
-  const sourceDate = overrideDate || asset.receiveDate || asset.returnDate || asset.purchaseDate || todayValue();
-  const compactDate = sourceDate.replace(/\D/g, "").slice(0, 8) || todayValue().replace(/\D/g, "");
-  return `${prefix}${compactDate}${String(index + 1).padStart(6, "0")}`;
-}
-
 function assetHasLifecycle(asset, action) {
   return (asset.lifecycle || []).some((item) => item?.[1] === action);
 }
@@ -7526,8 +6523,7 @@ function handoverStatusForAsset(asset) {
 }
 
 function employeeCodeForName(name = "") {
-  const user = state.users.find((item) => item.name === name || item.account === name);
-  if (user?.account) return user.account;
+  if (name === state.currentUser?.name || name === state.currentUser?.account) return state.currentUser.account;
   return name && name !== "未分配" ? name : "-";
 }
 
@@ -7599,90 +6595,52 @@ function matchesReceiveReturnOrder(order) {
 
 function getReceiveReturnOrders() {
   const activeTab = state.assetReceiveReturnTab || "receive";
-  const scopedAssets = getScopedAssets();
-  const rows = scopedAssets
-    .map((asset, index) => {
-      if (activeTab === "return") {
-        const returned = Boolean(asset.returnDate || assetHasLifecycle(asset, "资产退库"));
-        if (!returned) return null;
+  if (activeTab === "employee") {
+    return businessDataItems("requests")
+      .filter((request) => request.type === "资产领用" && Array.isArray(request.assetIds))
+      .flatMap((request) => request.assetIds.map((assetId) => {
+        const asset = state.assets.find((item) => item.id === assetId);
+        if (!asset) return null;
         return {
-          id: receiveReturnOrderId(asset, index, "TK"),
-          status: "已完成",
-          date: asset.returnDate || asset.receiveDate || todayValue(),
-          handler: asset.custodian || state.currentUser?.name || "admin",
-	          receiver: asset.owner || "未分配",
-	          employeeCode: employeeCodeForName(asset.owner),
-	          company: asset.company || asset.ownerCompany || "默认公司",
-	          department: asset.department || "默认部门",
-	          location: asset.location || "-",
-	          note: asset.note || "",
-	          actionLabel: "查看",
-          actionType: "detail",
+          id: request.id,
+          requestId: request.id,
+          status: request.status === "审批中" ? "审批中" : request.status === "已完成" ? "已完成" : request.status || "待处理",
+          date: request.date || "-",
+          handler: request.decisionOperator || "-",
+          receiver: request.applicant || "-",
+          employeeCode: employeeCodeForName(request.applicant),
+          company: asset.company || asset.ownerCompany || "默认公司",
+          department: asset.department || "默认部门",
+          location: request.receiveLocation || asset.location || "-",
+          note: request.reason || "",
+          actionLabel: "查看",
+          actionType: "request-detail",
           asset,
         };
-      }
+      }))
+      .filter(Boolean);
+  }
 
-      if (activeTab === "employee") {
-        const requested = assetHasLifecycle(asset, "资产领用") || isReceivableAsset(asset);
-        if (!requested) return null;
-        return {
-          id: receiveReturnOrderId(asset, index, "SQ"),
-          status: asset.receiveDate ? "已完成" : "待处理",
-          date: asset.receiveDate || asset.purchaseDate || todayValue(),
-          handler: asset.custodian || state.currentUser?.name || "admin",
-	          receiver: asset.owner && asset.owner !== "未分配" ? asset.owner : "-",
-	          employeeCode: employeeCodeForName(asset.owner),
-	          company: asset.company || asset.ownerCompany || "默认公司",
-	          department: asset.department || "默认部门",
-	          location: asset.location || "-",
-	          note: asset.note || "",
-	          actionLabel: isReceivableAsset(asset) ? "领用" : "查看",
-          actionType: isReceivableAsset(asset) ? "receive" : "detail",
-          asset,
-        };
-      }
-
-      if (activeTab === "handover") {
-        if (!hasHandoverRecord(asset)) return null;
-        const handoverDate = asset.handoverDate || latestAssetLifecycleDate(asset, "资产交接") || asset.receiveDate || asset.borrowDate || todayValue();
-        const status = handoverStatusForAsset(asset);
-        return {
-          id: receiveReturnOrderId(asset, index, "JJ", handoverDate),
-          status,
-          date: handoverDate,
-          handler: asset.custodian || state.currentUser?.name || "admin",
-	          receiver: asset.owner || "-",
-	          employeeCode: employeeCodeForName(asset.owner),
-	          company: asset.company || asset.ownerCompany || "默认公司",
-	          department: asset.department || "默认部门",
-	          location: asset.location || "-",
-	          note: asset.note || "",
-	          actionLabel: status === "待签字" ? "签字" : "查看",
-          actionType: status === "待签字" ? "handover-sign" : "detail",
-          asset,
-        };
-      }
-
-      if (!hasReceiveRecord(asset)) return null;
-      return {
-        id: receiveReturnOrderId(asset, index, "LY"),
-        status: "已完成",
-        date: asset.receiveDate || asset.purchaseDate || todayValue(),
-        handler: asset.custodian || state.currentUser?.name || "admin",
-		        receiver: asset.owner && asset.owner !== "未分配" ? asset.owner : "-",
-	        employeeCode: employeeCodeForName(asset.owner),
-	        company: asset.company || asset.ownerCompany || "默认公司",
-	        department: asset.department || "默认部门",
-		        location: asset.location || "-",
-		        note: asset.note || "",
-		        actionLabel: "查看",
-        actionType: "detail",
-        asset,
-      };
-    })
-    .filter(Boolean);
-
-  return rows;
+  const operationType = activeTab === "return" ? "RETURN" : activeTab === "handover" ? "HANDOVER" : "RECEIVE";
+  return operationRecordsByType(operationType).map((record) => {
+    const asset = operationAsset(record);
+    const canSign = record.canSign === true;
+    return {
+      id: record.id,
+      status: record.status,
+      date: record.date,
+      handler: record.operator || "-",
+      receiver: record.party || "-",
+      employeeCode: employeeCodeForName(record.party),
+      company: record.company || asset.company || asset.ownerCompany || "默认公司",
+      department: record.department || asset.department || "默认部门",
+      location: record.location || asset.location || "-",
+      note: record.note || "",
+      actionLabel: canSign ? "签字" : "查看",
+      actionType: canSign ? "handover-sign" : "detail",
+      asset,
+    };
+  });
 }
 
 function receiveReturnColumns(config = receiveReturnViewConfig()) {
@@ -7748,6 +6706,9 @@ function receiveReturnActionMarkup(order) {
          <button class="link receive-return-action-link danger" data-cancel-handover-asset="${escapeHtml(order.asset.id)}">取消交接</button>`
       : `<button class="link receive-return-action-link" data-detail="${escapeHtml(order.asset.id)}">查看</button>`;
   }
+  if (order.actionType === "request-detail") {
+    return `<button class="link receive-return-action-link" data-request="${escapeHtml(order.requestId)}">查看</button>`;
+  }
   if (order.actionType === "receive") return `<button class="link receive-return-action-link" data-quick-receive-asset="${escapeHtml(order.asset.id)}">领用</button>`;
   if (order.actionType === "return") return `<button class="link receive-return-action-link" data-quick-return-asset="${escapeHtml(order.asset.id)}">退库</button>`;
   if (order.actionType === "handover") return `<button class="link receive-return-action-link" data-quick-handover-asset="${escapeHtml(order.asset.id)}">交接</button>`;
@@ -7759,7 +6720,12 @@ function receiveReturnCellMarkup(order, column, checked) {
     return `<input type="checkbox" data-receive-return-select="${escapeHtml(order.asset.id)}" aria-label="选择${escapeHtml(order.id)}" ${checked ? "checked" : ""}>`;
   }
   if (column.key === "status") return receiveReturnStatusPill(order.status);
-  if (column.key === "id") return `<button class="link receive-return-order-link" data-detail="${escapeHtml(order.asset.id)}">${escapeHtml(order.id)}</button>`;
+  if (column.key === "id") {
+    const target = order.requestId
+      ? `data-request="${escapeHtml(order.requestId)}"`
+      : `data-detail="${escapeHtml(order.asset.id)}"`;
+    return `<button class="link receive-return-order-link" ${target}>${escapeHtml(order.id)}</button>`;
+  }
   if (column.key === "assetId") return escapeHtml(order.asset.id || "-");
   if (column.key === "action") return receiveReturnActionMarkup(order);
   return escapeHtml(order[column.key] || "-");
@@ -8053,20 +7019,17 @@ function renderAssetReceiveReturn() {
 
 function renderAssetTransferOwner() {
   const rows = getScopedAssets().filter((item) => item.status === "在用");
-  return `${pageHeader("变更领用人", "领用后的资产支持在线交接，管理员可变更资产当前领用人。", "发起交接", null, { actionAttr: "data-bulk-asset-action=\"handover\"" })}
+  return `${pageHeader("变更领用人", "领用后的资产支持在线交接，管理员可变更资产当前领用人。", "发起交接", null, {
+    actionAttr: "data-bulk-asset-action=\"handover\"",
+    actionPermissionCodes: ["asset:receive_return:handover"],
+  })}
     <section class="panel">
       <div class="table-wrap">
         <table>
           <thead><tr><th>资产编号</th><th>资产名称</th><th>当前领用人</th><th>部门</th><th>使用信息</th><th>操作</th></tr></thead>
-          <tbody>${rows.map((item) => `<tr><td>${item.id}</td><td>${item.name}</td><td>${item.owner}</td><td>${item.department}</td><td>${item.location}</td><td><button class="btn" data-quick-handover-asset="${escapeHtml(item.id)}">在线交接</button></td></tr>`).join("")}</tbody>
+          <tbody>${rows.map((item) => `<tr><td>${escapeHtml(item.id)}</td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.owner)}</td><td>${escapeHtml(item.department)}</td><td>${escapeHtml(item.location)}</td><td><button class="btn" data-quick-handover-asset="${escapeHtml(item.id)}">在线交接</button></td></tr>`).join("")}</tbody>
         </table>
     </section>`;
-}
-
-function borrowReturnOrderId(asset, index = 0, prefix = "JY") {
-  const sourceDate = asset.borrowDate || asset.returnDate || asset.purchaseDate || todayValue();
-  const compactDate = sourceDate.replace(/\D/g, "").slice(0, 8) || todayValue().replace(/\D/g, "");
-  return `${prefix}${compactDate}${String(index + 1).padStart(6, "0")}`;
 }
 
 function borrowReturnStatusPill(status) {
@@ -8144,50 +7107,33 @@ function matchesAdvancedBorrowReturnFilters(row) {
 
 function getBorrowReturnRows() {
   const activeTab = state.assetBorrowReturnTab || "borrow";
-  return getScopedAssets()
-    .map((asset, index) => {
-      if (activeTab === "return") {
-        if (!isBorrowReturnableAsset(asset)) return null;
-        return {
-          id: borrowReturnOrderId(asset, index, "GH"),
-          status: "待归还",
-          handler: asset.custodian || state.currentUser?.name || "admin",
-          borrower: asset.owner || "-",
-          borrowDate: asset.borrowDate || "-",
-          expectedReturnDate: asset.expectedReturnDate || "-",
-          company: asset.company || asset.ownerCompany || "默认公司",
-          department: asset.department || "默认部门",
-          employeeCode: employeeCodeForName(asset.owner),
-          phone: asset.phone || "-",
-          email: asset.email || "-",
-          location: asset.location || "-",
-          signer: asset.owner && asset.owner !== "未分配" ? asset.owner : "-",
-          signImage: "-",
-          note: asset.note || "",
-          actionType: "return",
-          asset,
-        };
-      }
-      if (!hasBorrowRecord(asset)) return null;
-      const borrowDate = asset.borrowDate || latestAssetLifecycleDate(asset, "资产借用") || "-";
-      const canceled = ["已撤销", "已取消"].includes(asset.borrowOrderStatus) || assetHasLifecycle(asset, "取消借用") || assetHasLifecycle(asset, "撤销借用");
+  const sourceRecords = activeTab === "return"
+    ? [
+        ...operationRecordsByType("BORROW").filter((record) => record.status === "待归还"),
+        ...operationRecordsByType("BORROW_RETURN"),
+      ]
+    : operationRecordsByType("BORROW");
+  return sourceRecords
+    .map((record) => {
+      const asset = operationAsset(record);
+      const pendingReturn = activeTab === "return" && record.type === "BORROW";
       return {
-        id: borrowReturnOrderId(asset, index, "JY"),
-        status: canceled ? "已撤销" : "已完成",
-        handler: asset.custodian || state.currentUser?.name || "admin",
-        borrower: asset.owner && asset.owner !== "未分配" ? asset.owner : "-",
-        borrowDate,
-        expectedReturnDate: asset.expectedReturnDate || "-",
-        company: asset.company || asset.ownerCompany || "默认公司",
-        department: asset.department || "默认部门",
-        employeeCode: employeeCodeForName(asset.owner),
+        id: pendingReturn ? record.returnOrderId : record.id,
+        status: pendingReturn ? "待归还" : record.status,
+        handler: record.operator || "-",
+        borrower: record.party || "-",
+        borrowDate: record.date || "-",
+        expectedReturnDate: record.expectedReturnDate || "-",
+        company: record.company || asset.company || asset.ownerCompany || "默认公司",
+        department: record.department || asset.department || "默认部门",
+        employeeCode: employeeCodeForName(record.party),
         phone: asset.phone || "-",
         email: asset.email || "-",
-        location: asset.location || "-",
-        signer: asset.owner && asset.owner !== "未分配" ? asset.owner : "-",
+        location: record.location || asset.location || "-",
+        signer: record.party || "-",
         signImage: "-",
-        note: asset.note || "",
-        actionType: "detail",
+        note: record.note || "",
+        actionType: pendingReturn ? "return" : "detail",
         asset,
       };
     })
@@ -8435,11 +7381,12 @@ function assetCodeRuleCurrentLength(settings = state.assetCodeRuleSettings) {
 
 function renderAssetCodeRules(activeSection) {
   const settings = normalizeAssetCodeRuleSettings(state.assetCodeRuleSettings);
+  const canUpdate = hasPermission("asset:code_rules:update");
   const selected = settings.selectedFields;
   const selectedSet = new Set(selected);
   const available = assetCodeRuleFieldDefinitions.filter((field) => !selectedSet.has(field.key));
   state.assetCodeRuleSettings = settings;
-  return `<section class="asset-code-rule-page">
+  return `<section class="asset-code-rule-page ${canUpdate ? "" : "is-readonly"}">
     <header class="asset-code-rule-title">
       <h1>${escapeHtml(activeSection.label)}</h1>
     </header>
@@ -8464,7 +7411,7 @@ function renderAssetCodeRules(activeSection) {
     <div class="asset-code-rule-serial">
       <label>
         <span>流水号：</span>
-        <select data-code-rule-serial>
+        <select data-code-rule-serial ${canUpdate ? "" : "disabled"}>
           ${[3, 4, 5, 6, 7].map((length) => `<option value="${length}" ${settings.serialLength === length ? "selected" : ""}>${length}</option>`).join("")}
         </select>
       </label>
@@ -8474,13 +7421,14 @@ function renderAssetCodeRules(activeSection) {
       <p>规则预览：<strong>${escapeHtml(assetCodeRulePreviewText(settings))}</strong></p>
       <p>当前编码规则下资产编码长度：<b>${assetCodeRuleCurrentLength(settings)}位</b></p>
     </section>
-    <div class="asset-code-rule-actions">
+    ${canUpdate ? `<div class="asset-code-rule-actions">
       <button class="btn primary" type="button" data-code-rule-save>保存</button>
-    </div>
+    </div>` : ""}
   </section>`;
 }
 
 function moveAssetCodeRuleField(fieldKey, targetList, beforeKey = "") {
+  if (!ensureAnyPermission(["asset:code_rules:update"])) return;
   if (!assetCodeRuleFieldByKey(fieldKey)) return;
   const selected = state.assetCodeRuleSettings.selectedFields.filter((key) => key !== fieldKey);
   if (targetList === "selected") {
@@ -8506,6 +7454,12 @@ function assetCodeRuleDropTarget(list, pointerY) {
 function bindAssetCodeRuleControls(root = document) {
   const pageHost = root.querySelector(".asset-code-rule-page");
   if (!pageHost) return;
+  if (!hasPermission("asset:code_rules:update")) {
+    pageHost.querySelectorAll("input, select, textarea, button").forEach((control) => {
+      control.disabled = true;
+    });
+    return;
+  }
   let pointerDrag = null;
 
   const clearPointerDrag = () => {
@@ -8651,14 +7605,13 @@ function bindAssetCodeRuleControls(root = document) {
     });
   });
 
-  pageHost.querySelector("[data-code-rule-save]")?.addEventListener("click", () => {
+  pageHost.querySelector("[data-code-rule-save]")?.addEventListener("click", async () => {
     state.assetCodeRuleSettings = normalizeAssetCodeRuleSettings(state.assetCodeRuleSettings);
     if (state.assetCodeRuleSettings.selectedFields.includes("customText") && !String(state.assetCodeRuleSettings.customTexts?.customText || "").trim()) {
       showToast("请输入自定义文本");
       return;
     }
-    saveAssetCodeRuleSettings();
-    showToast("资产编码规则已保存");
+    if (await saveAssetCodeRuleSettings()) showToast("资产编码规则已保存");
   });
 }
 
@@ -8666,11 +7619,17 @@ function bindAssetLabelTemplateSettings(root = document) {
   const pageHost = root.querySelector(".asset-label-template-page");
   if (!pageHost) return;
   const form = pageHost.querySelector("[data-label-template-settings-form]");
+  const canUpdate = hasPermission("asset:label_template_settings:update");
+  if (!canUpdate) {
+    form?.querySelectorAll("input, textarea, select").forEach((control) => {
+      control.disabled = true;
+    });
+  }
 
   const refreshSettingsPanel = () => {
+    if (!canUpdate) return;
     if (!form) return;
     state.assetLabelSettings = readAssetLabelSettingsForm(form);
-    saveAssetLabelSettings();
     const preview = pageHost.querySelector("[data-label-template-config-preview]");
     if (preview) preview.innerHTML = assetLabelTemplateConfigPreview(state.assetLabelSettings);
     const defaultPreview = pageHost.querySelector("[data-default-label-editor-preview]");
@@ -8692,16 +7651,16 @@ function bindAssetLabelTemplateSettings(root = document) {
 
   pageHost.querySelectorAll("[data-label-template-card]").forEach((card) => {
     card.addEventListener("click", () => {
+      if (!ensureAnyPermission(["asset:label_template_settings:update"])) return;
       const templateKey = card.dataset.labelTemplateCard;
       state.assetLabelSettings = normalizeAssetLabelSettings(assetLabelTemplateDefaults(templateKey));
-      saveAssetLabelSettings();
       render();
     });
   });
 
   form?.querySelector("[data-label-template-select]")?.addEventListener("change", (event) => {
+    if (!ensureAnyPermission(["asset:label_template_settings:update"])) return;
     state.assetLabelSettings = normalizeAssetLabelSettings(assetLabelTemplateDefaults(event.currentTarget.value));
-    saveAssetLabelSettings();
     render();
   });
 
@@ -8761,32 +7720,40 @@ function bindAssetLabelTemplateSettings(root = document) {
     });
   });
 
-  form?.querySelector("[data-label-template-reset]")?.addEventListener("click", () => {
+  form?.querySelector("[data-label-template-reset]")?.addEventListener("click", async () => {
+    if (!ensureAnyPermission(["asset:label_template_settings:reset"])) return;
     state.assetLabelSettings = normalizeAssetLabelSettings(assetLabelTemplateDefaults(state.assetLabelSettings.templateKey));
-    saveAssetLabelSettings();
-    render();
+    if (await saveAssetLabelSettings("reset")) {
+      render();
+      showToast("标签模板配置已重置");
+    }
   });
 
-  form?.querySelector("[data-label-template-save]")?.addEventListener("click", () => {
+  form?.querySelector("[data-label-template-save]")?.addEventListener("click", async () => {
+    if (!ensureAnyPermission(["asset:label_template_settings:save"])) return;
     state.assetLabelSettings = readAssetLabelSettingsForm(form);
-    saveAssetLabelSettings();
-    refreshSettingsPanel();
-    showToast("标签模板配置已保存");
+    if (await saveAssetLabelSettings("save", { updateCustomTemplate: true })) {
+      refreshSettingsPanel();
+      showToast("标签模板配置已保存");
+    }
   });
 
-  pageHost.querySelector("[data-label-template-add]")?.addEventListener("click", () => {
+  pageHost.querySelector("[data-label-template-add]")?.addEventListener("click", async () => {
+    if (!ensureAnyPermission(["asset:label_template_settings:create"])) return;
     if (form) state.assetLabelSettings = readAssetLabelSettingsForm(form);
-    const template = createAssetLabelCustomTemplate(state.assetLabelSettings);
+    const template = await createAssetLabelCustomTemplate(state.assetLabelSettings);
+    if (!template) return;
     render();
     showToast(`已新增模板：${template.name}`);
   });
 
-  pageHost.querySelector("[data-label-template-delete]")?.addEventListener("click", (event) => {
+  pageHost.querySelector("[data-label-template-delete]")?.addEventListener("click", async (event) => {
+    if (!ensureAnyPermission(["asset:label_template_settings:delete"])) return;
     const templateKey = event.currentTarget.dataset.labelTemplateDelete;
     const template = assetLabelTemplateByKey(templateKey);
     if (!template.custom) return;
     if (!window.confirm(`确定删除“${template.name}”吗？`)) return;
-    const removed = deleteAssetLabelCustomTemplate(templateKey);
+    const removed = await deleteAssetLabelCustomTemplate(templateKey);
     if (!removed) return;
     render();
     showToast(`已删除模板：${removed.name}`);
@@ -8802,6 +7769,7 @@ function bindAssetLabelTemplateSettings(root = document) {
     });
     fileInput?.addEventListener("click", (event) => event.stopPropagation());
     fileInput?.addEventListener("change", () => {
+      if (!ensureAnyPermission(["asset:label_template_settings:update"])) return;
       const file = fileInput.files?.[0];
       if (!file) return;
       if (!file.type.startsWith("image/")) {
@@ -8890,7 +7858,268 @@ function renderAssetCodeSwitch(enabled) {
 }
 
 function renderAssetCodeSwitchButton(row) {
+  if (!hasPermission("asset:location_settings:toggleCode")) return renderAssetCodeSwitch(row.enabled);
   return `<button class="asset-code-switch-button" type="button" data-location-toggle-code="${escapeHtml(row.id)}" aria-pressed="${row.enabled ? "true" : "false"}">${renderAssetCodeSwitch(row.enabled)}</button>`;
+}
+
+function assetCategoryWorkbookRows() {
+  return flattenAssetCategoryTree().map((node) => ({
+    code: node.code || "",
+    name: node.name || "",
+    parent: node.parent?.name || (node.parentName === "暂无上级" ? "" : node.parentName || ""),
+    usefulLife: node.usefulLife || "0",
+    unit: node.unit || "台",
+    enabled: node.enabled !== false ? "开" : "关",
+  }));
+}
+
+async function buildAssetCategoryWorkbookBlob(rows = []) {
+  const data = [
+    ["分类编码*", "分类名称*", "上级分类名称", "使用期限(月)", "计量单位", "资产编码开关"],
+    ["必填，不可重复", "必填，不可重复", "一级分类留空；上级需已存在或在表格中", "非必填，默认0", "非必填，默认台", "开/关，默认开"],
+    ...rows.map((row) => [row.code, row.name, row.parent, row.usefulLife, row.unit, row.enabled]),
+  ];
+  return buildXlsxBlob(data, [18, 24, 28, 18, 16, 18]);
+}
+
+function categoryWorkbookHeaderField(value = "") {
+  const normalized = normalizeImportHeader(value);
+  return new Map([
+    ["分类编码", "code"],
+    ["编码", "code"],
+    ["分类名称", "name"],
+    ["名称", "name"],
+    ["上级分类名称", "parent"],
+    ["上级分类", "parent"],
+    ["使用期限(月)", "usefulLife"],
+    ["使用期限（月）", "usefulLife"],
+    ["使用期限", "usefulLife"],
+    ["计量单位", "unit"],
+    ["单位", "unit"],
+    ["资产编码开关", "enabled"],
+    ["编码开关", "enabled"],
+  ].map(([label, field]) => [normalizeImportHeader(label), field])).get(normalized) || "";
+}
+
+function parseCategoryEnabled(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (["关", "关闭", "停用", "否", "false", "0", "off"].includes(normalized)) return false;
+  if (["开", "开启", "启用", "是", "true", "1", "on"].includes(normalized)) return true;
+  throw new Error(`资产编码开关“${value}”无效，请填写开或关`);
+}
+
+async function readAssetCategoryWorkbookRows(file) {
+  const rows = await readXlsxRows(file);
+  let headerIndex = -1;
+  let columns = {};
+  rows.slice(0, 12).forEach((row, index) => {
+    const candidate = {};
+    row.values.forEach((value, columnIndex) => {
+      const field = categoryWorkbookHeaderField(value);
+      if (field && candidate[field] === undefined) candidate[field] = columnIndex;
+    });
+    if (candidate.code !== undefined && candidate.name !== undefined && Object.keys(candidate).length > Object.keys(columns).length) {
+      headerIndex = index;
+      columns = candidate;
+    }
+  });
+  if (headerIndex < 0) throw new Error("未识别到分类导入表头，请使用分类导入模板");
+  return rows
+    .slice(headerIndex + 1)
+    .map((row) => ({
+      rowNumber: row.rowNumber,
+      code: rowCellValue(row, columns.code),
+      name: rowCellValue(row, columns.name),
+      parent: rowCellValue(row, columns.parent),
+      usefulLife: rowCellValue(row, columns.usefulLife),
+      unit: rowCellValue(row, columns.unit),
+      enabledText: rowCellValue(row, columns.enabled),
+    }))
+    .filter((row) => Object.entries(row).some(([key, value]) => key !== "rowNumber" && String(value || "").trim()))
+    .filter((row) => ![row.code, row.name, row.parent, row.usefulLife, row.unit, row.enabledText].join(" ").includes("必填"))
+    .map((row) => ({ ...row, enabled: parseCategoryEnabled(row.enabledText) }));
+}
+
+function findAssetCategoryNodeByNameInTree(name, tree = assetCategoryTree, parent = null) {
+  const target = String(name || "").trim();
+  if (!target) return null;
+  for (const node of tree) {
+    if (node.name === target) return { node, parent, siblings: tree };
+    const found = findAssetCategoryNodeByNameInTree(target, node.children || [], node);
+    if (found) return found;
+  }
+  return null;
+}
+
+function removeAssetCategoryNodeByName(name, tree = assetCategoryTree) {
+  const target = String(name || "").trim();
+  const index = tree.findIndex((node) => node.name === target);
+  if (index >= 0) return tree.splice(index, 1)[0];
+  for (const node of tree) {
+    const removed = removeAssetCategoryNodeByName(target, node.children || []);
+    if (removed) return removed;
+  }
+  return null;
+}
+
+function insertAssetCategoryNodeByParentName(tree, node, parentName = "") {
+  if (!parentName) {
+    tree.push(node);
+    return true;
+  }
+  const parent = findAssetCategoryNodeByNameInTree(parentName, tree)?.node;
+  if (!parent) return false;
+  parent.children = parent.children || [];
+  parent.children.push(node);
+  return true;
+}
+
+function withoutImportedCategoryNodes(nodes, importedNames) {
+  return cloneAssetCategoryTree(nodes || [])
+    .filter((node) => !importedNames.has(node.name))
+    .map((node) => ({ ...node, children: withoutImportedCategoryNodes(node.children || [], importedNames) }));
+}
+
+function validateImportedAssetCategoryRows(rows) {
+  const errors = [];
+  const names = new Map();
+  const codes = new Map();
+  rows.forEach((row) => {
+    if (!row.code) errors.push(`第 ${row.rowNumber} 行缺少分类编码`);
+    if (!row.name) errors.push(`第 ${row.rowNumber} 行缺少分类名称`);
+    if (row.name && names.has(row.name)) errors.push(`第 ${row.rowNumber} 行分类名称与第 ${names.get(row.name)} 行重复`);
+    if (row.code && codes.has(row.code)) errors.push(`第 ${row.rowNumber} 行分类编码与第 ${codes.get(row.code)} 行重复`);
+    if (row.parent && row.parent === row.name) errors.push(`第 ${row.rowNumber} 行上级分类不能等于自身`);
+    if (row.name) names.set(row.name, row.rowNumber);
+    if (row.code) codes.set(row.code, row.rowNumber);
+  });
+  const existingRows = flattenAssetCategoryTree();
+  const knownNames = new Set([...existingRows.map((row) => row.name), ...names.keys()]);
+  const codeOwners = new Map(existingRows.filter((row) => row.code).map((row) => [row.code, row.name]));
+  rows.forEach((row) => {
+    if (row.parent && !knownNames.has(row.parent)) errors.push(`第 ${row.rowNumber} 行上级分类“${row.parent}”不存在`);
+    const owner = codeOwners.get(row.code);
+    if (owner && owner !== row.name && !names.has(owner)) errors.push(`第 ${row.rowNumber} 行分类编码已被“${owner}”使用`);
+    if (row.code) codeOwners.set(row.code, row.name);
+  });
+  return errors;
+}
+
+async function applyImportedAssetCategoryRows(rows) {
+  const errors = validateImportedAssetCategoryRows(rows);
+  if (errors.length) throw new Error(errors.slice(0, 5).join("；"));
+  const previousTree = cloneAssetCategoryTree(assetCategoryTree);
+  const importedNames = new Set(rows.map((row) => row.name));
+  const existingByName = new Map(flattenAssetCategoryTree(previousTree).map((row) => [row.name, row]));
+  const nextTree = cloneAssetCategoryTree(previousTree);
+  rows.forEach((row) => removeAssetCategoryNodeByName(row.name, nextTree));
+  const nodesByName = new Map(rows.map((row) => {
+    const existing = existingByName.get(row.name);
+    const node = existing ? cloneAssetCategoryTree([existing])[0] : {
+      id: createAssetCategoryId(),
+      code: "",
+      name: row.name,
+      usefulLife: "0",
+      unit: "台",
+      enabled: true,
+      children: [],
+    };
+    node.code = row.code;
+    node.name = row.name;
+    node.usefulLife = row.usefulLife || node.usefulLife || "0";
+    node.unit = row.unit || node.unit || "台";
+    node.enabled = row.enabled === null ? node.enabled !== false : row.enabled;
+    node.children = withoutImportedCategoryNodes(node.children || [], importedNames);
+    if (row.parent && flattenAssetCategoryTree(node.children || []).some((child) => child.name === row.parent)) {
+      throw new Error(`第 ${row.rowNumber} 行不能把分类移动到自己的下级`);
+    }
+    return [row.name, node];
+  }));
+  const inserted = new Set();
+  let progressed = true;
+  while (inserted.size < rows.length && progressed) {
+    progressed = false;
+    rows.forEach((row) => {
+      if (inserted.has(row.name)) return;
+      if (row.parent && importedNames.has(row.parent) && !inserted.has(row.parent)) return;
+      if (!insertAssetCategoryNodeByParentName(nextTree, nodesByName.get(row.name), row.parent)) {
+        throw new Error(`第 ${row.rowNumber} 行上级分类“${row.parent}”不存在`);
+      }
+      inserted.add(row.name);
+      progressed = true;
+    });
+  }
+  if (inserted.size < rows.length) throw new Error("导入分类层级存在循环关系");
+  assetCategoryTree = normalizeAssetCategoryTree(nextTree);
+  state.assetCategoryTreeOpen = {};
+  try {
+    await saveAssetCategoryTree();
+  } catch (error) {
+    assetCategoryTree = previousTree;
+    throw error;
+  }
+  render();
+  return rows.length;
+}
+
+async function downloadAssetCategoryTemplate() {
+  const blob = await buildAssetCategoryWorkbookBlob();
+  downloadBlob(`资产分类导入模板_${todayValue()}.xlsx`, blob, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  showToast("已下载资产分类导入模板");
+}
+
+async function exportAssetCategoryWorkbook() {
+  const rows = assetCategoryWorkbookRows();
+  const blob = await buildAssetCategoryWorkbookBlob(rows);
+  downloadBlob(`资产分类导出_${todayValue()}.xlsx`, blob, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  showToast(`已导出 ${rows.length} 条分类`);
+}
+
+async function importAssetCategoryWorkbook(file) {
+  const rows = await readAssetCategoryWorkbookRows(file);
+  if (!rows.length) throw new Error("模板中没有可导入的分类");
+  if (rows.length > 5000) throw new Error("最大数据行数不超过5000行");
+  const count = await applyImportedAssetCategoryRows(rows);
+  showToast(`已导入 ${count} 条分类`);
+}
+
+function runAssetCategoryWorkbookAction(action) {
+  Promise.resolve().then(action).catch((error) => {
+    console.error(error);
+    showToast(error?.message || "分类导入/导出失败");
+  });
+}
+
+function triggerAssetCategoryWorkbookAction(action) {
+  if (state.assetCategoryImportBusy) return;
+  const requiredPermission = {
+    template: "asset:category_settings:template",
+    import: "asset:category_settings:import",
+    export: "asset:category_settings:export",
+  }[action];
+  if (!requiredPermission || !ensureAnyPermission([requiredPermission])) return;
+  if (action === "template") return runAssetCategoryWorkbookAction(downloadAssetCategoryTemplate);
+  if (action === "export") return runAssetCategoryWorkbookAction(exportAssetCategoryWorkbook);
+  const input = document.querySelector("[data-category-import-file]");
+  if (!input) return;
+  input.value = "";
+  input.click();
+}
+
+function handleAssetCategoryImportFile(file) {
+  if (!ensureAnyPermission(["asset:category_settings:import"])) return;
+  if (!file || state.assetCategoryImportBusy) return;
+  if (!/\.xlsx$/i.test(file.name || "")) return showToast("请上传 .xlsx 分类导入模板");
+  state.assetCategoryImportBusy = true;
+  showToast("正在导入分类...");
+  runAssetCategoryWorkbookAction(async () => {
+    try {
+      await importAssetCategoryWorkbook(file);
+    } finally {
+      state.assetCategoryImportBusy = false;
+    }
+  });
 }
 
 function filteredAssetCategoryRows(query = state.assetCategorySettingsQuery) {
@@ -8921,23 +8150,32 @@ function renderAssetCategoryTree() {
 }
 
 function renderAssetCategorySwitchButton(row) {
+  if (!hasPermission("asset:category_settings:toggleCode")) return renderAssetCodeSwitch(row.enabled);
   return `<button class="asset-code-switch-button" type="button" data-category-toggle-code="${escapeHtml(row.id)}" aria-pressed="${row.enabled ? "true" : "false"}">${renderAssetCodeSwitch(row.enabled)}</button>`;
 }
 
 function renderAssetCategoryRows(rows) {
   return rows.length
     ? rows
-        .map(
-          (row) => `<tr>
+        .map((row) => {
+          const actions = [
+            hasPermission("asset:category_settings:update")
+              ? `<button class="link" type="button" data-category-edit="${escapeHtml(row.id)}">编辑</button>`
+              : "",
+            hasPermission("asset:category_settings:delete")
+              ? `<button class="link" type="button" data-category-delete="${escapeHtml(row.id)}">删除</button>`
+              : "",
+          ].filter(Boolean);
+          return `<tr>
                     <td data-category-row="${escapeHtml(row.id)}">${escapeHtml(row.code)}</td>
                     <td>${escapeHtml(row.name)}</td>
                     <td>${escapeHtml(row.parentName)}</td>
                     <td>${escapeHtml(row.usefulLife)}</td>
                     <td>${escapeHtml(row.unit)}</td>
                     <td>${renderAssetCategorySwitchButton(row)}</td>
-                    <td><button class="link" type="button" data-category-edit="${escapeHtml(row.id)}">编辑</button><span class="action-separator">|</span><button class="link" type="button" data-category-delete="${escapeHtml(row.id)}">删除</button></td>
-                  </tr>`
-        )
+                    <td>${actions.join('<span class="action-separator">|</span>') || "-"}</td>
+                  </tr>`;
+        })
         .join("")
     : `<tr><td colspan="7" class="empty-cell">暂无匹配分类</td></tr>`;
 }
@@ -8950,11 +8188,18 @@ function toggleAssetCategoryTreeGroup(id) {
   render();
 }
 
-function toggleAssetCategoryCodeEnabled(id) {
+async function toggleAssetCategoryCodeEnabled(id) {
+  if (!ensureAnyPermission(["asset:category_settings:toggleCode"])) return;
   const found = findAssetCategoryNodeById(id);
   if (!found) return;
+  const previous = found.node.enabled;
   found.node.enabled = !found.node.enabled;
-  saveAssetCategoryTree();
+  try {
+    await saveAssetCategoryTree();
+  } catch (error) {
+    found.node.enabled = previous;
+    throw error;
+  }
   refreshAssetCategorySettingTable();
 }
 
@@ -9012,6 +8257,8 @@ function assetCategoryFormMarkup(category = null) {
 }
 
 function openAssetCategoryModal(id = "") {
+  const requiredPermission = id ? "asset:category_settings:update" : "asset:category_settings:create";
+  if (!ensureAnyPermission([requiredPermission])) return;
   const category = id ? findAssetCategoryNodeById(id)?.node : null;
   modalTitle.textContent = category ? "编辑分类" : "新增分类";
   modal.classList.add("location-modal");
@@ -9043,13 +8290,16 @@ function removeAssetCategoryNodeById(id, tree = assetCategoryTree) {
   return null;
 }
 
-function commitAssetCategoryForm(form) {
+async function commitAssetCategoryForm(form) {
+  const requiredPermission = form.dataset.categoryId ? "asset:category_settings:update" : "asset:category_settings:create";
+  if (!ensureAnyPermission([requiredPermission])) return false;
   const code = formValue(form, "categoryCode");
   const name = formValue(form, "categoryName");
   const parentId = formValue(form, "parentId");
   const usefulLife = formValue(form, "usefulLife");
   const unit = formValue(form, "unit");
   const enabled = formValue(form, "enabled") !== "false";
+  const previousTree = cloneAssetCategoryTree(assetCategoryTree);
   if (!code || !name) {
     showToast("请填写分类编码和分类名称");
     return false;
@@ -9070,23 +8320,25 @@ function commitAssetCategoryForm(form) {
   if (editingId) {
     const found = findAssetCategoryNodeById(editingId);
     if (!found) return false;
-    const beforeRows = descendantCategoryRows(found.node);
     Object.assign(found.node, { code, name, usefulLife, unit, enabled });
     if ((found.parent?.id || "") !== parentId) {
       const moved = removeAssetCategoryNodeById(editingId);
       if (!insertAssetCategoryNode(moved, parentId)) assetCategoryTree.push(moved);
     }
-    const afterNode = findAssetCategoryNodeById(editingId)?.node;
-    const afterRows = descendantCategoryRows(afterNode);
-    updateAssetCategoryReferenceMap(new Map(beforeRows.map((row, index) => [row.name, afterRows[index]?.name]).filter(([, nextName]) => Boolean(nextName))));
   } else {
     insertAssetCategoryNode({ id: createAssetCategoryId(), code, name, usefulLife, unit, enabled, children: [] }, parentId);
   }
-  saveAssetCategoryTree();
-  return true;
+  try {
+    await saveAssetCategoryTree();
+    return true;
+  } catch (error) {
+    assetCategoryTree = previousTree;
+    throw error;
+  }
 }
 
-function deleteAssetCategory(id) {
+async function deleteAssetCategory(id) {
+  if (!ensureAnyPermission(["asset:category_settings:delete"])) return;
   const found = findAssetCategoryNodeById(id);
   if (!found) return;
   const deletedNodes = descendantCategoryRows(found.node);
@@ -9098,8 +8350,14 @@ function deleteAssetCategory(id) {
   const childCount = deletedNodes.length - 1;
   const confirmed = window.confirm(`确定删除“${found.node.name}”吗？${childCount ? `这会同时删除 ${childCount} 个下级分类。` : ""}`);
   if (!confirmed) return;
+  const previousTree = cloneAssetCategoryTree(assetCategoryTree);
   removeAssetCategoryNodeById(id);
-  saveAssetCategoryTree();
+  try {
+    await saveAssetCategoryTree();
+  } catch (error) {
+    assetCategoryTree = previousTree;
+    throw error;
+  }
   render();
   showToast("分类已删除");
 }
@@ -9131,18 +8389,24 @@ function handleAssetCategoryTableClick(event) {
   }
   const remove = event.target.closest("[data-category-delete]");
   if (remove) {
-    deleteAssetCategory(remove.dataset.categoryDelete);
+    void deleteAssetCategory(remove.dataset.categoryDelete).catch((error) => showToast(error?.message || "分类删除失败"));
     return;
   }
   const toggle = event.target.closest("[data-category-toggle-code]");
   if (toggle) {
-    toggleAssetCategoryCodeEnabled(toggle.dataset.categoryToggleCode);
+    void toggleAssetCategoryCodeEnabled(toggle.dataset.categoryToggleCode)
+      .catch((error) => showToast(error?.message || "分类状态保存失败"));
   }
 }
 
 function renderAssetCategorySettings(activeSection) {
   const rows = filteredAssetCategoryRows();
   const pagination = paginateRows(rows, "assetCategory");
+  const canUseWorkbook = hasAnyPermission([
+    "asset:category_settings:template",
+    "asset:category_settings:import",
+    "asset:category_settings:export",
+  ]);
   return `
     <section class="location-settings-shell asset-category-settings-shell">
       <aside class="location-settings-tree-panel asset-category-tree-panel">
@@ -9158,17 +8422,18 @@ function renderAssetCategorySettings(activeSection) {
       <article class="location-settings-table-panel asset-category-table-panel" data-category-settings-panel>
         <div class="location-settings-toolbar asset-category-toolbar">
           <div class="asset-list-actions">
-            <button class="table-action primary" type="button" data-category-create>＋ 新增分类</button>
-            <div class="table-action-menu location-import-export-menu">
+            ${hasPermission("asset:category_settings:create") ? '<button class="table-action primary" type="button" data-category-create>＋ 新增分类</button>' : ""}
+            ${canUseWorkbook ? `<div class="table-action-menu location-import-export-menu">
               <button class="table-action has-caret" type="button">导入/导出<span class="action-caret" aria-hidden="true"></span></button>
               <div class="table-dropdown wide">
-                <button type="button" data-category-workbook-action="template">下载模板</button>
-                <button type="button" data-category-workbook-action="import">导入分类</button>
-                <button type="button" data-category-workbook-action="export">导出分类</button>
+                ${hasPermission("asset:category_settings:template") ? '<button type="button" data-category-workbook-action="template">下载模板</button>' : ""}
+                ${hasPermission("asset:category_settings:import") ? '<button type="button" data-category-workbook-action="import">导入分类</button>' : ""}
+                ${hasPermission("asset:category_settings:export") ? '<button type="button" data-category-workbook-action="export">导出分类</button>' : ""}
               </div>
-            </div>
+            </div>` : ""}
           </div>
         </div>
+        <input type="file" accept=".xlsx" data-category-import-file hidden>
         <div class="location-table-wrap asset-category-table-wrap">
           <table class="location-settings-table asset-category-settings-table">
             <colgroup>
@@ -9206,15 +8471,23 @@ function renderAssetCategorySettings(activeSection) {
 function renderLocationSettingTableRows(rows) {
   return rows.length
     ? rows
-        .map(
-          (row) => `<tr>
+        .map((row) => {
+          const actions = [
+            hasPermission("asset:location_settings:update")
+              ? `<button class="link" type="button" data-location-edit="${escapeHtml(row.id)}">编辑</button>`
+              : "",
+            hasPermission("asset:location_settings:delete")
+              ? `<button class="link" type="button" data-location-delete="${escapeHtml(row.id)}">删除</button>`
+              : "",
+          ].filter(Boolean);
+          return `<tr>
                     <td data-location-row="${escapeHtml(row.id)}">${escapeHtml(row.name)}</td>
                     <td>${escapeHtml(row.code)}</td>
                     <td>${escapeHtml(row.parent)}</td>
                     <td>${renderAssetCodeSwitchButton(row)}</td>
-                    <td><button class="link" type="button" data-location-edit="${escapeHtml(row.id)}">编辑</button><span class="action-separator">|</span><button class="link" type="button" data-location-delete="${escapeHtml(row.id)}">删除</button></td>
-                  </tr>`
-        )
+                    <td>${actions.join('<span class="action-separator">|</span>') || "-"}</td>
+                  </tr>`;
+        })
         .join("")
     : `<tr><td colspan="5" class="empty-cell">暂无匹配位置</td></tr>`;
 }
@@ -9228,12 +8501,18 @@ function toggleLocationTreeGroup(id) {
 }
 
 function locationImportExportDropdown() {
+  const canUseWorkbook = hasAnyPermission([
+    "asset:location_settings:template",
+    "asset:location_settings:import",
+    "asset:location_settings:export",
+  ]);
+  if (!canUseWorkbook) return "";
   return `<div class="table-action-menu location-import-export-menu">
     <button class="table-action has-caret" type="button">导入/导出<span class="action-caret" aria-hidden="true"></span></button>
     <div class="table-dropdown wide">
-      <button type="button" data-location-workbook-action="template">下载模板</button>
-      <button type="button" data-location-workbook-action="import">导入位置</button>
-      <button type="button" data-location-workbook-action="export">导出位置</button>
+      ${hasPermission("asset:location_settings:template") ? '<button type="button" data-location-workbook-action="template">下载模板</button>' : ""}
+      ${hasPermission("asset:location_settings:import") ? '<button type="button" data-location-workbook-action="import">导入位置</button>' : ""}
+      ${hasPermission("asset:location_settings:export") ? '<button type="button" data-location-workbook-action="export">导出位置</button>' : ""}
     </div>
   </div>`;
 }
@@ -9255,7 +8534,7 @@ function renderAssetLocationSettings(activeSection) {
       <article class="location-settings-table-panel" data-location-settings-panel>
         <div class="location-settings-toolbar">
           <div class="asset-list-actions">
-            <button class="table-action primary" type="button" data-location-create>＋ 新增位置</button>
+            ${hasPermission("asset:location_settings:create") ? '<button class="table-action primary" type="button" data-location-create>＋ 新增位置</button>' : ""}
             ${locationImportExportDropdown()}
           </div>
         </div>
@@ -9339,6 +8618,8 @@ function locationFormMarkup(location = null) {
 }
 
 function openLocationModal(id = "") {
+  const requiredPermission = id ? "asset:location_settings:update" : "asset:location_settings:create";
+  if (!ensureAnyPermission([requiredPermission])) return;
   const location = id ? findLocationNodeById(id)?.node : null;
   modalTitle.textContent = location ? "编辑位置" : "新增位置";
   modal.classList.add("location-modal");
@@ -9351,23 +8632,24 @@ function openLocationModal(id = "") {
   openModal();
 }
 
-function commitLocationForm(form) {
+async function commitLocationForm(form) {
+  const requiredPermission = form.dataset.locationId ? "asset:location_settings:update" : "asset:location_settings:create";
+  if (!ensureAnyPermission([requiredPermission])) return false;
   const name = formValue(form, "locationName");
   const code = formValue(form, "locationCode") || locationCodeForName(name);
   const parentId = formValue(form, "parentId");
   const enabled = formValue(form, "enabled") !== "false";
+  const previousTree = cloneLocationTree(assetLocationTree);
   if (!name) {
     showToast("请填写位置名称");
     return false;
   }
 
   const editingId = form.dataset.locationId || "";
-  let beforeRows = [];
   if (editingId) {
     const found = findLocationNodeById(editingId);
     if (!found) return false;
     const node = found.node;
-    beforeRows = descendantLocationRows(node, found.parent ? locationPathById(found.parent.id).split(" / ").filter(Boolean) : []);
     Object.assign(node, { name, code, enabled });
     if ((found.parent?.id || "") !== parentId) {
       const moved = removeLocationNodeById(editingId);
@@ -9381,16 +8663,18 @@ function commitLocationForm(form) {
   }
 
   refreshAssetLocationOptions();
-  if (editingId) {
-    const afterNode = findLocationNodeById(editingId)?.node;
-    const afterRows = descendantLocationRows(afterNode, locationParentPathById(editingId));
-    updateAssetLocationReferenceMap(new Map(beforeRows.map((row, index) => [row.path, afterRows[index]?.path]).filter(([, nextPath]) => Boolean(nextPath))));
+  try {
+    await saveAssetLocationTree();
+    return true;
+  } catch (error) {
+    assetLocationTree = previousTree;
+    refreshAssetLocationOptions();
+    throw error;
   }
-  saveAssetLocationTree();
-  return true;
 }
 
-function deleteLocation(id) {
+async function deleteLocation(id) {
+  if (!ensureAnyPermission(["asset:location_settings:delete"])) return;
   const found = findLocationNodeById(id);
   if (!found) return;
   const deletedNodes = descendantLocationRows(found.node, found.parent ? locationPathById(found.parent.id).split(" / ").filter(Boolean) : []);
@@ -9402,18 +8686,32 @@ function deleteLocation(id) {
   const childCount = deletedNodes.length - 1;
   const confirmed = window.confirm(`确定删除“${found.node.name}”吗？${childCount ? `这会同时删除 ${childCount} 个下级位置。` : ""}`);
   if (!confirmed) return;
+  const previousTree = cloneLocationTree(assetLocationTree);
   removeLocationNodeById(id);
   refreshAssetLocationOptions();
-  saveAssetLocationTree();
+  try {
+    await saveAssetLocationTree();
+  } catch (error) {
+    assetLocationTree = previousTree;
+    refreshAssetLocationOptions();
+    throw error;
+  }
   render();
   showToast("位置已删除");
 }
 
-function toggleLocationCodeEnabled(id) {
+async function toggleLocationCodeEnabled(id) {
+  if (!ensureAnyPermission(["asset:location_settings:toggleCode"])) return;
   const found = findLocationNodeById(id);
   if (!found) return;
+  const previous = found.node.enabled;
   found.node.enabled = !found.node.enabled;
-  saveAssetLocationTree();
+  try {
+    await saveAssetLocationTree();
+  } catch (error) {
+    found.node.enabled = previous;
+    throw error;
+  }
   render();
 }
 
@@ -9442,12 +8740,13 @@ function handleLocationTableClick(event) {
   }
   const remove = event.target.closest("[data-location-delete]");
   if (remove) {
-    deleteLocation(remove.dataset.locationDelete);
+    void deleteLocation(remove.dataset.locationDelete).catch((error) => showToast(error?.message || "位置删除失败"));
     return;
   }
   const toggle = event.target.closest("[data-location-toggle-code]");
   if (toggle) {
-    toggleLocationCodeEnabled(toggle.dataset.locationToggleCode);
+    void toggleLocationCodeEnabled(toggle.dataset.locationToggleCode)
+      .catch((error) => showToast(error?.message || "位置状态保存失败"));
   }
 }
 
@@ -9465,7 +8764,7 @@ function bindLocationFormControls(root = modal) {
 }
 
 function assetKpi(label, value, note) {
-  return `<div class="asset-kpi"><div class="detail-label">${label}</div><strong>${value}</strong><div class="panel-subtitle">${note}</div></div>`;
+  return `<div class="asset-kpi"><div class="detail-label">${escapeHtml(label)}</div><strong>${escapeHtml(value)}</strong><div class="panel-subtitle">${escapeHtml(note)}</div></div>`;
 }
 
 function assetToolbar(rows) {
@@ -9482,12 +8781,13 @@ function assetToolbar(rows) {
 
 function riskBadge(risk) {
   const color = risk === "正常" ? "green" : risk === "故障" ? "red" : "amber";
-  return `<span class="tag ${color}">${risk}</span>`;
+  return `<span class="tag ${color}">${escapeHtml(risk)}</span>`;
 }
 
 function completeness(value) {
-  const color = value >= 90 ? "green" : value >= 80 ? "amber" : "red";
-  return `<div class="complete"><span>${value}%</span><i><b class="${color}" style="width:${value}%"></b></i></div>`;
+  const numericValue = Math.max(0, Math.min(100, Number(value) || 0));
+  const color = numericValue >= 90 ? "green" : numericValue >= 80 ? "amber" : "red";
+  return `<div class="complete"><span>${numericValue}%</span><i><b class="${color}" style="width:${numericValue}%"></b></i></div>`;
 }
 
 function employeeRequestActionIcon(kind) {
@@ -9528,7 +8828,7 @@ function employeeRequestActionIcon(kind) {
 function renderEmployeeRequestAction(item) {
   const active = state.employeeRequestActiveType === item.request;
   return `<button class="employee-request-action ${active ? "active" : ""}" type="button" data-open-request="${escapeHtml(item.request)}" aria-pressed="${active ? "true" : "false"}">
-    <span class="employee-request-action-icon ${item.tone}">${employeeRequestActionIcon(item.icon)}</span>
+    <span class="employee-request-action-icon ${escapeHtml(item.tone)}">${employeeRequestActionIcon(item.icon)}</span>
     <span class="employee-request-action-label">${escapeHtml(item.label)}</span>
   </button>`;
 }
@@ -9542,46 +8842,30 @@ function employeeRequestStatusGroup(status = "") {
 
 function employeeRequestActions() {
   return [
-    { label: "资产领用", request: "资产领用", icon: "receive", tone: "blue" },
-    { label: "资产借用", request: "资产借用", icon: "borrow", tone: "sky" },
-    { label: "资产归还", request: "资产归还", icon: "giveBack", tone: "orange" },
-    { label: "资产退还", request: "资产退还", icon: "returnAsset", tone: "violet" },
-    { label: "资产交接", request: "资产交接", icon: "handover", tone: "green" },
-  ];
+    { label: "资产领用", request: "资产领用", icon: "receive", tone: "blue", settingKey: "receiveAsset" },
+    { label: "资产借用", request: "资产借用", icon: "borrow", tone: "sky", settingKey: "borrowAsset" },
+    { label: "资产归还", request: "资产归还", icon: "giveBack", tone: "orange", settingKey: "giveBackAsset" },
+    { label: "资产退还", request: "资产退还", icon: "returnAsset", tone: "violet", settingKey: "returnAsset" },
+    { label: "资产交接", request: "资产交接", icon: "handover", tone: "green", settingKey: "handoverAsset" },
+  ].filter((item) => state.selfServiceSettings?.[item.settingKey]?.enabled === true);
+}
+
+const selfServiceSettingKeyByRequestType = {
+  资产领用: "receiveAsset",
+  资产借用: "borrowAsset",
+  资产归还: "giveBackAsset",
+  资产退还: "returnAsset",
+  资产交接: "handoverAsset",
+};
+
+function enabledSelfServiceRequestSettings(type) {
+  const key = selfServiceSettingKeyByRequestType[type];
+  const settings = key ? state.selfServiceSettings?.[key] : null;
+  return settings?.enabled === true ? settings : null;
 }
 
 function employeeRequestRows() {
-  const scopedRows = getScopedRequests();
-  if (scopedRows.length) return scopedRows;
-  const applicant = state.currentUser?.name || "员工";
-  return [
-    {
-      id: "SQD202607090001",
-      type: "自助领用",
-      applicant,
-      asset: "资产领用",
-      reason: "员工端资产领用申请框架",
-      status: "审批中",
-      system: state.session.method === "oidc" ? state.session.provider : "飞书审批",
-      date: todayValue(),
-      approvalDate: "-",
-      currentNode: "直属主管",
-      assetCount: 1,
-    },
-    {
-      id: "SQD202607090002",
-      type: "资产领用",
-      applicant,
-      asset: "办公资产",
-      reason: "员工端资产领用申请",
-      status: "已同意",
-      system: "飞书审批",
-      date: todayValue(),
-      approvalDate: todayValue(),
-      currentNode: "已归档",
-      assetCount: 1,
-    },
-  ];
+  return getScopedRequests();
 }
 
 function employeeRequestTabs(rows) {
@@ -9597,8 +8881,8 @@ function renderEmployeeRequestTabs(tabs, activeTab) {
   return `<div class="employee-request-tabs" role="tablist" aria-label="我的申请状态">
     ${tabs
       .map(
-        (tab) => `<button class="${activeTab === tab.key ? "active" : ""}" type="button" role="tab" aria-selected="${activeTab === tab.key ? "true" : "false"}" data-employee-request-tab="${tab.key}">
-          ${tab.label} (${tab.count})
+        (tab) => `<button class="${activeTab === tab.key ? "active" : ""}" type="button" role="tab" aria-selected="${activeTab === tab.key ? "true" : "false"}" data-employee-request-tab="${escapeHtml(tab.key)}">
+          ${escapeHtml(tab.label)} (${escapeHtml(tab.count)})
         </button>`
       )
       .join("")}
@@ -9633,7 +8917,7 @@ function renderEmployeeRequestCard(item) {
 }
 
 function renderRequests() {
-  if (state.currentUser?.roleCode !== "employee") {
+  if (hasPermission("asset:request:review")) {
     return `${pageHeader("审批管理", "处理资产及业务申请，审批结果由服务端记录。", "新建申请", "request")}
       <section class="panel"><div class="table-wrap"><table>
         <thead><tr><th>单据编号</th><th>类型</th><th>申请人</th><th>关联物品</th><th>原因</th><th>状态</th><th>当前节点</th><th>操作</th></tr></thead>
@@ -9677,6 +8961,7 @@ function renderRequests() {
 }
 
 async function decideBusinessRequest(id, decision) {
+  if (!ensureAnyPermission(["asset:request:review"])) return;
   try {
     const response = await fetch(`/api/business-data/requests/${encodeURIComponent(id)}/decision`, {
       method: "POST",
@@ -9692,17 +8977,30 @@ async function decideBusinessRequest(id, decision) {
   } catch (error) { showToast(error?.message || "审批失败"); }
 }
 
-function employeeRequestSelectableAssets(anchorAsset = null) {
+function employeeRequestSelectableAssets(anchorAsset = null, settingKey = "") {
   const scopedRows = getScopedAllAssets();
-  const availableRows = scopedRows.filter(
-    (asset) =>
-      ["空闲", "闲置", "上架"].includes(asset.status) ||
-      !asset.owner ||
-      asset.owner === "未分配" ||
-      asset.owner === state.currentUser?.name
-  );
-  const fallbackRows = availableRows.length ? availableRows : scopedRows.length ? scopedRows : state.assets;
-  const rows = [anchorAsset, ...fallbackRows].filter(Boolean);
+  const allowedCategories = new Set(state.selfServiceSettings?.[settingKey]?.categories || []);
+  const isSelectable = (asset) =>
+    (!allowedCategories.size || allowedCategories.has(asset.category))
+    && ["空闲", "闲置", "上架", "待验收"].includes(asset.status)
+    && (!asset.owner || asset.owner === "未分配");
+  const availableRows = scopedRows.filter(isSelectable);
+  const fallbackRows = settingKey
+    ? availableRows
+    : availableRows.length ? availableRows : scopedRows.length ? scopedRows : state.assets;
+  const rows = [anchorAsset && isSelectable(anchorAsset) ? anchorAsset : null, ...fallbackRows].filter(Boolean);
+  return Array.from(new Map(rows.map((asset) => [asset.id, asset])).values());
+}
+
+function employeeOwnedRequestAssets(type, anchorAsset = null) {
+  const statuses = {
+    资产归还: new Set(["借用中"]),
+    资产退还: new Set(["在用"]),
+    资产交接: new Set(["在用", "借用中"]),
+  }[type] || new Set();
+  const userName = state.currentUser?.name || "";
+  const isSelectable = (asset) => statuses.has(asset.status) && asset.owner === userName;
+  const rows = [anchorAsset && isSelectable(anchorAsset) ? anchorAsset : null, ...getScopedAllAssets().filter(isSelectable)].filter(Boolean);
   return Array.from(new Map(rows.map((asset) => [asset.id, asset])).values());
 }
 
@@ -9756,7 +9054,7 @@ function renderEmployeeSelectedAssets(assets) {
 
 function employeeRequestOperatorOptions(user = {}) {
   return Array.from(
-    new Set([user.name, ...state.users.filter((item) => item.roleCode !== "employee").map((item) => item.name), ...uniqueAssetFormValues("custodian")].filter(Boolean))
+    new Set([user.name, ...uniqueAssetFormValues("custodian")].filter(Boolean))
   );
 }
 
@@ -9798,7 +9096,8 @@ function employeeAssetRequestPickerMarkup(assets, selectedIds, selectedAssets) {
 
 function employeeAssetReceiveFormMarkup(asset = null) {
   const user = state.currentUser || {};
-  const assets = employeeRequestSelectableAssets(asset);
+  const settings = enabledSelfServiceRequestSettings("资产领用");
+  const assets = employeeRequestSelectableAssets(asset, "receiveAsset");
   const selectedIds = new Set(asset ? [asset.id] : []);
   const selectedAssets = assets.filter((item) => selectedIds.has(item.id));
   const company = user.company || asset?.company || asset?.ownerCompany || "默认公司";
@@ -9813,7 +9112,7 @@ function employeeAssetReceiveFormMarkup(asset = null) {
         <div class="field"><label><span class="required-star">*</span>领用后位置：</label>${inlineSelect("receiveLocation", "领用后位置", assetLocationOptions, { required: true, selected: asset?.location || "" })}</div>
         <div class="field"><label><span class="required-star">*</span>经办人：</label>${inlineSelect("operator", "经办人", operatorOptions.length ? operatorOptions : [user.name || "经办人"], { required: true, selected: user.name || "" })}</div>
         <div class="field"><label><span class="required-star">*</span>领用日期：</label><input name="receiveDate" required type="date" value="${todayValue()}"></div>
-        <div class="field full"><label>领用备注：</label><textarea name="receiveNote" placeholder="请输入领用备注"></textarea></div>
+        <div class="field full"><label>${settings?.remarkRequired ? '<span class="required-star">*</span>' : ""}领用备注：</label><textarea name="receiveNote" ${settings?.remarkRequired ? "required" : ""} placeholder="${escapeHtml(settings?.remarkPrompt || "请输入领用备注")}"></textarea></div>
       </div>
     </section>
     ${employeeAssetRequestPickerMarkup(assets, selectedIds, selectedAssets)}
@@ -9826,7 +9125,8 @@ function employeeAssetReceiveFormMarkup(asset = null) {
 
 function employeeAssetBorrowFormMarkup(asset = null) {
   const user = state.currentUser || {};
-  const assets = employeeRequestSelectableAssets(asset);
+  const settings = enabledSelfServiceRequestSettings("资产借用");
+  const assets = employeeRequestSelectableAssets(asset, "borrowAsset");
   const selectedIds = new Set(asset ? [asset.id] : []);
   const selectedAssets = assets.filter((item) => selectedIds.has(item.id));
   const company = user.company || asset?.company || asset?.ownerCompany || "默认公司";
@@ -9842,7 +9142,7 @@ function employeeAssetBorrowFormMarkup(asset = null) {
         <div class="field"><label><span class="required-star">*</span>经办人：</label>${inlineSelect("operator", "请选择经办人", operatorOptions.length ? operatorOptions : [user.name || "经办人"], { required: true })}</div>
         <div class="field"><label><span class="required-star">*</span>借用日期：</label><input name="borrowDate" required type="date" value="${todayValue()}"></div>
         <div class="field"><label><span class="required-star">*</span>预计归还日期：</label><input name="expectedReturnDate" required type="date" value="${dateOffsetValue(7)}"></div>
-        <div class="field full"><label>借用备注：</label><textarea name="borrowNote" placeholder="请输入借用备注"></textarea></div>
+        <div class="field full"><label>${settings?.remarkRequired ? '<span class="required-star">*</span>' : ""}借用备注：</label><textarea name="borrowNote" ${settings?.remarkRequired ? "required" : ""} placeholder="${escapeHtml(settings?.remarkPrompt || "请输入借用备注")}"></textarea></div>
       </div>
     </section>
     ${employeeAssetRequestPickerMarkup(assets, selectedIds, selectedAssets)}
@@ -9853,7 +9153,44 @@ function employeeAssetBorrowFormMarkup(asset = null) {
   </form>`;
 }
 
-function saveEmployeeAssetReceiveRequest(form) {
+function employeeOwnedAssetRequestFormMarkup(type, asset = null) {
+  const user = state.currentUser || {};
+  const settings = enabledSelfServiceRequestSettings(type);
+  const assets = employeeOwnedRequestAssets(type, asset);
+  const selectedIds = new Set(asset && assets.some((item) => item.id === asset.id) ? [asset.id] : []);
+  const selectedAssets = assets.filter((item) => selectedIds.has(item.id));
+  const locationLabel = type === "资产交接" ? "接收位置" : type === "资产退还" ? "退还后位置" : "归还后位置";
+  const dateLabel = type === "资产交接" ? "交接日期" : type === "资产退还" ? "退还日期" : "归还日期";
+  const noteLabel = type.replace(/^资产/, "") + "备注";
+  return `<form id="demoForm" class="employee-asset-request-form" data-mode="employee-owned-asset-request" data-request-type="${escapeHtml(type)}">
+    <section class="employee-request-form-section">
+      <div class="employee-request-form-grid">
+        <div class="field"><label>申请人：</label><input name="applicant" value="${escapeHtml(user.name || "")}" readonly data-locked-field></div>
+        <div class="field"><label>所属公司：</label><input name="company" value="${escapeHtml(user.company || "默认公司")}" readonly data-locked-field></div>
+        <div class="field"><label>所在部门：</label><input name="department" value="${escapeHtml(user.department || "默认部门")}" readonly data-locked-field></div>
+        <div class="field"><label><span class="required-star">*</span>${escapeHtml(locationLabel)}：</label>${inlineSelect("targetLocation", locationLabel, assetLocationOptions, { required: true, selected: asset?.location || "" })}</div>
+        <div class="field"><label><span class="required-star">*</span>${escapeHtml(dateLabel)}：</label><input name="targetDate" required type="date" value="${todayValue()}"></div>
+        ${
+          type === "资产交接"
+            ? `<div class="field"><label>交接类型：</label><input value="员工交接" readonly data-locked-field></div>
+               <div class="field" data-handover-personal><label><span class="required-star">*</span>接收人：</label>${directoryPersonSelect("receiverSubject")}</div>`
+            : ""
+        }
+        <div class="field full"><label>${settings?.remarkRequired ? '<span class="required-star">*</span>' : ""}${escapeHtml(noteLabel)}：</label><textarea name="requestNote" ${settings?.remarkRequired ? "required" : ""} placeholder="${escapeHtml(settings?.remarkPrompt || `请输入${noteLabel}`)}"></textarea></div>
+      </div>
+    </section>
+    ${employeeAssetRequestPickerMarkup(assets, selectedIds, selectedAssets)}
+    <div class="modal-actions employee-request-modal-actions">
+      <button type="button" class="btn" data-cancel-modal>关闭</button>
+      <button type="submit" class="btn primary">提交申请</button>
+    </div>
+  </form>`;
+}
+
+async function saveEmployeeAssetReceiveRequest(form) {
+  if (!ensureAnyPermission(["asset:request:create"])) return false;
+  const settings = enabledSelfServiceRequestSettings("资产领用");
+  if (!settings) return showToast("资产领用自助申请当前未启用"), false;
   const selectedIds = Array.from(form.querySelectorAll("[data-employee-request-asset]:checked")).map((input) => input.value).filter(Boolean);
   const selectedAssets = selectedIds.map((id) => state.assets.find((asset) => asset.id === id)).filter(Boolean);
   const receiver = formValue(form, "receiver") || state.currentUser?.name || "员工";
@@ -9861,6 +9198,10 @@ function saveEmployeeAssetReceiveRequest(form) {
   const receiveLocation = normalizeLocationValue(formValue(form, "receiveLocation"));
   const operator = formValue(form, "operator");
   const note = formValue(form, "receiveNote");
+  if (settings.remarkRequired && !note) {
+    showToast("请填写领用备注");
+    return false;
+  }
   if (!selectedAssets.length) {
     showToast("请先勾选要领用的资产");
     return false;
@@ -9870,30 +9211,27 @@ function saveEmployeeAssetReceiveRequest(form) {
     return false;
   }
   if (!validateManagedAssetLocation(receiveLocation, "请选择位置管理中的领用后位置")) return false;
-  const requestId = `SQD${Date.now()}`;
-  state.requests.unshift({
-    id: requestId,
+  const created = await createBusinessRequest({
     type: "资产领用",
     applicant: receiver,
     asset: selectedAssets.map((asset) => asset.name || asset.id).join("、"),
-    reason: note || "员工端资产领用申请",
-    status: "审批中",
-    system: state.session.method === "oidc" || state.session.method === "ecp" ? state.session.provider || "ECP审批" : "飞书审批",
-    date: receiveDate,
-    approvalDate: "-",
-    currentNode: "直属主管",
+    reason: note,
     assetCount: selectedAssets.length,
     assetIds: selectedIds,
     operator,
     receiveLocation,
+    receiveDate,
   });
-  void createBusinessRequest(state.requests[0]);
+  if (!created) return false;
   state.employeeRequestTab = "pending";
   state.employeeRequestActiveType = "资产领用";
   return true;
 }
 
-function saveEmployeeAssetBorrowRequest(form) {
+async function saveEmployeeAssetBorrowRequest(form) {
+  if (!ensureAnyPermission(["asset:request:create"])) return false;
+  const settings = enabledSelfServiceRequestSettings("资产借用");
+  if (!settings) return showToast("资产借用自助申请当前未启用"), false;
   const selectedIds = Array.from(form.querySelectorAll("[data-employee-request-asset]:checked")).map((input) => input.value).filter(Boolean);
   const selectedAssets = selectedIds.map((id) => state.assets.find((asset) => asset.id === id)).filter(Boolean);
   const borrower = formValue(form, "borrower") || state.currentUser?.name || "员工";
@@ -9902,6 +9240,10 @@ function saveEmployeeAssetBorrowRequest(form) {
   const borrowLocation = normalizeLocationValue(formValue(form, "borrowLocation"));
   const operator = formValue(form, "operator");
   const note = formValue(form, "borrowNote");
+  if (settings.remarkRequired && !note) {
+    showToast("请填写借用备注");
+    return false;
+  }
   if (!selectedAssets.length) {
     showToast("请先勾选要借用的资产");
     return false;
@@ -9911,27 +9253,76 @@ function saveEmployeeAssetBorrowRequest(form) {
     return false;
   }
   if (!validateManagedAssetLocation(borrowLocation, "请选择位置管理中的借用后位置")) return false;
-  const requestId = `SQD${Date.now()}`;
-  state.requests.unshift({
-    id: requestId,
+  const created = await createBusinessRequest({
     type: "资产借用",
     applicant: borrower,
     asset: selectedAssets.map((asset) => asset.name || asset.id).join("、"),
-    reason: note || "员工端资产借用申请",
-    status: "审批中",
-    system: state.session.method === "oidc" || state.session.method === "ecp" ? state.session.provider || "ECP审批" : "飞书审批",
-    date: borrowDate,
-    approvalDate: "-",
-    currentNode: "直属主管",
+    reason: note,
     assetCount: selectedAssets.length,
     assetIds: selectedIds,
     operator,
     borrowLocation,
+    borrowDate,
     expectedReturnDate,
   });
-  void createBusinessRequest(state.requests[0]);
+  if (!created) return false;
   state.employeeRequestTab = "pending";
   state.employeeRequestActiveType = "资产借用";
+  return true;
+}
+
+async function saveEmployeeOwnedAssetRequest(form) {
+  if (!ensureAnyPermission(["asset:request:create"])) return false;
+  const type = form.dataset.requestType || "";
+  const settings = enabledSelfServiceRequestSettings(type);
+  if (!settings) return showToast(`${type}自助申请当前未启用`), false;
+  const selectedIds = Array.from(form.querySelectorAll("[data-employee-request-asset]:checked")).map((input) => input.value).filter(Boolean);
+  const selectedAssets = selectedIds.map((id) => state.assets.find((asset) => asset.id === id)).filter(Boolean);
+  const location = normalizeLocationValue(formValue(form, "targetLocation"));
+  const targetDate = formValue(form, "targetDate") || todayValue();
+  const note = formValue(form, "requestNote");
+  if (settings.remarkRequired && !note) {
+    showToast("请填写申请备注");
+    return false;
+  }
+  if (!selectedAssets.length) {
+    showToast("请先勾选要处理的资产");
+    return false;
+  }
+  if (!location || !targetDate) {
+    showToast("请填写位置和日期");
+    return false;
+  }
+  if (!validateManagedAssetLocation(location, "请选择位置管理中的位置")) return false;
+  const draft = {
+    type,
+    applicant: state.currentUser?.name || "",
+    asset: selectedAssets.map((item) => item.name || item.id).join("、"),
+    reason: note,
+    assetCount: selectedAssets.length,
+    assetIds: selectedIds,
+  };
+  if (type === "资产归还" || type === "资产退还") {
+    draft.returnLocation = location;
+    draft.returnDate = targetDate;
+  } else if (type === "资产交接") {
+    const handoverType = formValue(form, "handoverType") || "personal";
+    draft.handoverLocation = location;
+    draft.handoverDate = targetDate;
+    draft.handoverType = handoverType === "public" ? "公共交接" : "员工交接";
+    if (handoverType !== "public") {
+      const receiverSubject = formValue(form, "receiverSubject");
+      if (!receiverSubject) {
+        showToast("请选择交接接收人");
+        return false;
+      }
+      draft.receiverSubject = receiverSubject;
+    }
+  }
+  const created = await createBusinessRequest(draft);
+  if (!created) return false;
+  state.employeeRequestTab = "pending";
+  state.employeeRequestActiveType = type;
   return true;
 }
 
@@ -9990,6 +9381,7 @@ function bindEmployeeAssetReceiveForm(root = modal) {
 
 function renderStocktake() {
   const rows = getScopedStocktakes();
+  const canUpdate = hasPermission("asset:stocktake:update");
   return `
     ${pageHeader("资产盘点", "支持普通管理员扫码盘点、员工自助盘点、照片水印和盘盈盘亏处理。", "新建盘点", "stocktake")}
     <section class="panel">
@@ -10004,13 +9396,13 @@ function renderStocktake() {
                     .map((item) => {
                       const percent = Math.round((item.checked / item.total) * 100);
                       return `<tr>
-                        <td>${item.id}</td><td>${item.name}</td><td>${item.scope}</td><td>${item.owner}</td>
-                        <td>${statusTag(item.progress)} <div class="panel-subtitle">${item.checked}/${item.total} · ${percent}%</div></td>
-                        <td>${item.diff}</td><td>${item.date}</td><td><button class="btn" data-stocktake="${item.id}">查看明细</button> <button class="btn" data-stocktake-update="${item.id}">登记进度</button></td>
+                        <td>${escapeHtml(item.id)}</td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.scope)}</td><td>${escapeHtml(item.owner)}</td>
+                        <td>${statusTag(item.progress)} <div class="panel-subtitle">${escapeHtml(item.checked)}/${escapeHtml(item.total)} · ${escapeHtml(percent)}%</div></td>
+                        <td>${escapeHtml(item.diff)}</td><td>${escapeHtml(item.date)}</td><td><button class="btn" data-stocktake="${escapeHtml(item.id)}">查看明细</button>${canUpdate ? ` <button class="btn" data-stocktake-update="${escapeHtml(item.id)}">登记进度</button>` : ""}</td>
                       </tr>`;
                     })
                     .join("")
-                : `<tr class="empty-row"><td colspan="8">当前角色没有可查看的盘点任务。</td></tr>`
+                : `<tr class="empty-row"><td colspan="8">当前账号没有可查看的盘点任务。</td></tr>`
             }
           </tbody>
         </table>
@@ -10020,6 +9412,7 @@ function renderStocktake() {
 
 function renderConsumables() {
   const rows = state.consumables;
+  const canAdjust = hasPermission("asset:consumable:adjust");
   return `
     ${pageHeader("耗材库存", "低值耗材不进入固定资产台账，但需要入库、领用、退库、调拨和库存预警。", "耗材入库", "consumable")}
     <section class="panel">
@@ -10028,15 +9421,16 @@ function renderConsumables() {
         <table>
           <thead><tr><th>耗材名称</th><th>型号</th><th>当前库存</th><th>最小库存</th><th>仓库</th><th>状态</th><th>操作</th></tr></thead>
           <tbody>
-            ${rows
-              .map(
+            ${rows.length
+              ? rows.map(
                 (item) => `<tr>
-                  <td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.model)}</td><td>${item.stock}</td><td>${item.min}</td><td>${escapeHtml(item.warehouse)}</td>
+                  <td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.model)}</td><td>${escapeHtml(item.stock)}</td><td>${escapeHtml(item.min)}</td><td>${escapeHtml(item.warehouse)}</td>
                   <td>${item.stock < item.min ? statusTag("待执行") : statusTag("在用")}</td>
-                  <td><button class="btn" data-consumable-adjust="${escapeHtml(item.id)}" data-adjust-direction="-1">领取</button> <button class="btn" data-consumable-adjust="${escapeHtml(item.id)}" data-adjust-direction="1">入库</button></td>
+                  <td>${canAdjust ? `<button class="btn" data-consumable-adjust="${escapeHtml(item.id)}" data-adjust-direction="-1">领取</button> <button class="btn" data-consumable-adjust="${escapeHtml(item.id)}" data-adjust-direction="1">入库</button>` : "-"}</td>
                 </tr>`
               )
-              .join("")}
+              .join("")
+              : '<tr class="empty-row"><td colspan="7">当前范围内没有耗材数据。</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -10045,8 +9439,9 @@ function renderConsumables() {
 
 function renderRepair() {
   const failures = state.repairs;
+  const canUpdate = hasPermission("asset:repair:update");
   const subtitle =
-    state.currentUser?.roleCode === "employee"
+    !canUpdate
       ? "员工只能查看本人相关报修记录，提交后由普通管理员继续处理。"
       : "员工和管理员均可报修，普通管理员处理后形成维修记录并回写资产履历。";
   return `
@@ -10061,7 +9456,7 @@ function renderRepair() {
                 ? failures
                     .map(
                       (item) =>
-                        `<tr><td>${escapeHtml(item.asset)}</td><td>${escapeHtml(item.description)}</td><td>${escapeHtml(item.reporter)}</td><td>${statusTag(item.status)}</td><td>${escapeHtml(item.handler)}</td><td><button class="btn" data-repair-update="${escapeHtml(item.id)}">${state.currentUser?.roleCode === "employee" ? "查看" : "处理"}</button></td></tr>`
+                        `<tr><td>${escapeHtml(item.asset)}</td><td>${escapeHtml(item.description)}</td><td>${escapeHtml(item.reporter)}</td><td>${statusTag(item.status)}</td><td>${escapeHtml(item.handler)}</td><td>${canUpdate ? `<button class="btn" data-repair-update="${escapeHtml(item.id)}">处理</button>` : '<span class="tag gray">只读</span>'}</td></tr>`
                     )
                     .join("")
                 : `<tr class="empty-row"><td colspan="6">当前范围内没有维修工单。</td></tr>`
@@ -10076,565 +9471,229 @@ function renderContracts() {
   return `
     ${pageHeader("合同供应商", "供应商、合同、采购订单和资产入库关联，支撑采购到入库闭环。", "新增合同", "contract")}
     <section class="grid stats-grid">
-      ${state.contracts
-        .map(
+      ${state.contracts.length
+        ? state.contracts.map(
           (item) => `<article class="stat-card" data-watermark="CT">
             <div class="stat-top"><span>${escapeHtml(item.supplier)}</span>${statusTag(item.status)}</div>
             <div class="stat-value">${escapeHtml(item.id)}</div>
             <div class="stat-note">${escapeHtml(item.name)} · 至 ${escapeHtml(item.endDate)} · ¥${Number(item.amount || 0).toLocaleString("zh-CN")}</div>
           </article>`
         )
-        .join("")}
+        .join("")
+        : '<div class="empty-note">当前范围内没有合同数据。</div>'}
     </section>`;
 }
 
-function roleFormFromRole(role) {
-  return {
-    id: role?.id || "",
-    name: role?.name || "",
-    type: role?.type || "admin",
-    description: role?.description || "",
-    permissions: [...(role?.permissions || ["employee:view", "asset:view"])],
-  };
+function formatSystemConfigTimestamp(value) {
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("zh-CN", { hour12: false });
 }
 
-function currentRoleForm() {
-  if (state.roleForm && !state.roleForm.id && !state.selectedRoleId) {
-    return state.roleForm;
-  }
-  const selected = state.roles.find((role) => role.id === state.selectedRoleId) || state.roles[0];
-  if (!state.selectedRoleId && selected) {
-    state.selectedRoleId = selected.id;
-  }
-  if (!state.roleForm || state.roleForm.id !== (selected?.id || "")) {
-    state.roleForm = roleFormFromRole(selected);
-  }
-  return state.roleForm;
-}
-
-function filteredRoleDefinitions() {
-  const keyword = state.roleQuery.trim().toLowerCase();
-  return state.roles.filter((role) => {
-    if (state.roleTab === "system" && role.type === "employee") return false;
-    if (state.roleTab === "employee" && role.type !== "employee") return false;
-    if (!keyword) return true;
-    return [role.name, role.description, role.id].some((value) => String(value || "").toLowerCase().includes(keyword));
-  });
-}
-
-function rolePermissionSummary(role) {
-  const permissions = role.permissions || [];
-  return rolePermissionModules
-    .map((module) => {
-      const actions = module.actions
-        .filter(([action]) => permissions.includes(`${module.code}:${action}`))
-        .map(([, label]) => label);
-      return actions.length ? `${module.name}：${actions.join("、")}` : "";
-    })
-    .filter(Boolean)
-    .join("；");
-}
-
-function userAssignedToRole(user, role) {
-  if (!user || !role) return false;
-  if (user.roleDefinitionId) return user.roleDefinitionId === role.id;
-  if (role.id === user.roleCode) return true;
-  return role.type === user.roleCode;
-}
-
-function roleAssignedUsers(role) {
-  if (!role) return [];
-  if (isEcpAuthEnabled()) {
-    return userAssignedToRole(state.currentUser, role) ? [state.currentUser] : [];
-  }
-  return state.users.filter((user) => {
-    return userAssignedToRole(user, role);
-  });
-}
-
-function roleListItemMarkup(role) {
-  const editable = !role.builtIn;
-  return `<div class="role-list-item ${role.id === state.selectedRoleId ? "active" : ""}">
-    <button class="role-list-main" type="button" data-role-select="${escapeHtml(role.id)}" aria-label="查看${escapeHtml(role.name)}">
-      <span class="role-name">${escapeHtml(role.name)}</span>
-    </button>
-    ${
-      editable
-        ? `<span class="role-row-actions">
-            <button class="role-edit-icon" type="button" data-role-edit="${escapeHtml(role.id)}" title="编辑${escapeHtml(role.name)}" aria-label="编辑${escapeHtml(role.name)}">✎</button>
-          </span>`
-        : ""
-    }
-  </div>`;
-}
-
-function rolePermissionGroups() {
-  return [
-    {
-      id: "system",
-      name: "系统",
-      modules: rolePermissionModules.filter((module) => systemPermissionModuleCodes.includes(module.code)),
-    },
-    {
-      id: "asset",
-      name: "资产",
-      modules: rolePermissionModules.filter((module) => assetPermissionModuleCodes.includes(module.code)),
-    },
-    {
-      id: "approval",
-      name: "审批",
-      modules: rolePermissionModules.filter((module) => approvalPermissionModuleCodes.includes(module.code)),
-    },
-  ].filter((group) => group.modules.length);
-}
-
-function roleModuleCodes(module) {
-  return module.actions.map(([action]) => `${module.code}:${action}`);
-}
-
-function roleGroupCodes(group) {
-  return group.modules.flatMap(roleModuleCodes);
-}
-
-function roleCheckedCount(codes, permissions) {
-  return codes.filter((code) => permissions.has(code)).length;
-}
-
-function rolePermissionSelection(form = state.roleForm) {
-  const groups = rolePermissionGroups();
-  const permissions = new Set(form?.permissions || []);
-  let group = groups.find((item) => item.id === state.rolePermissionGroup);
-  if (!group) {
-    group = groups.find((item) => roleGroupCodes(item).some((code) => permissions.has(code))) || groups[0];
-  }
-  let module = group?.modules.find((item) => item.code === state.rolePermissionModule);
-  if (!module) {
-    module = group?.modules.find((item) => roleModuleCodes(item).some((code) => permissions.has(code))) || group?.modules[0];
-  }
-  state.rolePermissionGroup = group?.id || "";
-  state.rolePermissionModule = module?.code || "";
-  return { groups, group, module, permissions };
-}
-
-function resetRolePermissionSelection(form = state.roleForm) {
-  state.rolePermissionGroup = "";
-  state.rolePermissionModule = "";
-  rolePermissionSelection(form);
-}
-
-function rolePermissionCascadeMarkup(form, disabled) {
-  const { groups, group: activeGroup, module: activeModule, permissions } = rolePermissionSelection(form);
-  const allCodes = groups.flatMap(roleGroupCodes);
-  const allChecked = roleCheckedCount(allCodes, permissions);
-  const groupCodes = activeGroup ? roleGroupCodes(activeGroup) : [];
-  const groupChecked = roleCheckedCount(groupCodes, permissions);
-  const moduleCodes = activeModule ? roleModuleCodes(activeModule) : [];
-  const moduleChecked = roleCheckedCount(moduleCodes, permissions);
-
-  return `<div class="role-permission-cascade" data-role-permission-cascade>
-    <section class="role-permission-column">
-      <div class="role-permission-column-head">
-        <label><input type="checkbox" data-role-all-permissions ${allChecked === allCodes.length ? "checked" : ""} ${disabled}> 全选</label>
-        <strong>角色授权</strong>
-      </div>
-      <div class="role-permission-column-list">
-        ${groups
-          .map((group) => {
-            const codes = roleGroupCodes(group);
-            const checkedCount = roleCheckedCount(codes, permissions);
-            return `<div class="role-permission-row ${group.id === activeGroup?.id ? "active" : ""}" data-role-permission-group="${escapeHtml(group.id)}">
-              <input type="checkbox" aria-label="${escapeHtml(group.name)}全选" data-role-group-check="${escapeHtml(group.id)}" ${checkedCount === codes.length ? "checked" : ""} ${disabled}>
-              <span class="role-permission-row-name">${escapeHtml(group.name)}</span>
-              <em data-role-group-count="${escapeHtml(group.id)}">(${checkedCount}/${codes.length})</em>
-              <b aria-hidden="true">&rsaquo;</b>
-            </div>`;
-          })
-          .join("")}
-      </div>
-    </section>
-
-    <section class="role-permission-column">
-      <div class="role-permission-column-head">
-        <label><input type="checkbox" data-role-active-group-check ${groupChecked === groupCodes.length ? "checked" : ""} ${disabled}> 全选</label>
-        <strong data-role-active-group-title>${escapeHtml(activeGroup?.name || "-")}</strong>
-      </div>
-      <div class="role-permission-column-list">
-        ${groups
-          .flatMap((group) =>
-            group.modules.map((module) => {
-              const codes = roleModuleCodes(module);
-              const checkedCount = roleCheckedCount(codes, permissions);
-              return `<div class="role-permission-row ${module.code === activeModule?.code ? "active" : ""}" data-role-module-row="${escapeHtml(module.code)}" data-role-module-group="${escapeHtml(group.id)}" ${group.id === activeGroup?.id ? "" : "hidden"}>
-                <input type="checkbox" aria-label="${escapeHtml(module.name)}全选" data-role-module="${escapeHtml(module.code)}" ${checkedCount === codes.length ? "checked" : ""} ${disabled}>
-                <span class="role-permission-row-name">${escapeHtml(module.name)}</span>
-                <em data-role-module-count="${escapeHtml(module.code)}">(${checkedCount}/${codes.length})</em>
-                <b aria-hidden="true">&rsaquo;</b>
-              </div>`;
-            })
-          )
-          .join("")}
-      </div>
-    </section>
-
-    <section class="role-permission-column">
-      <div class="role-permission-column-head">
-        <label><input type="checkbox" data-role-active-module-check ${moduleChecked === moduleCodes.length ? "checked" : ""} ${disabled}> 全选</label>
-        <strong data-role-active-module-title>${escapeHtml(activeModule?.name || "-")}</strong>
-      </div>
-      <div class="role-permission-column-list">
-        ${groups
-          .flatMap((group) =>
-            group.modules.map((module) => `<div class="role-permission-action-panel" data-role-action-panel="${escapeHtml(module.code)}" ${module.code === activeModule?.code ? "" : "hidden"}>
-              ${module.actions
-                .map(([action, label]) => {
-                  const code = `${module.code}:${action}`;
-                  return `<label class="role-permission-action ${permissions.has(code) ? "checked" : ""}">
-                    <input type="checkbox" data-role-permission="${escapeHtml(code)}" ${permissions.has(code) ? "checked" : ""} ${disabled}>
-                    <span>${escapeHtml(label)}</span>
-                  </label>`;
-                })
-                .join("")}
-            </div>`)
-          )
-          .join("")}
-      </div>
-    </section>
-  </div>`;
-}
-
-function roleConfigFormMarkup(form, options = {}) {
-  const readonly = Boolean(options.readonly);
-  const disabled = readonly ? "disabled" : "";
-  const isEmployeeRole = form.type === "employee";
-  if (isEmployeeRole) {
-    return `<form id="demoForm" class="role-config-form employee-role-form" data-mode="role-definition">
-      <div class="role-modal-fields">
-        <div class="role-error" data-role-form-error ${state.roleError ? "" : "hidden"}>${escapeHtml(state.roleError || "")}</div>
-        <input type="hidden" data-role-field="type" value="employee">
-        <label class="role-modal-field required">
-          <span>角色名称：</span>
-          <input data-role-field="name" value="${escapeHtml(form.name)}" placeholder="请输入" ${disabled}>
-        </label>
-        <label class="role-modal-field role-modal-textarea-field">
-          <span>角色描述：</span>
-          <textarea data-role-field="description" placeholder="请输入" ${disabled}>${escapeHtml(form.description)}</textarea>
-        </label>
-      </div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn" data-cancel-modal>取消</button>
-        ${!readonly && form.id ? `<button type="button" class="btn role-delete-modal ${state.pendingRoleDeleteId === form.id ? "confirming" : ""}" data-role-delete="${escapeHtml(form.id)}">${state.pendingRoleDeleteId === form.id ? "确认删除" : "删除角色"}</button>` : ""}
-        ${readonly ? "" : `<button type="submit" class="btn primary">确定</button>`}
-      </div>
-    </form>`;
-  }
-  return `<div class="role-config-shell">
-    <form id="demoForm" class="role-config-form" data-mode="role-definition">
-      <div class="role-modal-fields">
-        <div class="role-error" data-role-form-error ${state.roleError ? "" : "hidden"}>${escapeHtml(state.roleError || "")}</div>
-        <input type="hidden" data-role-field="type" value="${escapeHtml(form.type || "admin")}">
-        <label class="role-modal-field required">
-          <span>角色名称：</span>
-          <input data-role-field="name" value="${escapeHtml(form.name)}" placeholder="请输入" ${disabled}>
-        </label>
-        <label class="role-modal-field">
-          <span>描述：</span>
-          <input data-role-field="description" value="${escapeHtml(form.description)}" placeholder="请输入" ${disabled}>
-        </label>
-      </div>
-
-      <div class="role-permission-panel">
-        ${rolePermissionCascadeMarkup(form, disabled)}
-      </div>
-    </form>
-
-    <div class="modal-actions">
-      <button type="button" class="btn" data-cancel-modal>取消</button>
-      ${!readonly && form.id ? `<button type="button" class="btn role-delete-modal ${state.pendingRoleDeleteId === form.id ? "confirming" : ""}" data-role-delete="${escapeHtml(form.id)}">${state.pendingRoleDeleteId === form.id ? "确认删除" : "删除角色"}</button>` : ""}
-      ${readonly ? "" : `<button type="submit" class="btn primary" form="demoForm">确定</button>`}
-    </div>
-  </div>`;
-}
-
-function openRoleDefinitionModal(roleId = "") {
-  const role = roleId ? state.roles.find((item) => item.id === roleId) : null;
-  state.selectedRoleId = role?.id || "";
-  state.pendingRoleDeleteId = "";
-  state.roleError = "";
-  const draft = state.roleForm && !state.roleForm.id
-    ? state.roleForm
-    : {
-        id: "",
-        name: "",
-        type: state.roleTab === "employee" ? "employee" : "admin",
-        description: "",
-        permissions: [],
-      };
-  state.roleForm = role ? roleFormFromRole(role) : draft;
-  resetRolePermissionSelection(state.roleForm);
-  modalTitle.textContent = state.roleForm.type === "employee" ? (role ? "编辑员工角色" : "新增员工角色") : role ? "编辑角色" : "新增角色";
-  modal.classList.add("role-modal");
-  modal.classList.toggle("role-employee-definition-modal", state.roleForm.type === "employee");
-  modal.classList.remove("asset-create-modal", "asset-flow-modal", "asset-import-modal", "print-preview-modal", "asset-label-print-modal", "location-modal", "profile-center-modal");
-  modalBody.innerHTML = roleConfigFormMarkup(state.roleForm, {
-    readonly: Boolean(role?.builtIn),
-  });
-  openModal();
-  refreshRoleModuleState(modal);
-}
-
-function filteredRoleUsers(role) {
-  const keyword = state.roleUserQuery.trim().toLowerCase();
-  const users = roleAssignedUsers(role).filter((user) => user.roleCode !== "employee" || role?.type === "employee");
-  if (!keyword) return users;
-  return users.filter((user) =>
-    [user.account, user.name, user.department, user.phone, user.email, user.roleName].some((value) =>
-      String(value || "").toLowerCase().includes(keyword)
-    )
-  );
-}
-
-function roleUserRowsMarkup(users) {
-  if (!users.length) {
-    return `<tr class="empty-row"><td colspan="8">当前暂无账号绑定该角色。</td></tr>`;
-  }
-  return users
-    .map(
-      (user) => `<tr>
-        <td><input type="checkbox" aria-label="选择${escapeHtml(user.account)}"></td>
-        <td>${escapeHtml(user.account)}</td>
-        <td>${escapeHtml(user.name)}</td>
-        <td>${escapeHtml(user.department || "-")}</td>
-        <td>${escapeHtml(user.company || "默认公司")}</td>
-        <td>${escapeHtml(user.phone || "-")}</td>
-        <td>${statusTag(user.bindStatus || "已绑定")}</td>
-        <td>
-          <button class="role-table-link" type="button" data-role-user-action="edit" data-account="${escapeHtml(user.account)}">编辑</button>
-          <button class="role-table-link" type="button" data-role-user-action="reset" data-account="${escapeHtml(user.account)}">重置密码</button>
-          <button class="role-table-link danger" type="button" data-role-user-action="delete" data-account="${escapeHtml(user.account)}">删除</button>
-        </td>
-      </tr>`
-    )
-    .join("");
-}
-
-function roleEmployeeCandidates() {
-  return state.users.filter((user) => user.roleCode === "employee");
-}
-
-function roleEmployeeOptionLabel(user) {
-  return [user.name, user.account, user.department].filter(Boolean).join(" / ");
-}
-
-function roleUserNoun(role) {
-  return role?.type === "employee" ? "员工" : "管理员";
-}
-
-function roleUserNotFoundMessage(role) {
-  return `未找到${roleUserNoun(role)}账号`;
-}
-
-function roleUserFormMarkup(role) {
-  const noun = roleUserNoun(role);
-  return `<form id="demoForm" class="role-user-form" data-mode="role-user">
-    <div class="role-user-fields">
-      <label class="role-user-field required"><span>账号：</span><input name="account" placeholder="请输入" required autocomplete="off"></label>
-    </div>
-    <input type="hidden" name="roleId" value="${escapeHtml(role?.id || "admin")}">
-    <input type="hidden" name="employeeKeyword" value="">
-    <div class="modal-actions role-user-actions">
-      <button type="button" class="btn" data-cancel-modal>取消</button>
-      <button type="submit" class="btn primary">新增${noun}</button>
-    </div>
-  </form>`;
-}
-
-function roleUserEditFormMarkup(user) {
-  return `<form id="demoForm" class="role-user-form" data-mode="role-user-edit">
-    <div class="role-user-fields">
-      <label class="role-user-field"><span>账号：</span><input name="account" value="${escapeHtml(user.account)}" disabled></label>
-      <label class="role-user-field required"><span>姓名：</span><input name="name" value="${escapeHtml(user.name)}" placeholder="请输入" required autocomplete="off"></label>
-      <label class="role-user-field"><span>手机号：</span><input name="phone" value="${escapeHtml(user.phone || "")}" placeholder="请输入" autocomplete="off"></label>
-      <label class="role-user-field"><span>邮箱：</span><input name="email" value="${escapeHtml(user.email || "")}" placeholder="请输入" autocomplete="off"></label>
-      <label class="role-user-field"><span>所属部门：</span><input name="department" value="${escapeHtml(user.department || "")}" placeholder="请输入" autocomplete="off"></label>
-      <label class="role-user-field"><span>状态：</span><input name="bindStatus" value="${escapeHtml(user.bindStatus || "已绑定")}" placeholder="请输入" autocomplete="off"></label>
-    </div>
-    <input type="hidden" name="accountKey" value="${escapeHtml(user.account)}">
-    <div class="modal-actions role-user-actions">
-      <button type="button" class="btn" data-cancel-modal>取消</button>
-      <button type="submit" class="btn primary">保存</button>
-    </div>
-  </form>`;
-}
-
-function roleUserResetPasswordMarkup(user) {
-  return `<div class="empty-note">${escapeHtml(user.account)} 的密码由 ECP 统一管理，本系统不提供密码重置。</div>`;
-}
-
-function openRoleUserModal() {
-  const currentRole = state.roles.find((role) => role.id === state.selectedRoleId);
-  const selectedRole = currentRole || state.roles.find((role) => role.id === "admin") || state.roles.find((role) => role.type === "admin") || state.roles[0];
-  modalTitle.textContent = `新增${roleUserNoun(selectedRole)}`;
-  modal.classList.add("role-modal", "role-user-modal");
-  modal.classList.remove("asset-create-modal", "asset-flow-modal", "asset-import-modal", "print-preview-modal", "asset-label-print-modal", "location-modal", "profile-center-modal");
-  modalBody.innerHTML = roleUserFormMarkup(selectedRole);
-  openModal();
-}
-
-function openRoleUserActionModal(account, action) {
-  const user = state.users.find((item) => item.account === account);
-  const role = state.roles.find((item) => item.id === user?.roleDefinitionId) || { type: user?.roleCode };
-  if (!user) {
-    showToast(roleUserNotFoundMessage(role));
-    return;
-  }
-  if (action === "delete") {
-    deleteRoleUser(account);
-    return;
-  }
-  modalTitle.textContent = action === "reset" ? "重置密码" : `编辑${roleUserNoun(role)}`;
-  modal.classList.add("role-modal", "role-user-modal");
-  modal.classList.remove("asset-create-modal", "asset-flow-modal", "asset-import-modal", "print-preview-modal", "asset-label-print-modal", "location-modal", "profile-center-modal");
-  modalBody.innerHTML = action === "reset" ? roleUserResetPasswordMarkup(user) : roleUserEditFormMarkup(user);
-  openModal();
-}
-
-function deleteRoleUser(account) {
-  const user = state.users.find((item) => item.account === account);
-  const role = state.roles.find((item) => item.id === user?.roleDefinitionId) || { type: user?.roleCode };
-  if (!user) {
-    showToast(roleUserNotFoundMessage(role));
-    return;
-  }
-  if (user.account === state.currentUser?.account) {
-    showToast("不能删除当前登录账号");
-    return;
-  }
-  if (user.roleCode === "employee") {
-    showToast("员工账号请到员工信息中维护");
-    return;
-  }
-  const confirmed = window.confirm(`确定删除${roleUserNoun(role)}账号“${user.account}”吗？`);
-  if (!confirmed) return;
-  state.users = state.users.filter((item) => item.account !== account);
-  if (!["本地注册", "角色管理新增"].includes(user.identitySource)) {
-    state.deletedRoleUserAccounts = Array.from(new Set([...(state.deletedRoleUserAccounts || []), account]));
-    saveDeletedRoleUsers();
-  }
-  saveRegisteredUsers();
-  render();
-  showToast(`${roleUserNoun(role)}已删除`);
-}
-
-function findRoleEmployee(keyword) {
-  const normalized = String(keyword || "").trim().toLowerCase();
-  if (!normalized) return { user: null, ambiguous: false };
-  const candidates = roleEmployeeCandidates();
-  const exact = candidates.find((user) =>
-    [roleEmployeeOptionLabel(user), user.account, user.name, user.phone, user.email].some((value) => String(value || "").trim().toLowerCase() === normalized)
-  );
-  if (exact) return { user: exact, ambiguous: false };
-  const matches = candidates.filter((user) =>
-    [roleEmployeeOptionLabel(user), user.account, user.name, user.phone, user.email, user.department].some((value) =>
-      String(value || "").toLowerCase().includes(normalized)
-    )
-  );
-  return { user: matches.length === 1 ? matches[0] : null, ambiguous: matches.length > 1 };
-}
-
-function saveRoleUserFromForm(form) {
-  const data = new FormData(form);
-  const roleId = String(data.get("roleId") || "admin");
-  const role = state.roles.find((item) => item.id === roleId) || state.roles.find((item) => item.id === "admin");
-  const isEmployeeRole = role?.type === "employee";
-  const accountInput = String(data.get("account") || "").trim();
-  const employeeKeyword = String(data.get("employeeKeyword") || "").trim();
-  if (!accountInput) {
-    showToast("请填写账号");
-    return false;
-  }
-  const employeeResult = employeeKeyword ? findRoleEmployee(employeeKeyword) : { user: null, ambiguous: false };
-  if (employeeKeyword && !employeeResult.user) {
-    showToast(employeeResult.ambiguous ? "请从搜索结果中选择一个员工" : "未找到关联员工");
-    return false;
-  }
-  const employee = employeeResult.user;
-  const account = createUserIdFragment(accountInput);
-  if (state.users.some((user) => user.account === account)) {
-    showToast("账号已存在");
-    return false;
-  }
-  state.users.push({
-    name: employee?.name || account,
-    account,
-    phone: employee?.phone || "",
-    email: employee?.email || "",
-    department: employee?.department || "默认部门",
-    company: employee?.company || "默认公司",
-    roleCode: isEmployeeRole ? "employee" : role?.type === "super_admin" ? "super_admin" : "admin",
-    roleName: role?.name || (isEmployeeRole ? "普通员工" : "普通管理员"),
-    roleDefinitionId: role?.id || "admin",
-    scope: role?.description || role?.scope || "按角色授权",
-    loginType: isEmployeeRole ? "管理员添加员工信息" : "超级管理员分配账号",
-    identitySource: "角色管理新增",
-    externalSubject: `assigned:${account}`,
-    linkedEmployeeAccount: employee?.account || "",
-    bindStatus: employee ? "已绑定" : "未关联员工",
-  });
-  state.selectedRoleId = role?.id || "admin";
-  saveRegisteredUsers();
-  return true;
-}
-
-function saveRoleUserEditForm(form) {
-  const data = new FormData(form);
-  const account = String(data.get("accountKey") || "").trim();
-  const user = state.users.find((item) => item.account === account);
-  if (!user) {
-    showToast("未找到账号");
-    return false;
-  }
-  const name = String(data.get("name") || "").trim();
-  if (!name) {
-    showToast("请填写姓名");
-    return false;
-  }
-  user.name = name;
-  user.phone = String(data.get("phone") || "").trim();
-  user.email = String(data.get("email") || "").trim();
-  user.department = String(data.get("department") || "").trim() || "默认部门";
-  user.bindStatus = String(data.get("bindStatus") || "").trim() || "已绑定";
-  saveRegisteredUsers();
-  return true;
-}
-
-function saveRoleUserResetPasswordForm(form) {
-  void form;
-  showToast("密码由 ECP 统一管理");
-  return false;
-}
-
-function renderRoleManagement() {
-  const user = state.currentUser;
+function renderSystemIntegrations() {
+  const canCreate = hasPermission("asset:integration:create");
+  const canUpdate = hasPermission("asset:integration:update");
   return `<div class="system-content">
     <section class="panel">
       <div class="panel-header">
-        <div>
-          <h2 class="panel-title">ECP 角色与权限</h2>
-          <div class="panel-subtitle">当前系统只读取 ECP 服务端身份，不在本地创建账号、保存密码或授予角色。</div>
-        </div>
+        <div><h2 class="panel-title">系统对接</h2><div class="panel-subtitle">${systemIntegrations.length} 个连接配置</div></div>
+        ${canCreate ? '<button class="btn primary" type="button" data-system-integration-create>新增连接</button>' : ""}
       </div>
-      <div class="detail-grid">
-        ${detail("账号", user?.account || "-")}
-        ${detail("姓名", user?.name || "-")}
-        ${detail("当前角色", user?.roleName || "普通员工")}
-        ${detail("所在部门", user?.department || "-")}
-        ${detail("身份来源", "ECP统一认证")}
-        ${detail("授权方式", "ECP应用管理后台")}
-      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>编码</th><th>名称</th><th>提供方</th><th>基础地址</th><th>状态</th><th>密钥</th><th>版本</th><th>更新时间</th><th>操作</th></tr></thead>
+        <tbody>${systemIntegrations.length ? systemIntegrations.map((item) => `<tr>
+          <td><code>${escapeHtml(item.code)}</code></td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.provider)}</td>
+          <td>${escapeHtml(item.baseUrl)}</td><td>${statusTag(item.enabled ? "在用" : "已取消")}</td>
+          <td>${item.secretConfigured ? '<span class="tag">已配置</span>' : '<span class="tag gray">未配置</span>'}</td>
+          <td>${Number(item.version) || 1}</td><td>${escapeHtml(formatSystemConfigTimestamp(item.updatedAt))}</td>
+          <td>${canUpdate ? `<button class="btn" type="button" data-system-integration-edit="${escapeHtml(item.id)}">编辑</button>` : "-"}</td>
+        </tr>`).join("") : '<tr class="empty-row"><td colspan="9">当前范围内没有系统连接配置。</td></tr>'}</tbody>
+      </table></div>
     </section>
   </div>`;
 }
+
+function renderSystemForms() {
+  const canCreate = hasPermission("asset:form:create");
+  const canUpdate = hasPermission("asset:form:update");
+  const canDelete = hasPermission("asset:form:delete");
+  return `<div class="system-content">
+    <section class="panel">
+      <div class="panel-header">
+        <div><h2 class="panel-title">表单管理</h2><div class="panel-subtitle">${systemForms.length} 个表单定义</div></div>
+        ${canCreate ? '<button class="btn primary" type="button" data-system-form-create>新增表单</button>' : ""}
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>编码</th><th>名称</th><th>说明</th><th>状态</th><th>版本</th><th>更新时间</th><th>操作</th></tr></thead>
+        <tbody>${systemForms.length ? systemForms.map((item) => `<tr>
+          <td><code>${escapeHtml(item.code)}</code></td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.description || "-")}</td>
+          <td>${statusTag(item.enabled ? "在用" : "已取消")}</td><td>${Number(item.version) || 1}</td>
+          <td>${escapeHtml(formatSystemConfigTimestamp(item.updatedAt))}</td>
+          <td>
+            ${canUpdate ? `<button class="btn" type="button" data-system-form-edit="${escapeHtml(item.id)}">编辑</button>` : ""}
+            ${canDelete ? `<button class="btn" type="button" data-system-form-delete="${escapeHtml(item.id)}">删除</button>` : ""}
+            ${!canUpdate && !canDelete ? "-" : ""}
+          </td>
+        </tr>`).join("") : '<tr class="empty-row"><td colspan="7">当前范围内没有表单定义。</td></tr>'}</tbody>
+      </table></div>
+    </section>
+  </div>`;
+}
+
+function systemIntegrationFormMarkup(integration = null) {
+  const config = JSON.stringify(integration?.config || {}, null, 2);
+  const enabled = integration ? integration.enabled : true;
+  return `<form id="demoForm" class="system-config-form" data-mode="system-integration" data-system-integration-id="${escapeHtml(integration?.id || "")}">
+    <div class="form-grid">
+      <div class="field"><label><span class="required-star">*</span>连接编码</label><input name="code" required maxlength="64" pattern="[a-z][a-z0-9._-]{0,63}" value="${escapeHtml(integration?.code || "")}" autocomplete="off" /></div>
+      <div class="field"><label><span class="required-star">*</span>连接名称</label><input name="name" required maxlength="100" value="${escapeHtml(integration?.name || "")}" autocomplete="off" /></div>
+      <div class="field"><label><span class="required-star">*</span>提供方</label><input name="provider" required maxlength="40" pattern="[a-z][a-z0-9_-]{0,39}" value="${escapeHtml(integration?.provider || "")}" autocomplete="off" /></div>
+      <div class="field"><label><span class="required-star">*</span>基础地址</label><input name="baseUrl" type="url" required maxlength="2048" value="${escapeHtml(integration?.baseUrl || "")}" autocomplete="off" /></div>
+      <div class="field full"><label>连接参数（JSON）</label><textarea name="config" rows="9" spellcheck="false">${escapeHtml(config)}</textarea></div>
+      <div class="field"><label>${integration?.secretConfigured ? "更新密钥" : "密钥"}</label><input name="secret" type="password" maxlength="4096" autocomplete="new-password" /></div>
+      <div class="field"><label>连接状态</label><label><input name="enabled" type="checkbox" ${enabled ? "checked" : ""} /> 启用</label></div>
+      ${integration?.secretConfigured ? '<div class="field"><label>密钥处理</label><label><input name="clearSecret" type="checkbox" /> 清除已有密钥</label></div>' : ""}
+    </div>
+    <div class="modal-actions"><button type="button" class="btn" data-cancel-modal>取消</button><button type="submit" class="btn primary">保存</button></div>
+  </form>`;
+}
+
+function systemFormDefinitionMarkup(definition = null) {
+  const schema = JSON.stringify(definition?.schema || { type: "object", properties: {} }, null, 2);
+  const enabled = definition ? definition.enabled : true;
+  return `<form id="demoForm" class="system-config-form" data-mode="system-form" data-system-form-id="${escapeHtml(definition?.id || "")}">
+    <div class="form-grid">
+      <div class="field"><label><span class="required-star">*</span>表单编码</label><input name="code" required maxlength="64" pattern="[a-z][a-z0-9._-]{0,63}" value="${escapeHtml(definition?.code || "")}" autocomplete="off" /></div>
+      <div class="field"><label><span class="required-star">*</span>表单名称</label><input name="name" required maxlength="100" value="${escapeHtml(definition?.name || "")}" autocomplete="off" /></div>
+      <div class="field full"><label>表单说明</label><textarea name="description" maxlength="1000" rows="3">${escapeHtml(definition?.description || "")}</textarea></div>
+      <div class="field full"><label><span class="required-star">*</span>JSON Schema</label><textarea name="schema" required rows="14" spellcheck="false">${escapeHtml(schema)}</textarea></div>
+      <div class="field"><label>表单状态</label><label><input name="enabled" type="checkbox" ${enabled ? "checked" : ""} /> 启用</label></div>
+    </div>
+    <div class="modal-actions"><button type="button" class="btn" data-cancel-modal>取消</button><button type="submit" class="btn primary">保存</button></div>
+  </form>`;
+}
+
+function parseSystemConfigJson(value, label) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(value || ""));
+  } catch (error) {
+    throw new Error(`${label} JSON 格式错误：${error.message}`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label}必须是 JSON 对象`);
+  }
+  return parsed;
+}
+
+function openSystemIntegrationModal(id = "") {
+  const integration = id ? systemIntegrations.find((item) => item.id === id) : null;
+  if (id && !integration) return showToast("连接配置已更新，请刷新后重试");
+  const permission = integration ? "asset:integration:update" : "asset:integration:create";
+  if (!ensureAnyPermission([permission])) return;
+  modalTitle.textContent = integration ? "编辑系统连接" : "新增系统连接";
+  modalBody.innerHTML = systemIntegrationFormMarkup(integration);
+  openModal();
+}
+
+function openSystemFormModal(id = "") {
+  const definition = id ? systemForms.find((item) => item.id === id) : null;
+  if (id && !definition) return showToast("表单定义已更新，请刷新后重试");
+  const permission = definition ? "asset:form:update" : "asset:form:create";
+  if (!ensureAnyPermission([permission])) return;
+  modalTitle.textContent = definition ? "编辑表单" : "新增表单";
+  modalBody.innerHTML = systemFormDefinitionMarkup(definition);
+  openModal();
+}
+
+function replaceSystemConfigItem(items, saved) {
+  const index = items.findIndex((item) => item.id === saved.id);
+  if (index >= 0) items.splice(index, 1, saved);
+  else items.unshift(saved);
+  items.sort((left, right) => String(left.code || "").localeCompare(String(right.code || ""), "zh-CN"));
+}
+
+async function saveSystemIntegrationForm(form) {
+  const id = String(form.dataset.systemIntegrationId || "");
+  const current = id ? systemIntegrations.find((item) => item.id === id) : null;
+  if (id && !current) throw new Error("连接配置版本已变化，请重新打开后编辑");
+  const permission = current ? "asset:integration:update" : "asset:integration:create";
+  if (!ensureAnyPermission([permission])) return false;
+  const data = new FormData(form);
+  const secret = String(data.get("secret") || "");
+  const clearSecret = data.has("clearSecret");
+  if (clearSecret && secret) throw new Error("更新密钥和清除密钥不能同时选择");
+  if (secret && !secret.trim()) throw new Error("密钥不能只包含空白字符");
+  const body = {
+    code: String(data.get("code") || "").trim(),
+    name: String(data.get("name") || "").trim(),
+    provider: String(data.get("provider") || "").trim(),
+    baseUrl: String(data.get("baseUrl") || "").trim(),
+    enabled: data.has("enabled"),
+    config: parseSystemConfigJson(data.get("config"), "连接参数"),
+    ...(secret ? { secret } : {}),
+    ...(current ? { clearSecret, expectedVersion: Number(current.version) } : {}),
+  };
+  try {
+    const saved = await systemConfigApiRequest(
+      current ? `/api/system/integrations/${encodeURIComponent(current.id)}` : "/api/system/integrations",
+      { method: current ? "PUT" : "POST", body }
+    );
+    replaceSystemConfigItem(systemIntegrations, saved);
+    return true;
+  } catch (error) {
+    if (error.status === 409) await hydrateSystemIntegrations();
+    throw error;
+  }
+}
+
+async function saveSystemFormDefinition(form) {
+  const id = String(form.dataset.systemFormId || "");
+  const current = id ? systemForms.find((item) => item.id === id) : null;
+  if (id && !current) throw new Error("表单版本已变化，请重新打开后编辑");
+  const permission = current ? "asset:form:update" : "asset:form:create";
+  if (!ensureAnyPermission([permission])) return false;
+  const data = new FormData(form);
+  const body = {
+    code: String(data.get("code") || "").trim(),
+    name: String(data.get("name") || "").trim(),
+    description: String(data.get("description") || "").trim(),
+    enabled: data.has("enabled"),
+    schema: parseSystemConfigJson(data.get("schema"), "JSON Schema"),
+    ...(current ? { expectedVersion: Number(current.version) } : {}),
+  };
+  try {
+    const saved = await systemConfigApiRequest(
+      current ? `/api/system/forms/${encodeURIComponent(current.id)}` : "/api/system/forms",
+      { method: current ? "PUT" : "POST", body }
+    );
+    replaceSystemConfigItem(systemForms, saved);
+    return true;
+  } catch (error) {
+    if (error.status === 409) await hydrateSystemForms();
+    throw error;
+  }
+}
+
+async function deleteSystemForm(id) {
+  if (!ensureAnyPermission(["asset:form:delete"])) return;
+  const current = systemForms.find((item) => item.id === id);
+  if (!current) return showToast("表单定义已更新，请刷新后重试");
+  if (!window.confirm(`确定删除表单“${current.name}”吗？`)) return;
+  try {
+    await systemConfigApiRequest(`/api/system/forms/${encodeURIComponent(current.id)}?expectedVersion=${encodeURIComponent(current.version)}`, { method: "DELETE" });
+    systemForms = systemForms.filter((item) => item.id !== current.id);
+    render();
+    showToast("表单已删除");
+  } catch (error) {
+    if (error.status === 409) {
+      await hydrateSystemForms();
+      render();
+    }
+    showToast(error?.message || "表单删除失败");
+  }
+}
+
 
 function renderSystemPlaceholder(title, description) {
   return `<div class="system-content">
@@ -10645,9 +9704,82 @@ function renderSystemPlaceholder(title, description) {
           <div class="panel-subtitle">${escapeHtml(description)}</div>
         </div>
       </div>
-      <p class="empty-note">该模块内容正在整理中，当前已优先补齐角色管理配置。</p>
+      <p class="empty-note">当前账号没有可访问的系统配置内容。</p>
     </section>
   </div>`;
+}
+
+function renderEmployeeDirectory() {
+  const query = String(state.query || "").trim().toLowerCase();
+  const rows = ecpDirectoryUsers.filter((user) => !query || [
+    user.name,
+    user.employeeNo,
+    user.jobTitle,
+    user.company,
+    user.department,
+    user.subject,
+  ].some((value) => String(value || "").toLowerCase().includes(query)));
+  return `<div class="system-content">
+    <section class="panel">
+      <div class="panel-header">
+        <div><h2 class="panel-title">员工信息</h2><div class="panel-subtitle">${rows.length} 个 ECP 目录账号</div></div>
+      </div>
+      <div class="toolbar"><input class="local-search" type="search" placeholder="姓名、工号、岗位或组织" value="${escapeHtml(state.query)}"><button class="btn primary" data-search>查询</button><button class="btn" data-reset>重置</button></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>姓名</th><th>工号</th><th>岗位</th><th>所属公司</th><th>部门</th><th>ECP Subject</th><th>状态</th></tr></thead>
+        <tbody>${rows.length ? rows.map((user) => `<tr>
+          <td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.employeeNo || "-")}</td><td>${escapeHtml(user.jobTitle || "-")}</td>
+          <td>${escapeHtml(user.company || "-")}</td><td>${escapeHtml(user.department || "-")}</td><td><code>${escapeHtml(user.subject)}</code></td>
+          <td>${statusTag(user.status || "在用")}</td>
+        </tr>`).join("") : '<tr class="empty-row"><td colspan="7">当前范围内没有员工目录数据。</td></tr>'}</tbody>
+      </table></div>
+    </section>
+  </div>`;
+}
+
+function renderDepartmentDirectory() {
+  const departments = new Map();
+  ecpDirectoryUsers.forEach((user) => {
+    const userDepartments = user.departments?.length
+      ? user.departments
+      : user.department ? [{ id: user.department, name: user.department, path: user.department }] : [];
+    userDepartments.forEach((department) => {
+      const key = `${user.company || ""}\u0000${department.id || department.path || department.name}`;
+      const entry = departments.get(key) || {
+        company: user.company || "-",
+        name: department.name,
+        path: department.path || department.name,
+        members: 0,
+      };
+      entry.members += 1;
+      departments.set(key, entry);
+    });
+  });
+  const query = String(state.query || "").trim().toLowerCase();
+  const rows = Array.from(departments.values())
+    .filter((item) => !query || [item.company, item.name, item.path].some((value) => String(value).toLowerCase().includes(query)))
+    .sort((left, right) => `${left.company}/${left.path}`.localeCompare(`${right.company}/${right.path}`, "zh-CN"));
+  return `<div class="system-content">
+    <section class="panel">
+      <div class="panel-header"><div><h2 class="panel-title">组织架构</h2><div class="panel-subtitle">${rows.length} 个 ECP 目录部门</div></div></div>
+      <div class="toolbar"><input class="local-search" type="search" placeholder="公司、部门或组织路径" value="${escapeHtml(state.query)}"><button class="btn primary" data-search>查询</button><button class="btn" data-reset>重置</button></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>所属公司</th><th>部门名称</th><th>组织路径</th><th>目录成员</th></tr></thead>
+        <tbody>${rows.length ? rows.map((item) => `<tr><td>${escapeHtml(item.company)}</td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.path)}</td><td>${item.members}</td></tr>`).join("") : '<tr class="empty-row"><td colspan="4">当前范围内没有组织目录数据。</td></tr>'}</tbody>
+      </table></div>
+    </section>
+  </div>`;
+}
+
+function renderSelfServiceReadOnly() {
+  const rows = selfServiceSettingItems.map((meta) => {
+    const settings = state.selfServiceSettings[meta.key] || {};
+    return `<tr><td>${escapeHtml(meta.title)}</td><td>${statusTag(settings.enabled ? "在用" : "已取消")}</td><td>${settings.remarkRequired ? "是" : "否"}</td><td>${escapeHtml((settings.categories || []).join("、") || "-")}</td></tr>`;
+  });
+  return `<div class="system-content"><section class="panel">
+    <div class="panel-header"><div><h2 class="panel-title">员工自助</h2><div class="panel-subtitle">当前账号具有只读权限</div></div></div>
+    <div class="table-wrap"><table><thead><tr><th>功能</th><th>状态</th><th>备注必填</th><th>可申请分类</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>
+  </section></div>`;
 }
 
 function renderSelfServiceManagement() {
@@ -10692,10 +9824,8 @@ function selfServiceSignChildren() {
 function renderSelfServiceContent() {
   if (state.selfServiceMenu === "员工自助管理") return renderSelfServiceMainSettings();
   if (selfServiceSignChildren().includes(state.selfServiceMenu)) return renderSelfServiceSignSettings();
-  return `<section class="panel self-service-placeholder" data-self-service-content>
-    <h2>${escapeHtml(state.selfServiceMenu)}</h2>
-    <p class="empty-note">该子栏目用于配置签字确认范围，内容后续补充。</p>
-  </section>`;
+  state.selfServiceMenu = "员工自助管理";
+  return renderSelfServiceMainSettings();
 }
 
 function currentSelfServiceSignPage() {
@@ -10917,6 +10047,7 @@ function toggleSelfServiceSignGroup() {
 }
 
 function toggleSelfServiceReceiveSetting(key) {
+  if (!ensureAnyPermission(["asset:self_service:update"])) return;
   const [itemKey, fieldKey] = key.split(":");
   const meta = selfServiceSettingMeta(itemKey);
   const allowedFields = ["enabled", "remarkRequired", ...(meta.extraSwitches || []).map((item) => item.key)];
@@ -10927,6 +10058,7 @@ function toggleSelfServiceReceiveSetting(key) {
 }
 
 function removeSelfServiceReceiveCategory(itemKey, category) {
+  if (!ensureAnyPermission(["asset:self_service:update"])) return;
   const settings = state.selfServiceSettings[itemKey];
   if (!settings) return;
   const nextCategories = settings.categories.filter((item) => item !== category);
@@ -10939,7 +10071,8 @@ function removeSelfServiceReceiveCategory(itemKey, category) {
   refreshSelfServiceManagement();
 }
 
-function saveSelfServiceReceiveSettings(form) {
+async function saveSelfServiceReceiveSettings(form) {
+  if (!ensureAnyPermission(["asset:self_service:update"])) return;
   const data = new FormData(form);
   selfServiceSettingItems.forEach((meta) => {
     const extraSwitches = meta.extraSwitches || [];
@@ -10960,8 +10093,7 @@ function saveSelfServiceReceiveSettings(form) {
       remarkPrompt: String(data.get(`${meta.key}RemarkPrompt`) || "").trim(),
     });
   });
-  saveSelfServiceSettings();
-  showToast("员工自助配置已保存");
+  if (await saveSelfServiceSettings()) showToast("员工自助配置已保存");
   refreshSelfServiceManagement();
 }
 
@@ -10984,6 +10116,7 @@ function syncSelfServiceSignNoticeDrafts() {
 }
 
 function toggleSelfServiceSignSetting(key) {
+  if (!ensureAnyPermission(["asset:self_service:update"])) return;
   const [itemKey, fieldKey, timingKey] = key.split(":");
   const item = selfServiceSignItemDefinitions().find((definition) => definition.key === itemKey);
   if (!item) return;
@@ -11006,7 +10139,8 @@ function toggleSelfServiceSignSetting(key) {
   refreshSelfServiceManagement();
 }
 
-function saveSelfServiceSignSettings(form) {
+async function saveSelfServiceSignSettings(form) {
+  if (!ensureAnyPermission(["asset:self_service:update"])) return;
   const data = new FormData(form);
   const currentPage = currentSelfServiceSignPage();
   state.selfServiceSettings.signSettings = normalizeSelfServiceSignSettings(state.selfServiceSettings.signSettings || {});
@@ -11025,8 +10159,7 @@ function saveSelfServiceSignSettings(form) {
       item
     );
   });
-  saveSelfServiceSettings();
-  showToast("签字设置已保存");
+  if (await saveSelfServiceSettings()) showToast("签字设置已保存");
   refreshSelfServiceManagement();
 }
 
@@ -11078,31 +10211,42 @@ function bindSelfServiceSettingsEvents() {
     const counter = document.querySelector(`[data-self-service-notice-count="${cssEscape(event.currentTarget.dataset.selfServiceNotice)}"]`);
     if (counter) counter.textContent = String(event.currentTarget.value.length);
   }));
-  document.querySelector("[data-self-service-form]")?.addEventListener("submit", (event) => {
+  document.querySelector("[data-self-service-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    saveSelfServiceReceiveSettings(event.currentTarget);
+    await saveSelfServiceReceiveSettings(event.currentTarget);
   });
-  document.querySelector("[data-self-service-sign-form]")?.addEventListener("submit", (event) => {
+  document.querySelector("[data-self-service-sign-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    saveSelfServiceSignSettings(event.currentTarget);
+    await saveSelfServiceSignSettings(event.currentTarget);
   });
 }
 
 function renderSystemMainContent() {
-  if (state.systemMenu === "角色管理") return renderRoleManagement();
-  if (state.systemMenu === "员工自助") return renderSelfServiceManagement();
+  if (state.systemMenu === "员工信息") return renderEmployeeDirectory();
+  if (state.systemMenu === "组织架构") return renderDepartmentDirectory();
+  if (state.systemMenu === "员工自助") {
+    return hasPermission("asset:self_service:update")
+      ? renderSelfServiceManagement()
+      : renderSelfServiceReadOnly();
+  }
+  if (state.systemMenu === "系统对接") return renderSystemIntegrations();
+  if (state.systemMenu === "表单管理") return renderSystemForms();
   const descriptions = {
     员工信息: "维护员工档案、账号归属和员工端登录基础信息。",
     组织架构: "维护公司、部门和组织同步后的层级结构。",
     员工自助: "配置员工领用、退库、借用、报修和签字确认能力。",
-    系统对接: "维护飞书、钉钉、企业微信、OA 等外部系统连接。",
-    表单管理: "维护资产、审批、盘点相关表单字段和模板。",
   };
   return renderSystemPlaceholder(state.systemMenu, descriptions[state.systemMenu] || "系统配置模块。");
 }
 
 function renderSettings() {
-  const items = ["员工信息", "组织架构", "角色管理", "员工自助", "系统对接", "表单管理"];
+  const items = portalMenuItems()
+    .filter((item) => item.parentId === "settings")
+    .map((item) => ({ id: item.id, label: item.title }));
+  if (!items.some((item) => item.label === state.systemMenu)) {
+    state.systemMenu = items[0]?.label || "";
+  }
+  if (!items.length) return renderSystemPlaceholder("系统", "当前账号没有系统设置查看权限。");
   return `<section class="system-page ${state.systemMenu === "员工自助" ? "self-service-system-page" : ""}">
     <aside class="system-menu-shell">
       <div class="asset-subnav system-menu">
@@ -11114,9 +10258,9 @@ function renderSettings() {
         <div class="asset-subnav-list">
         ${items
           .map(
-            (item) => `<button class="asset-subnav-item ${state.systemMenu === item ? "active" : ""}" type="button" data-system-menu="${item}">
+            (item) => `<button class="asset-subnav-item ${state.systemMenu === item.label ? "active" : ""}" type="button" data-system-menu="${escapeHtml(item.label)}" data-system-menu-id="${escapeHtml(item.id)}">
               <span class="asset-subnav-dot" aria-hidden="true"></span>
-              <span class="asset-subnav-label">${item}</span>
+              <span class="asset-subnav-label">${escapeHtml(item.label)}</span>
             </button>`
           )
           .join("")}
@@ -11129,100 +10273,33 @@ function renderSettings() {
 
 function pageHeader(title, subtitle, action = null, kind = null, options = {}) {
   const buttons = [];
-  if (action && options.actionAttr) {
-    buttons.push(`<button class="btn primary" ${options.actionAttr}>${action}</button>`);
-  } else if (action && kind) {
-    buttons.push(`<button class="btn primary" data-open-kind="${kind}">${action}</button>`);
+  const actionAllowed = !options.actionPermissionCodes?.length || hasAnyPermission(options.actionPermissionCodes);
+  const kindPermission = kind ? createPermissionByKind[kind] : "";
+  if (action && options.actionAttr && actionAllowed) {
+    buttons.push(`<button class="btn primary" ${options.actionAttr}>${escapeHtml(action)}</button>`);
+  } else if (action && kind && (!kindPermission || hasPermission(kindPermission))) {
+    buttons.push(`<button class="btn primary" data-open-kind="${escapeHtml(kind)}">${escapeHtml(action)}</button>`);
   }
   if (options.showExport !== false) {
     buttons.push(`<button class="btn">导出</button>`);
   }
-  const showBatch = options.showBatch ?? state.currentUser?.roleCode !== "employee";
+  const showBatch = options.showBatch ?? (hasManagementExperience() && hasAnyPermission(portalWritePermissions));
   if (showBatch) {
     buttons.push(`<button class="btn">批量操作</button>`);
   }
-  return `<section class="hero"><h1>${title}</h1><p>${subtitle}</p>${buttons.length ? `<div class="quick-actions">${buttons.join("")}</div>` : ""}</section>`;
+  return `<section class="hero"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(subtitle)}</p>${buttons.length ? `<div class="quick-actions">${buttons.join("")}</div>` : ""}</section>`;
 }
 
 function toolbar(placeholders) {
   return `<div class="toolbar">
-    <input class="local-search" type="search" placeholder="${placeholders[0]}" value="${escapeHtml(state.query)}">
-    <select><option>${placeholders[1]}</option><option>全部</option><option>在用</option><option>闲置</option><option>维修中</option></select>
-    <select><option>${placeholders[2]}</option><option>全部</option><option>设备</option><option>软件</option></select>
+    <input class="local-search" type="search" placeholder="${escapeHtml(placeholders[0])}" value="${escapeHtml(state.query)}">
+    <select><option>${escapeHtml(placeholders[1])}</option><option>全部</option><option>在用</option><option>闲置</option><option>维修中</option></select>
+    <select><option>${escapeHtml(placeholders[2])}</option><option>全部</option><option>设备</option><option>软件</option></select>
     <button class="btn primary" data-search>查询</button>
     <button class="btn" data-reset>重置</button>
   </div>`;
 }
 
-function renderLogin() {
-  return `<section class="login-page"><article class="login-panel"><p class="panel-subtitle">请通过 ECP 统一认证登录。</p></article></section>`;
-}
-
-function renderBindReview() {
-  const pending = state.pendingAuth;
-  if (!pending) return renderLogin();
-
-  const targetUser = pending.targetAccount ? state.users.find((user) => user.account === pending.targetAccount) : null;
-
-  return `<section class="bind-shell">
-    <article class="bind-card bind-highlight">
-      <div class="eyebrow">身份绑定确认</div>
-      <h1>${pending.name}</h1>
-      <p>${pending.provider} 认证已成功。本系统需要先确认本地用户归属，再根据三类本地角色决定进入管理端还是员工端。</p>
-      <div class="detail-grid">
-        ${detail("Provider", pending.provider)}
-        ${detail("外部 Subject", pending.subject)}
-        ${detail("邮箱", pending.email)}
-        ${detail("部门", pending.department)}
-        ${detail("建议策略", pending.suggestion)}
-        ${detail("当前动作", pending.suggestedAction === "bind_existing" ? "绑定现有用户" : "自动新增普通员工")}
-      </div>
-    </article>
-    <article class="bind-card">
-      <div class="panel-header">
-        <div>
-          <h2 class="panel-title">处理建议</h2>
-          <div class="panel-subtitle">高权限不直接继承自 OIDC。绑定和授权都在本地系统中完成。</div>
-        </div>
-      </div>
-      <div class="permission-list">
-        ${
-          pending.suggestedAction === "bind_existing"
-            ? `<div class="permission-item">
-                <div>
-                  <strong>绑定到现有本地用户</strong>
-                  <div class="panel-subtitle">${targetUser?.name || pending.targetAccount} / ${targetUser?.roleName || "待确认角色"}</div>
-                </div>
-                ${targetUser ? roleBadge(targetUser.roleCode) : statusTag("待执行")}
-              </div>`
-            : `<div class="permission-item">
-                <div>
-                  <strong>新增普通员工</strong>
-                  <div class="panel-subtitle">自动创建本地用户，后续仍可由管理员调整角色。</div>
-                </div>
-                ${roleBadge("employee")}
-              </div>`
-        }
-        <div class="permission-item">
-          <div>
-            <strong>保留在待处理队列</strong>
-            <div class="panel-subtitle">适合需要人工复核邮箱冲突或组织归属的情况。</div>
-          </div>
-          ${statusTag("待执行")}
-        </div>
-      </div>
-      <div class="quick-actions">
-        ${
-          pending.suggestedAction === "bind_existing"
-            ? `<button class="btn primary" data-bind-action="bind">确认绑定并登录</button>`
-            : `<button class="btn primary" data-bind-action="create">自动新增并登录</button>`
-        }
-        <button class="btn ghost" data-bind-action="queue">暂存待处理</button>
-        <button class="btn" data-bind-action="back">返回登录入口</button>
-      </div>
-    </article>
-  </section>`;
-}
 
 function render() {
   if (!isAuthenticated() && isEcpAuthEnabled() && applyEcpSession()) {
@@ -11559,10 +10636,22 @@ function bindPageEvents() {
   document.querySelectorAll("[data-system-menu]").forEach((el) =>
     el.addEventListener("click", () => {
       state.systemMenu = el.dataset.systemMenu;
+      state.route = "settings";
       if (state.systemMenu === "员工自助" && !state.selfServiceMenu) state.selfServiceMenu = "员工自助管理";
-      state.roleForm = null;
+      persistRoute("settings");
       render();
     })
+  );
+  document.querySelector("[data-system-integration-create]")?.addEventListener("click", () => openSystemIntegrationModal());
+  document.querySelectorAll("[data-system-integration-edit]").forEach((el) =>
+    el.addEventListener("click", () => openSystemIntegrationModal(el.dataset.systemIntegrationEdit))
+  );
+  document.querySelector("[data-system-form-create]")?.addEventListener("click", () => openSystemFormModal());
+  document.querySelectorAll("[data-system-form-edit]").forEach((el) =>
+    el.addEventListener("click", () => openSystemFormModal(el.dataset.systemFormEdit))
+  );
+  document.querySelectorAll("[data-system-form-delete]").forEach((el) =>
+    el.addEventListener("click", () => void deleteSystemForm(el.dataset.systemFormDelete))
   );
   document.querySelectorAll("[data-self-service-toggle]").forEach((el) =>
     el.addEventListener("click", toggleSelfServiceSignGroup)
@@ -11571,7 +10660,6 @@ function bindPageEvents() {
     el.addEventListener("click", () => setSelfServiceMenu(el.dataset.selfServiceMenu || "员工自助管理"))
   );
   bindSelfServiceSettingsEvents();
-  bindRoleManagementEvents();
   document.querySelectorAll("[data-location-tree-toggle]").forEach((el) =>
     el.addEventListener("click", () => toggleLocationTreeGroup(el.dataset.locationTreeToggle))
   );
@@ -11599,13 +10687,11 @@ function bindPageEvents() {
     el.addEventListener("click", () => triggerLocationWorkbookAction(el.dataset.locationWorkbookAction))
   );
   document.querySelectorAll("[data-category-workbook-action]").forEach((el) =>
-    el.addEventListener("click", () => {
-      const action = el.dataset.categoryWorkbookAction;
-      if (action === "export") showToast(`已模拟导出 ${flattenAssetCategoryTree().length} 条分类`);
-      else if (action === "template") showToast("已模拟下载资产分类导入模板");
-      else showToast("已模拟打开分类导入");
-    })
+    el.addEventListener("click", () => triggerAssetCategoryWorkbookAction(el.dataset.categoryWorkbookAction))
   );
+  document.querySelector("[data-category-import-file]")?.addEventListener("change", (event) => {
+    handleAssetCategoryImportFile(event.currentTarget.files?.[0]);
+  });
   document.querySelector("[data-location-import-file]")?.addEventListener("change", (event) => {
     const file = event.currentTarget.files?.[0];
     handleLocationImportFile(file);
@@ -11803,13 +10889,6 @@ function bindPageEvents() {
       render();
     })
   );
-  document.querySelectorAll("[data-terminal]").forEach((el) =>
-    el.addEventListener("click", () => {
-      state.selectedTerminal = el.dataset.terminal;
-      render();
-    })
-  );
-  document.querySelectorAll("[data-switch-terminal]").forEach((el) => el.addEventListener("click", switchTerminal));
   document.querySelector("[data-open-help]")?.addEventListener("click", openHelpModal);
   document.querySelector("[data-account-toggle]")?.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -11820,135 +10899,9 @@ function bindPageEvents() {
       item.querySelector("[data-account-toggle]")?.setAttribute("aria-expanded", item === menu && open ? "true" : "false");
     });
   });
-  document.querySelector("[data-account-profile]")?.addEventListener("click", openProfileCenter);
   document.querySelector("[data-logout]")?.addEventListener("click", logout);
 }
 
-function isInsideRoleManagement(target) {
-  return Boolean(target?.closest?.(".role-management"));
-}
-
-function bindRoleManagementEvents() {
-  if (roleEventsBound) return;
-  roleEventsBound = true;
-  document.addEventListener("click", (event) => {
-    if (!isInsideRoleManagement(event.target) && !event.target.closest?.(".role-modal")) return;
-    const permissionGroup = event.target.closest("[data-role-permission-group]");
-    if (permissionGroup && !event.target.closest("input")) {
-      selectRolePermissionGroup(permissionGroup.dataset.rolePermissionGroup, modal);
-      return;
-    }
-    const permissionModule = event.target.closest("[data-role-module-row]");
-    if (permissionModule && !event.target.closest("input")) {
-      selectRolePermissionModule(permissionModule.dataset.roleModuleRow, modal);
-      return;
-    }
-    const tabButton = event.target.closest("[data-role-tab]");
-    if (tabButton) {
-      state.roleTab = tabButton.dataset.roleTab || "system";
-      state.roleQuery = "";
-      state.roleQueryDraft = "";
-      state.pendingRoleDeleteId = "";
-      render();
-      return;
-    }
-    const createButton = event.target.closest("[data-role-create]");
-    if (createButton) {
-      createRoleDefinitionDraft();
-      return;
-    }
-    const editButton = event.target.closest("[data-role-edit]");
-    if (editButton) {
-      openRoleDefinitionModal(editButton.dataset.roleEdit);
-      return;
-    }
-    const userCreateButton = event.target.closest("[data-role-user-create]");
-    if (userCreateButton) {
-      openRoleUserModal();
-      return;
-    }
-    const roleSearchButton = event.target.closest("[data-role-search-submit]");
-    if (roleSearchButton) {
-      submitRoleSearch("role");
-      return;
-    }
-    const userActionButton = event.target.closest("[data-role-user-action]");
-    if (userActionButton) {
-      openRoleUserActionModal(userActionButton.dataset.account || "", userActionButton.dataset.roleUserAction || "edit");
-      return;
-    }
-    const searchSubmitButton = event.target.closest("[data-role-user-search-submit]");
-    if (searchSubmitButton) {
-      submitRoleSearch("user");
-      return;
-    }
-    const deleteButton = event.target.closest("[data-role-delete]");
-    if (deleteButton && !deleteButton.disabled) {
-      deleteRoleDefinition(deleteButton.dataset.roleDelete);
-      return;
-    }
-    const selectButton = event.target.closest("[data-role-select]");
-    if (selectButton) {
-      selectRoleDefinition(selectButton.dataset.roleSelect);
-    }
-  });
-  document.addEventListener("input", (event) => {
-    if (!isInsideRoleManagement(event.target) && !event.target.closest?.(".role-modal")) return;
-    if (event.target.matches("[data-role-search]")) {
-      state.roleQueryDraft = event.target.value;
-      return;
-    }
-    if (event.target.matches("[data-role-user-search]")) {
-      state.roleUserQueryDraft = event.target.value;
-      return;
-    }
-    if (event.target.matches("[data-role-field]")) {
-      syncRoleFormFromDom(modal);
-    }
-  });
-  document.addEventListener("keydown", (event) => {
-    if (!isInsideRoleManagement(event.target)) return;
-    if (event.key !== "Enter") return;
-    if (event.target.matches("[data-role-search]")) {
-      event.preventDefault();
-      submitRoleSearch("role");
-      return;
-    }
-    if (event.target.matches("[data-role-user-search]")) {
-      event.preventDefault();
-      submitRoleSearch("user");
-    }
-  });
-  document.addEventListener("change", (event) => {
-    if (!isInsideRoleManagement(event.target) && !event.target.closest?.(".role-modal")) return;
-    if (event.target.matches("[data-role-all-permissions]")) {
-      setRolePermissionCodes(allRolePermissionCodes(), event.target.checked, modal);
-      return;
-    }
-    if (event.target.matches("[data-role-active-group-check]")) {
-      const group = rolePermissionGroups().find((item) => item.id === state.rolePermissionGroup);
-      if (group) setRolePermissionCodes(roleGroupCodes(group), event.target.checked, modal);
-      return;
-    }
-    if (event.target.matches("[data-role-group-check]")) {
-      toggleRoleGroup(event.target.dataset.roleGroupCheck, event.target.checked, modal);
-      return;
-    }
-    if (event.target.matches("[data-role-active-module-check]")) {
-      const module = rolePermissionModules.find((item) => item.code === state.rolePermissionModule);
-      if (module) setRolePermissionCodes(roleModuleCodes(module), event.target.checked, modal);
-      return;
-    }
-    if (event.target.matches("[data-role-module]")) {
-      toggleRoleModule(event.target.dataset.roleModule, event.target.checked, modal);
-      return;
-    }
-    if (event.target.matches("[data-role-permission]")) {
-      syncRoleFormFromDom(modal);
-      refreshRoleModuleState(modal);
-    }
-  });
-}
 
 function bindPaginationEvents(root = document) {
   root.querySelectorAll("[data-pagination]").forEach((pagination) => {
@@ -11972,13 +10925,33 @@ function handleAssetAction(id, action) {
   const asset = state.assets.find((item) => item.id === id);
   if (!asset) return;
   if (canDirectHandle(asset, action)) {
-    openDirectActionModal(asset, action);
+    state.selectedAssetIds = [asset.id];
+    if (action === "领用" && isReceivableAsset(asset)) openAssetReceiveModal([asset]);
+    else if (action === "退库" && isReturnableAsset(asset)) openAssetReturnModal([asset]);
+    else if (action === "借用" && isBorrowableAsset(asset)) openAssetBorrowModal([asset]);
+    else if (action === "归还" && isBorrowReturnableAsset(asset)) openAssetBorrowReturnModal([asset]);
+    else if (action === "交接" && isHandoverAsset(asset)) openAssetHandoverModal([asset]);
+    else if (action === "报修" || action === "维修") openRepairForAsset(asset);
+    else showToast("当前资产状态不支持该操作");
     return;
   }
-  openRequestModal(`资产${action}`, asset);
+  const requestTypeByAction = {
+    领用: "资产领用",
+    借用: "资产借用",
+    归还: "资产归还",
+    退还: "资产退还",
+    退库: "资产退还",
+    交接: "资产交接",
+  };
+  if (action === "报修") {
+    openRepairForAsset(asset);
+    return;
+  }
+  openRequestModal(requestTypeByAction[action] || `资产${action}`, asset);
 }
 
 async function cancelInboundOrder(assetId) {
+  if (!ensureAnyPermission(["asset:inbound:cancel"], "当前账号没有取消入库单的权限")) return;
   const asset = state.assets.find((item) => item.id === assetId);
   if (!asset) return;
   const orderId = buildInboundOrders().find((order) => order.asset.id === assetId)?.id;
@@ -11999,6 +10972,7 @@ async function handleBulkAssetAction(action) {
   }
 
   if (action === "receive") {
+    if (!ensureAnyPermission(["asset:receive_return:receive"])) return;
     const selected = requireSelectedAssets("领用");
     if (!selected.length) return;
     const invalid = selected.filter((asset) => !isReceivableAsset(asset));
@@ -12011,6 +10985,7 @@ async function handleBulkAssetAction(action) {
   }
 
   if (action === "return") {
+    if (!ensureAnyPermission(["asset:receive_return:return"])) return;
     const selected = requireSelectedAssets("退库");
     if (!selected.length) return;
     if (selected.some((asset) => !isReturnableAsset(asset))) {
@@ -12022,6 +10997,7 @@ async function handleBulkAssetAction(action) {
   }
 
   if (action === "borrow") {
+    if (!ensureAnyPermission(["asset:borrow_return:borrow"])) return;
     const selected = requireSelectedAssets("借用");
     if (!selected.length) return;
     if (selected.some((asset) => !isBorrowableAsset(asset))) {
@@ -12033,6 +11009,7 @@ async function handleBulkAssetAction(action) {
   }
 
   if (action === "borrowReturn") {
+    if (!ensureAnyPermission(["asset:borrow_return:return"])) return;
     const selected = requireSelectedAssets("借用归还");
     if (!selected.length) return;
     if (selected.some((asset) => !isBorrowReturnableAsset(asset))) {
@@ -12044,6 +11021,7 @@ async function handleBulkAssetAction(action) {
   }
 
   if (action === "handover") {
+    if (!ensureAnyPermission(["asset:receive_return:handover"])) return;
     const selected = requireSelectedAssets("交接");
     if (!selected.length) return;
     if (selected.some((asset) => !isHandoverAsset(asset))) {
@@ -12055,6 +11033,13 @@ async function handleBulkAssetAction(action) {
 }
 
 async function handleEditAction(action) {
+  const requiredPermission = {
+    modify: "asset:item:update",
+    delete: "asset:item:delete",
+    copy: "asset:item:copy",
+    batch: "asset:item:batchUpdate",
+  }[action];
+  if (requiredPermission && !ensureAnyPermission([requiredPermission])) return;
   if (action === "modify") {
     const selected = requireSelectedAssets("编辑");
     if (!selected.length) return;
@@ -12074,7 +11059,6 @@ async function handleEditAction(action) {
     catch (error) { showToast(error?.message || "资产删除失败"); return; }
     state.assets = state.assets.filter((asset) => !ids.has(asset.id));
     state.selectedAssetIds = [];
-    localStorage.setItem("assetPortalAssets", JSON.stringify(state.assets));
     render();
     showToast(`已删除 ${selected.length} 条资产`);
     return;
@@ -12088,23 +11072,14 @@ async function handleEditAction(action) {
       return;
     }
     const source = selected[0];
-    const copy = normalizeSavedAsset({
-      ...source,
-      id: generateAssetCode(source.category),
-      name: `${source.name || "未命名资产"} 副本`,
-      status: "空闲",
-      owner: "未分配",
-      receiveDate: "",
-      borrowDate: "",
-      expectedReturnDate: "",
-      returnDate: "",
-      lifecycle: [[todayValue(), "复制资产", `从 ${source.id} 复制生成`]],
-    });
-    try { await createAssetCommand(copy); }
+    let created;
+    try {
+      created = await createAssetCommand({ name: `${source.name || "未命名资产"} 副本` }, source.id);
+    }
     catch (error) { showToast(error?.message || "资产复制失败"); return; }
-    state.selectedAssetIds = [copy.id];
+    state.selectedAssetIds = [created.id];
     render();
-    showToast(`已复制资产 ${copy.id}`);
+    showToast(`已复制资产 ${created.id}`);
     return;
   }
 
@@ -12116,6 +11091,20 @@ async function handleEditAction(action) {
 }
 
 function handleImportAction(action) {
+  const routePermissions = state.route === "assetInbound"
+    ? { asset: "asset:inbound:import", export: "asset:inbound:export" }
+    : state.route === "assetReceiveReturn"
+      ? { export: "asset:receive_return:export" }
+      : state.route === "assetBorrowReturn"
+        ? { export: "asset:borrow_return:export" }
+        : {
+            asset: "asset:item:assetImport",
+            update: "asset:item:updateImport",
+            receive: "asset:item:receiveImport",
+            export: "asset:item:export",
+          };
+  const requiredPermission = routePermissions[action];
+  if (requiredPermission && !ensureAnyPermission([requiredPermission])) return;
   if (action === "export") {
     if (state.route === "assetInbound") {
       exportSelectedInboundOrders();
@@ -12125,7 +11114,11 @@ function handleImportAction(action) {
       exportSelectedReceiveReturnOrders();
       return;
     }
-    showToast("已模拟导出资产列表");
+    if (state.route === "assets") {
+      exportAssetWorkbook();
+      return;
+    }
+    showToast("当前页面暂不支持导出");
     return;
   }
   const config = {
@@ -12140,14 +11133,14 @@ function handleImportAction(action) {
     update: {
       title: "更新导入",
       kind: "update",
-      template: "资产更新模板.xlsx",
+      template: "资产更新模板.xls",
       mode: "更新导入",
       note: "按资产编码匹配已有资产，只更新模板内填写的字段。",
     },
     receive: {
       title: "批量领用导入",
       kind: "receive",
-      template: "批量领用导入模板.xlsx",
+      template: "批量领用导入模板.xls",
       mode: "批量领用导入",
       note: "按资产编码和领用人批量生成领用记录。",
     },
@@ -12156,6 +11149,7 @@ function handleImportAction(action) {
 }
 
 function openQuickAssetReceive(id) {
+  if (!ensureAnyPermission(["asset:receive_return:receive"])) return;
   const asset = state.assets.find((item) => item.id === id);
   if (!asset) return;
   if (!isReceivableAsset(asset)) {
@@ -12167,26 +11161,31 @@ function openQuickAssetReceive(id) {
 }
 
 function openBlankAssetReceiveModal() {
+  if (!ensureAnyPermission(["asset:receive_return:receive"])) return;
   state.selectedAssetIds = [];
   openAssetReceiveModal([]);
 }
 
 function openBlankAssetReturnModal() {
+  if (!ensureAnyPermission(["asset:receive_return:return"])) return;
   state.selectedAssetIds = [];
   openAssetReturnModal([]);
 }
 
 function openBlankAssetHandoverModal() {
+  if (!ensureAnyPermission(["asset:receive_return:handover"])) return;
   state.selectedAssetIds = [];
   openAssetHandoverModal([]);
 }
 
 function openBlankAssetBorrowModal() {
+  if (!ensureAnyPermission(["asset:borrow_return:borrow"])) return;
   state.selectedAssetIds = [];
   openAssetBorrowModal([]);
 }
 
 function openQuickAssetReturn(id) {
+  if (!ensureAnyPermission(["asset:receive_return:return"])) return;
   const asset = state.assets.find((item) => item.id === id);
   if (!asset) return;
   if (!isReturnableAsset(asset)) {
@@ -12198,6 +11197,7 @@ function openQuickAssetReturn(id) {
 }
 
 function openQuickAssetHandover(id) {
+  if (!ensureAnyPermission(["asset:receive_return:handover"])) return;
   const asset = state.assets.find((item) => item.id === id);
   if (!asset) return;
   if (!isHandoverAsset(asset)) {
@@ -12209,6 +11209,7 @@ function openQuickAssetHandover(id) {
 }
 
 async function signHandoverOrder(id) {
+  if (!ensureAnyPermission(["asset:receive_return:sign"])) return;
   const asset = state.assets.find((item) => item.id === id);
   if (!asset) return;
   try { await executeAssetCommand("handover-sign", [id], { date: todayValue() }); }
@@ -12218,6 +11219,7 @@ async function signHandoverOrder(id) {
 }
 
 async function cancelHandoverOrder(id) {
+  if (!ensureAnyPermission(["asset:receive_return:cancel"])) return;
   const asset = state.assets.find((item) => item.id === id);
   if (!asset) return;
   try { await executeAssetCommand("handover-cancel", [id], { operator: state.currentUser?.name || "admin", date: todayValue() }); }
@@ -12228,6 +11230,8 @@ async function cancelHandoverOrder(id) {
 }
 
 function openQuickBorrowFlow(id, flow) {
+  const permission = flow === "borrow" ? "asset:borrow_return:borrow" : "asset:borrow_return:return";
+  if (!ensureAnyPermission([permission])) return;
   const asset = state.assets.find((item) => item.id === id);
   if (!asset) return;
   state.selectedAssetIds = [asset.id];
@@ -12247,6 +11251,7 @@ function openQuickBorrowFlow(id, flow) {
 }
 
 async function delayBorrowAsset(id) {
+  if (!ensureAnyPermission(["asset:borrow_return:extend"])) return;
   const asset = state.assets.find((item) => item.id === id);
   if (!asset) return;
   if (!isBorrowReturnableAsset(asset)) {
@@ -12266,17 +11271,20 @@ async function delayBorrowAsset(id) {
 function drawerActionMarkup(item) {
   if (!state.currentUser) return "";
 
-  if (state.currentUser.roleCode === "employee") {
-    const primaryAction = item.owner === state.currentUser.name ? "归还" : "领用";
+  if (!hasAnyPermission(["asset:receive_return:handover", "asset:repair:update"])) {
+    if (!hasPermission("asset:request:create")) return "";
+    const primaryAction = item.owner === state.currentUser.name
+      ? item.status === "借用中" ? "归还" : "退还"
+      : "领用";
     return `<div class="detail-actions">
-      <button class="btn primary" data-asset-action="${item.id}" data-action="${primaryAction}">${assetActionLabel(item, primaryAction)}</button>
-      <button class="btn" data-asset-action="${item.id}" data-action="报修">${assetActionLabel(item, "报修")}</button>
+      <button class="btn primary" data-asset-action="${escapeHtml(item.id)}" data-action="${escapeHtml(primaryAction)}">${escapeHtml(assetActionLabel(item, primaryAction))}</button>
+      <button class="btn" data-asset-action="${escapeHtml(item.id)}" data-action="报修">${escapeHtml(assetActionLabel(item, "报修"))}</button>
     </div>`;
   }
 
   return `<div class="detail-actions">
-    <button class="btn primary" data-asset-action="${item.id}" data-action="调拨">${assetActionLabel(item, "调拨")}</button>
-    <button class="btn" data-asset-action="${item.id}" data-action="维修">${assetActionLabel(item, "维修")}</button>
+    <button class="btn primary" data-asset-action="${escapeHtml(item.id)}" data-action="交接">${escapeHtml(assetActionLabel(item, "交接"))}</button>
+    <button class="btn" data-asset-action="${escapeHtml(item.id)}" data-action="维修">${escapeHtml(assetActionLabel(item, "维修"))}</button>
 	  </div>`;
 }
 
@@ -12286,8 +11294,8 @@ function assetDetailText(value, fallback = "-") {
 }
 
 function assetDetailReadonly(label, value, options = {}) {
-  const { html = false, unit = "", wide = false, tall = false } = options;
-  const content = html ? value || "-" : escapeHtml(assetDetailText(value));
+  const { unit = "", wide = false, tall = false } = options;
+  const content = escapeHtml(assetDetailText(value));
   return `<label class="asset-detail-form-item ${wide ? "wide" : ""}">
     <span>${escapeHtml(label)}：</span>
     <div class="asset-detail-readonly ${tall ? "tall" : ""}">
@@ -12364,16 +11372,21 @@ function renderAssetDetailOperations(item) {
 }
 
 function renderAssetDetailFooterActions(item) {
-  const receiveButton = isReturnableAsset(item)
+  const receiveButton = isReturnableAsset(item) && hasPermission("asset:receive_return:return")
     ? `<button class="table-action primary" type="button" data-quick-return-asset="${escapeHtml(item.id)}">退库</button>`
-    : `<button class="table-action primary" type="button" data-quick-receive-asset="${escapeHtml(item.id)}" ${isReceivableAsset(item) ? "" : "disabled"}>领用</button>`;
-  const borrowButton = isBorrowReturnableAsset(item)
+    : hasPermission("asset:receive_return:receive")
+      ? `<button class="table-action primary" type="button" data-quick-receive-asset="${escapeHtml(item.id)}" ${isReceivableAsset(item) ? "" : "disabled"}>领用</button>`
+      : "";
+  const borrowButton = isBorrowReturnableAsset(item) && hasPermission("asset:borrow_return:return")
     ? `<button class="table-action primary" type="button" data-quick-borrow-flow="borrowReturn" data-asset-id="${escapeHtml(item.id)}">归还</button>`
-    : `<button class="table-action primary" type="button" data-quick-borrow-flow="borrow" data-asset-id="${escapeHtml(item.id)}" ${isBorrowableAsset(item) ? "" : "disabled"}>借用</button>`;
-  const handoverButton = isHandoverAsset(item)
+    : hasPermission("asset:borrow_return:borrow")
+      ? `<button class="table-action primary" type="button" data-quick-borrow-flow="borrow" data-asset-id="${escapeHtml(item.id)}" ${isBorrowableAsset(item) ? "" : "disabled"}>借用</button>`
+      : "";
+  const handoverButton = isHandoverAsset(item) && hasPermission("asset:receive_return:handover")
     ? `<button class="table-action" type="button" data-quick-handover-asset="${escapeHtml(item.id)}">交接</button>`
     : "";
-  return `<div class="asset-detail-footer-actions">${receiveButton}${borrowButton}${handoverButton}</div>`;
+  const actions = `${receiveButton}${borrowButton}${handoverButton}`;
+  return actions ? `<div class="asset-detail-footer-actions">${actions}</div>` : "";
 }
 
 function openAssetDetail(id) {
@@ -12445,19 +11458,18 @@ function openRequestDetail(id) {
       ${detail("申请物品", item.asset)}
       ${detail("审批系统", item.system)}
       ${detail("当前节点", item.currentNode)}
-      ${detail("状态", statusTag(item.status))}
+      ${detail("状态", statusTag(item.status), { html: true })}
       ${detail("资产数量", item.assetCount || "-")}
       ${detail("申请原因", item.reason)}
       ${detail("申请日期", item.date)}
       ${item.borrowLocation ? detail("借用后位置", item.borrowLocation) : ""}
       ${item.expectedReturnDate ? detail("预计归还日期", item.expectedReturnDate) : ""}
     </div>
-    <h3>外部审批状态</h3>
+    <h3>审批状态</h3>
     <div class="approval-flow">
-      <div class="approval-step"><span class="step-dot done"></span><div><strong>资产系统创建单据</strong><div class="timeline-desc">生成业务单据并冻结待变更资产。</div></div></div>
-      <div class="approval-step"><span class="step-dot done"></span><div><strong>${item.system} 创建审批实例</strong><div class="timeline-desc">字段映射成功，外部单号已返回。</div></div></div>
-      <div class="approval-step"><span class="step-dot current"></span><div><strong>${item.currentNode}</strong><div class="timeline-desc">等待外部审批回调或人工同步。</div></div></div>
-      <div class="approval-step"><span class="step-dot"></span><div><strong>资产动作执行</strong><div class="timeline-desc">审批通过后自动领用、调拨、报废或入库。</div></div></div>
+      <div class="approval-step"><span class="step-dot done"></span><div><strong>资产系统创建单据</strong><div class="timeline-desc">生成业务单据并记录申请内容。</div></div></div>
+      <div class="approval-step"><span class="step-dot current"></span><div><strong>${escapeHtml(item.currentNode || item.status)}</strong><div class="timeline-desc">Java 后端校验权限、资产归属和状态后执行。</div></div></div>
+      <div class="approval-step"><span class="step-dot"></span><div><strong>资产动作归档</strong><div class="timeline-desc">审批通过后写入资产台账和操作记录。</div></div></div>
     </div>
   `;
   openDrawer();
@@ -12474,7 +11486,7 @@ function openStocktakeDetail(id) {
       ${detail("任务编号", item.id)}
       ${detail("盘点范围", item.scope)}
       ${detail("负责人", item.owner)}
-      ${detail("状态", statusTag(item.progress))}
+      ${detail("状态", statusTag(item.progress), { html: true })}
       ${detail("应盘数量", item.total)}
       ${detail("已盘数量", item.checked)}
       ${detail("差异数量", item.diff)}
@@ -12489,8 +11501,9 @@ function openStocktakeDetail(id) {
   openDrawer();
 }
 
-function detail(label, value) {
-  return `<div class="detail-item"><div class="detail-label">${label}</div><div class="detail-value">${value}</div></div>`;
+function detail(label, value, options = {}) {
+  const content = options.html ? String(value || "-") : escapeHtml(value ?? "-");
+  return `<div class="detail-item"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value">${content}</div></div>`;
 }
 
 function openDrawer() {
@@ -12508,6 +11521,11 @@ function closeDrawer() {
 }
 
 function openRequestModal(type = "资产领用", asset = null) {
+  if (!ensureAnyPermission(["asset:request:create"])) return;
+  if (!hasManagementExperience() && !enabledSelfServiceRequestSettings(type)) {
+    showToast("该自助申请当前未启用");
+    return;
+  }
   state.employeeRequestActiveType = type;
   modalTitle.textContent = type;
   modal.classList.remove(
@@ -12517,15 +11535,15 @@ function openRequestModal(type = "资产领用", asset = null) {
     "print-preview-modal",
     "asset-label-print-modal",
     "employee-request-modal",
-    "profile-center-modal",
-    "location-modal",
-    "role-modal",
-    "role-user-modal",
-    "role-employee-definition-modal"
+    "location-modal"
   );
-  if (state.currentUser?.roleCode === "employee" && ["资产领用", "资产借用"].includes(type)) {
+  if (!hasManagementExperience() && ["资产领用", "资产借用", "资产归还", "资产退还", "资产交接"].includes(type)) {
     modal.classList.add("employee-request-modal");
-    modalBody.innerHTML = type === "资产借用" ? employeeAssetBorrowFormMarkup(asset) : employeeAssetReceiveFormMarkup(asset);
+    modalBody.innerHTML = type === "资产借用"
+      ? employeeAssetBorrowFormMarkup(asset)
+      : type === "资产领用"
+        ? employeeAssetReceiveFormMarkup(asset)
+        : employeeOwnedAssetRequestFormMarkup(type, asset);
     openModal();
     return;
   }
@@ -12533,14 +11551,24 @@ function openRequestModal(type = "资产领用", asset = null) {
   openModal();
 }
 
-function openDirectActionModal(asset, action) {
-  modalTitle.textContent = `管理端直办${action}`;
-  modal.classList.remove("asset-create-modal", "employee-request-modal", "profile-center-modal");
-  modalBody.innerHTML = formMarkup(`管理端直办${action}`, asset, true);
+function openRepairForAsset(asset) {
+  if (!ensureAnyPermission(["asset:repair:create"])) return;
+  modalTitle.textContent = "新建报修";
+  modal.classList.remove("asset-create-modal", "employee-request-modal", "asset-flow-modal");
+  modalBody.innerHTML = `<form id="demoForm" data-mode="business-repair">
+    <div class="form-grid">
+      <div class="field"><label>关联资产</label><input name="asset" required readonly value="${escapeHtml(asset.id)}"></div>
+      <div class="field"><label>上报人</label><input name="reporter" required readonly value="${escapeHtml(state.currentUser?.name || "")}"></div>
+      <div class="field full"><label>故障描述</label><textarea name="description" required></textarea></div>
+    </div>
+    <div class="modal-actions"><button type="button" class="btn" data-cancel-modal>取消</button><button type="submit" class="btn primary">提交报修</button></div>
+  </form>`;
   openModal();
 }
 
 function openKindModal(kind) {
+  const requiredPermission = createPermissionByKind[kind];
+  if (requiredPermission && !ensureAnyPermission([requiredPermission])) return;
   const map = {
     asset: "新增资产",
     request: "新建申请",
@@ -12556,7 +11584,7 @@ function openKindModal(kind) {
 }
 
 function businessKindFormMarkup(kind, title) {
-  const common = (fields) => `<form id="demoForm" data-mode="business-${kind}"><div class="form-grid">${fields}</div><div class="modal-actions"><button type="button" class="btn" data-cancel-modal>取消</button><button type="submit" class="btn primary">确定</button></div></form>`;
+  const common = (fields) => `<form id="demoForm" data-mode="business-${escapeHtml(kind)}"><div class="form-grid">${fields}</div><div class="modal-actions"><button type="button" class="btn" data-cancel-modal>取消</button><button type="submit" class="btn primary">确定</button></div></form>`;
   if (kind === "stocktake") return common(`
     <div class="field"><label>任务名称</label><input name="name" required></div><div class="field"><label>盘点范围</label><input name="scope" required></div>
     <div class="field"><label>负责人</label><input name="owner" required value="${escapeHtml(state.currentUser?.name || "")}"></div><div class="field"><label>应盘数量</label><input name="total" type="number" min="1" required></div>
@@ -12575,6 +11603,8 @@ function businessKindFormMarkup(kind, title) {
 }
 
 async function submitBusinessKindForm(form, kind) {
+  const requiredPermission = createPermissionByKind[kind];
+  if (requiredPermission && !ensureAnyPermission([requiredPermission])) return;
   const data = Object.fromEntries(new FormData(form).entries());
   if (kind === "stocktake") data.total = Number(data.total);
   if (kind === "consumable") {
@@ -12593,6 +11623,7 @@ async function submitBusinessKindForm(form, kind) {
 }
 
 async function adjustConsumable(id, direction) {
+  if (!ensureAnyPermission(["asset:consumable:adjust"])) return;
   const raw = window.prompt(direction > 0 ? "请输入入库数量" : "请输入领取数量", "1");
   if (raw === null) return;
   const quantity = Number(raw);
@@ -12605,6 +11636,7 @@ async function adjustConsumable(id, direction) {
 }
 
 async function updateStocktakeProgress(id) {
+  if (!ensureAnyPermission(["asset:stocktake:update"])) return;
   const item = state.stocktakes.find((row) => row.id === id);
   if (!item) return;
   const checked = window.prompt(`已盘数量（总数 ${item.total}）`, String(item.checked));
@@ -12620,7 +11652,7 @@ async function updateStocktakeProgress(id) {
 
 async function advanceRepair(id) {
   const item = state.repairs.find((row) => row.id === id);
-  if (!item || state.currentUser?.roleCode === "employee") return;
+  if (!item || !ensureAnyPermission(["asset:repair:update"])) return;
   const status = item.status === "待处理" ? "维修中" : item.status === "维修中" ? "已完成" : item.status;
   if (status === item.status) return showToast("该维修单已结束");
   try {
@@ -12628,45 +11660,6 @@ async function advanceRepair(id) {
     render();
     showToast(`维修状态已更新为${status}`);
   } catch (error) { showToast(error?.message || "维修状态更新失败"); }
-}
-
-function switchTerminal() {
-  if (!isAuthenticated()) return;
-  persistRoute(state.route, userTerminalMode());
-  if (isEcpAuthEnabled()) {
-    const managerRoleCode = state.currentUser.managerRoleCode || (["super_admin", "admin"].includes(state.currentUser.roleCode) ? state.currentUser.roleCode : "");
-    const managerRoleName = state.currentUser.managerRoleName || roleMeta[managerRoleCode]?.name || "";
-    if (state.currentUser.roleCode === "employee") {
-      if (!managerRoleCode) {
-        showToast("当前 ECP 账号没有管理端权限");
-        return;
-      }
-      state.currentUser = {
-        ...state.currentUser,
-        roleCode: managerRoleCode,
-        roleName: managerRoleName,
-        roleDefinitionId: managerRoleCode,
-      };
-    } else {
-      state.currentUser = {
-        ...state.currentUser,
-        managerRoleCode,
-        managerRoleName: managerRoleName || state.currentUser.roleName,
-        roleCode: "employee",
-        roleName: roleMeta.employee.name,
-        roleDefinitionId: "employee",
-      };
-    }
-    state.selectedTerminal = "web_pc";
-    state.session.terminal = "web_pc";
-    resetSessionView();
-    const nextMode = userTerminalMode();
-    persistTerminalMode(nextMode);
-    state.route = preferredAccessibleRoute(firstAccessibleRoute(), { mode: nextMode, includeHash: false });
-    persistRoute(state.route, nextMode);
-    render();
-    return;
-  }
 }
 
 function openHelpModal() {
@@ -12679,20 +11672,8 @@ function openHelpModal() {
         <p>系统支持网页PC端、iOS APP、Android APP。同一个账号可登录不同客户端，查看和操作相同的数据。</p>
       </div>
       <div class="help-guide-card">
-        <strong>超级管理员</strong>
-        <p>网页端或移动APP均可登录，拥有全部功能及数据权限。</p>
-      </div>
-      <div class="help-guide-card">
-        <strong>普通管理员</strong>
-        <p>网页端或移动APP均可登录，功能及数据查看权限由超级管理员授权。</p>
-      </div>
-      <div class="help-guide-card">
-        <strong>普通员工</strong>
-        <p>网页端或移动APP均可登录，仅能使用员工端功能，查看本人资产并提交申请。</p>
-      </div>
-      <div class="help-guide-card">
-        <strong>一键切换</strong>
-        <p>左下角第一个按钮会在员工端和管理端之间切换，默认管理端使用超级管理员演示账号。</p>
+        <strong>ECP 权限</strong>
+        <p>页面入口和业务操作由当前 ECP 会话权限决定。</p>
       </div>
     </div>
   `;
@@ -12706,7 +11687,7 @@ function assetReceiveFormMarkup(assets) {
   return `<form id="demoForm" class="asset-flow-form receive-flow-form" data-mode="asset-receive">
     <section class="asset-flow-section">
       <div class="asset-flow-grid">
-        <div class="field"><label><span class="required-star">*</span>领用人</label><div class="field-control has-icon"><input name="receiver" required placeholder="模糊搜索" autocomplete="off"><span class="field-icon" aria-hidden="true">⌕</span></div></div>
+        <div class="field"><label><span class="required-star">*</span>领用人</label>${directoryPersonSelect("receiverSubject")}</div>
         <div class="field"><label><span class="required-star">*</span>所属公司</label><input name="company" required value="${escapeHtml(lockedCompany)}" readonly data-locked-field></div>
         <div class="field"><label>所在部门</label><input name="department" value="${escapeHtml(lockedDepartment)}" readonly data-locked-field></div>
         <div class="field"><label><span class="required-star">*</span>领用日期</label><input name="receiveDate" required type="date" value="${todayValue()}"></div>
@@ -12718,7 +11699,6 @@ function assetReceiveFormMarkup(assets) {
     ${assetFlowDetailSection(assets, "资产详情")}
     <div class="modal-actions">
       <button type="button" class="btn" data-cancel-modal>取消</button>
-      <button type="button" class="btn" data-save-draft>暂存</button>
       <button type="submit" class="btn primary">保存并提交</button>
     </div>
   </form>`;
@@ -12740,7 +11720,6 @@ function assetReturnFormMarkup(assets) {
     ${assetFlowDetailSection(assets)}
     <div class="modal-actions">
       <button type="button" class="btn" data-cancel-modal>取消</button>
-      <button type="button" class="btn" data-save-draft>暂存</button>
       <button type="submit" class="btn primary">保存并提交</button>
     </div>
   </form>`;
@@ -12753,7 +11732,7 @@ function assetBorrowFormMarkup(assets) {
   return `<form id="demoForm" class="asset-flow-form borrow-flow-form" data-mode="asset-borrow">
     <section class="asset-flow-section">
       <div class="asset-flow-grid">
-        <div class="field"><label><span class="required-star">*</span>借用人：</label><div class="field-control has-icon"><input name="borrower" required placeholder="模糊搜索" autocomplete="off"><span class="field-icon" aria-hidden="true">⌕</span></div></div>
+        <div class="field"><label><span class="required-star">*</span>借用人：</label>${directoryPersonSelect("borrowerSubject")}</div>
         <div class="field"><label><span class="required-star">*</span>所属公司：</label><input name="company" required value="${escapeHtml(lockedCompany)}" readonly data-locked-field></div>
         <div class="field"><label>所在部门：</label><input name="department" value="${escapeHtml(lockedDepartment)}" readonly data-locked-field></div>
         <div class="field"><label><span class="required-star">*</span>借用日期：</label><input name="borrowDate" required type="date" value="${todayValue()}"></div>
@@ -12766,7 +11745,6 @@ function assetBorrowFormMarkup(assets) {
     ${assetFlowDetailSection(assets, "资产详情", { expectedReturnDateColumn: true, defaultExpectedReturnDate: todayValue() })}
     <div class="modal-actions">
       <button type="button" class="btn" data-cancel-modal>取消</button>
-      <button type="button" class="btn" data-save-draft>暂存</button>
       <button type="submit" class="btn primary">保存并提交</button>
     </div>
   </form>`;
@@ -12786,7 +11764,6 @@ function assetBorrowReturnFormMarkup(assets) {
     ${assetFlowDetailSection(assets)}
     <div class="modal-actions">
       <button type="button" class="btn" data-cancel-modal>取消</button>
-      <button type="button" class="btn" data-save-draft>暂存</button>
       <button type="submit" class="btn primary">保存并提交</button>
     </div>
   </form>`;
@@ -12810,7 +11787,7 @@ function assetHandoverFormMarkup(assets) {
         </label>
       </div>
       <div class="asset-flow-grid">
-        <div class="field" data-handover-personal><label><span class="required-star">*</span>接收人：</label><div class="field-control has-icon"><input name="receiver" required placeholder="模糊搜索" autocomplete="off"><span class="field-icon" aria-hidden="true">⌕</span></div></div>
+        <div class="field" data-handover-personal><label><span class="required-star">*</span>接收人：</label>${directoryPersonSelect("receiverSubject")}</div>
         <div class="field" data-handover-personal><label><span class="required-star">*</span>接收公司：</label><input name="receiverCompany" required value="${escapeHtml(lockedCompany)}" readonly data-locked-field></div>
         <div class="field"><label>接收部门：</label>${inlineSelect("receiverDepartment", "接收部门", defaultDepartmentOptions, { selected: lockedDepartment })}</div>
         <div class="field"><label><span class="required-star">*</span>接收位置：</label>${inlineSelect("receiverLocation", "接收位置", assetLocationOptions, { required: true })}</div>
@@ -12822,7 +11799,6 @@ function assetHandoverFormMarkup(assets) {
     ${assetFlowDetailSection(assets, "资产明细")}
     <div class="modal-actions">
       <button type="button" class="btn" data-cancel-modal>取消</button>
-      <button type="button" class="btn" data-save-draft>暂存</button>
       <button type="submit" class="btn primary">保存并提交</button>
     </div>
   </form>`;
@@ -12838,7 +11814,6 @@ function assetFlowDetailSection(assets, title = "资产详情", options = {}) {
     <div class="asset-flow-toolbar">
       <button type="button" class="btn primary" data-keep-modal>选择资产</button>
       <button type="button" class="btn" data-remove-flow-assets ${assets.length ? "" : "disabled"}>删除资产</button>
-      <button type="button" class="btn">批量导入</button>
     </div>
     <div class="asset-flow-table-wrap">
       <table class="asset-flow-table">
@@ -13133,21 +12108,20 @@ function bindAssetPickerEvents(host) {
 
 function assetEditFormMarkup(asset) {
   const admins = Array.from(
-    new Set([state.currentUser?.name, ...state.users.filter((item) => item.roleCode !== "employee").map((item) => item.name), ...uniqueAssetFormValues("custodian")].filter(Boolean))
+    new Set([state.currentUser?.name, ...uniqueAssetFormValues("custodian")].filter(Boolean))
   );
   const categories = assetCategoryFormOptions([asset.category]);
   const locations = assetLocationOptions;
-  const selectedCondition = asset.condition || (asset.status === "维修中" ? "维修中" : "正常");
   return `<form id="demoForm" class="asset-create-form asset-edit-form" data-mode="asset-edit" data-asset-id="${escapeHtml(asset.id)}">
     <section class="asset-form-section">
       <div class="asset-form-section-head">
         <h3>使用信息</h3>
       </div>
       <div class="asset-form-grid">
-        ${assetField("人员姓名", `<div class="field-control has-icon"><input name="personName" placeholder="请输入" value="${escapeHtml(asset.owner === "未分配" ? "" : asset.owner || "")}" autocomplete="off"><span class="field-icon" aria-hidden="true">⌕</span></div>`)}
+        ${assetField("人员姓名", `<input value="${escapeHtml(asset.owner === "未分配" ? "" : asset.owner)}" readonly>`)}
         ${assetField("使用公司", inlineSelect("company", "使用公司", defaultCompanyOptions, { required: true, selected: asset.company || "默认公司" }), { required: true })}
         ${assetField("使用部门", inlineSelect("department", "使用部门", defaultDepartmentOptions, { selected: asset.department || "默认部门" }))}
-        ${assetField("领用/借用日期", `<input name="receiveDate" type="date" value="${escapeHtml(asset.receiveDate || asset.borrowDate || "")}">`)}
+        ${assetField("领用/借用日期", `<input type="date" value="${escapeHtml(asset.receiveDate || asset.borrowDate || "")}" readonly>`)}
       </div>
     </section>
 
@@ -13164,7 +12138,7 @@ function assetEditFormMarkup(asset) {
         ${assetField("品牌", `<input name="brand" required placeholder="请输入" value="${escapeHtml(asset.brand || "")}" autocomplete="off">`, { required: true })}
         ${assetField("型号", `<input name="model" placeholder="请输入" value="${escapeHtml(asset.model || "")}" autocomplete="off">`)}
         ${assetField("所属/承租公司", inlineSelect("ownerCompany", "所属/承租公司", defaultCompanyOptions, { required: true, selected: asset.ownerCompany || "默认公司" }), { required: true })}
-        ${assetField("资产状况", inlineSelect("condition", "请选择", assetConditionOptions, { required: true, selected: selectedCondition }), { required: true })}
+        ${assetField("资产状况", `<input value="${escapeHtml(asset.condition || asset.status || "")}" readonly>`)}
         ${assetField("所在位置", inlineSelect("location", "所在位置", locations, { required: true, selected: normalizeLocationValue(asset.location || ""), variant: "location" }), { required: true })}
         ${assetField("使用期限", `<div class="field-control has-unit"><input name="usageMonths" type="number" min="0" step="1" placeholder="请输入" value="${escapeHtml(asset.usageMonths || "")}" data-category-useful-life-input><span class="field-unit">月</span></div>`)}
         ${assetField("金额", `<div class="field-control has-unit"><input name="price" type="number" min="0" step="1" placeholder="请输入" value="${escapeHtml(asset.price || 0)}"><span class="field-unit">元</span></div>`)}
@@ -13270,7 +12244,7 @@ function openAssetImportModal(config) {
 function assetImportFormMarkup(config) {
   const templateControl = config.templateHref
     ? `<a class="asset-template-download" href="${escapeHtml(config.templateHref)}" download="${escapeHtml(config.template)}">⇩ ${escapeHtml(config.template)}</a>`
-    : `<button type="button" class="asset-template-download" data-download-template="${escapeHtml(config.template)}">⇩ ${escapeHtml(config.template)}</button>`;
+    : `<button type="button" class="asset-template-download" data-download-template="${escapeHtml(config.template)}" data-download-template-kind="${escapeHtml(config.kind || "asset")}">⇩ ${escapeHtml(config.template)}</button>`;
   return `<form id="demoForm" class="asset-import-form" data-mode="asset-import" data-import-kind="${escapeHtml(config.kind || "asset")}" data-result="${escapeHtml(config.title)}已提交">
     <label class="asset-upload-drop" data-asset-upload-drop tabindex="0">
       <input name="assetImportFile" type="file" accept=".xls,.xlsx" data-asset-import-file hidden>
@@ -13294,6 +12268,38 @@ function assetImportFormMarkup(config) {
       <button type="submit" class="btn primary">确定</button>
     </div>
   </form>`;
+}
+
+function downloadAssetImportTemplate(kind, filename) {
+  const configs = {
+    update: {
+      sheet: "资产更新",
+      columns: [
+        ["id", "资产编码*", 110], ["name", "资产名称", 130], ["category", "资产分类", 100],
+        ["brand", "品牌", 80], ["model", "型号", 100], ["price", "金额", 80],
+        ["purchaseMethod", "购置方式", 90], ["rent", "租金", 80], ["custodian", "管理员", 90],
+        ["condition", "资产状况", 90], ["orderNo", "订单号", 110], ["unit", "计量单位", 72],
+        ["ownerCompany", "所属/承租公司", 120], ["purchaseDate", "购置/起租日期", 110],
+        ["receiveDate", "领用日期", 100], ["location", "所在位置", 160], ["company", "使用公司", 110],
+        ["department", "使用部门", 110], ["owner", "使用人", 90], ["ownerSubject", "ECP人员Subject", 150],
+        ["note", "备注", 180],
+      ],
+      instruction: { id: "必填项；按资产编码匹配，其余空白字段不修改", ownerSubject: "变更使用人时必填 ECP unionId subject" },
+    },
+    receive: {
+      sheet: "批量领用",
+      columns: [
+        ["id", "资产编码*", 110], ["owner", "领用人", 100], ["ownerSubject", "ECP人员Subject*", 150],
+        ["receiveDate", "领用日期*", 100], ["location", "领用后位置*", 160], ["note", "领用备注", 180],
+      ],
+      instruction: { id: "必填项", ownerSubject: "必填项；填写 ECP unionId subject", receiveDate: "必填项；YYYY-MM-DD", location: "必填项；填写位置完整路径" },
+    },
+  };
+  const config = configs[kind];
+  if (!config) return showToast("该导入类型暂无模板");
+  const workbook = spreadsheetWorkbookXml(config.sheet, config.columns, [config.instruction]);
+  downloadBlob(filename || `${config.sheet}模板.xls`, workbook, "application/vnd.ms-excel;charset=utf-8");
+  showToast(`已下载${config.sheet}模板`);
 }
 
 function setAssetImportStatus(form, message, tone = "info") {
@@ -13479,12 +12485,13 @@ const assetImportHeaderAliases = {
   ownerCompany: ["所属/承租公司", "所属公司", "承租公司"],
   purchaseDate: ["购置/起租日期", "购置日期", "起租日期"],
   receiveDate: ["领用日期"],
-  location: ["所在位置", "位置"],
+  location: ["所在位置", "位置", "领用后位置", "接收位置"],
   company: ["使用公司"],
   department: ["部门", "使用部门"],
   employeeCode: ["人员编号", "员工编号"],
   email: ["电子邮箱", "邮箱"],
-  owner: ["使用人", "人员姓名"],
+  owner: ["使用人", "人员姓名", "领用人", "接收人"],
+  ownerSubject: ["ECP人员Subject", "人员Subject", "使用人Subject", "领用人Subject", "ownerSubject", "receiverSubject", "unionId"],
   supplier: ["供应商"],
   warrantyDate: ["维保到期时间", "维保到期日期"],
   note: ["备注"],
@@ -13562,20 +12569,8 @@ function normalizeImportCondition(value) {
 function assetImportStatusForRecord(record, condition) {
   if (condition === "维修中") return "维修中";
   if (condition === "待验收") return "待验收";
-  if (record.owner || record.receiveDate) return "在用";
+  if (record.owner || record.ownerSubject || record.receiveDate) return "在用";
   return "空闲";
-}
-
-function generateImportedAssetCode(category, usedIds) {
-  const prefix = assetCodeRulePrefix(category);
-  const serialLength = Math.round(clampNumber(state?.assetCodeRuleSettings?.serialLength, 5, 3, 7));
-  let serial = state.assets.length + 1;
-  let code = `${prefix}${String(serial).padStart(serialLength, "0")}`;
-  while (usedIds.has(code)) {
-    serial += 1;
-    code = `${prefix}${String(serial).padStart(serialLength, "0")}`;
-  }
-  return code;
 }
 
 function validateImportedAssetRecord(record, rowNumber) {
@@ -13599,13 +12594,19 @@ function createImportedAsset(record, rowNumber, usedIds, filename) {
   const validationErrors = validateImportedAssetRecord(record, rowNumber);
   if (validationErrors.length) throw new Error(validationErrors.join("；"));
   const category = record.category;
-  const id = record.id || generateImportedAssetCode(category, usedIds);
-  if (usedIds.has(id)) throw new Error(`第 ${rowNumber} 行资产编码“${id}”重复`);
-  usedIds.add(id);
+  const id = String(record.id || "").trim();
+  if (id && usedIds.has(id)) throw new Error(`第 ${rowNumber} 行资产编码“${id}”重复`);
+  if (id) usedIds.add(id);
   const condition = normalizeImportCondition(record.condition);
   const purchaseDate = normalizeImportDate(record.purchaseDate);
   const receiveDate = normalizeImportDate(record.receiveDate);
   const location = normalizeLocationValue(record.location);
+  const ownerUser = record.ownerSubject ? directoryUserBySubject(record.ownerSubject) : record.owner ? directoryUserByName(record.owner) : null;
+  if (record.owner && !record.ownerSubject && !ownerUser) {
+    throw new Error(`第 ${rowNumber} 行使用人“${record.owner}”无法唯一匹配 ECP 账号目录`);
+  }
+  const ownerSubject = String(record.ownerSubject || ownerUser?.subject || "").trim();
+  const owner = ownerUser?.name || record.owner || (ownerSubject ? "待服务端解析" : "未分配");
   const asset = {
     id,
     name: record.name || `${category}资产`,
@@ -13613,9 +12614,10 @@ function createImportedAsset(record, rowNumber, usedIds, filename) {
     type: category,
     model: record.model,
     sn: record.sn,
-    owner: record.owner || "未分配",
+    owner,
+    ownerSubject,
     custodian: record.custodian || state.currentUser?.name || "admin",
-    department: record.department || "默认部门",
+    department: ownerUser?.department || record.department || "默认部门",
     status: assetImportStatusForRecord(record, condition),
     location,
     supplier: record.supplier,
@@ -13637,7 +12639,7 @@ function createImportedAsset(record, rowNumber, usedIds, filename) {
     unit: record.unit || assetCategoryDefaultsForName(category).unit || "台",
     note: record.note,
     brand: record.brand,
-    company: record.company || record.ownerCompany || "默认公司",
+    company: ownerUser?.company || record.company || record.ownerCompany || "默认公司",
     ownerCompany: record.ownerCompany || "默认公司",
     condition,
     usageMonths: record.usageMonths || assetCategoryDefaultsForName(category).usefulLife,
@@ -13684,9 +12686,142 @@ async function importAssetWorkbook(file) {
   state.assets.unshift(...created);
   state.selectedAssetIds = created.map((asset) => asset.id);
   state.assetListPage = 1;
-  localStorage.setItem("assetPortalAssets", JSON.stringify(state.assets));
   render();
   return created.length;
+}
+
+function importRecordHasValue(record, field) {
+  return String(record?.[field] || "").trim() !== "";
+}
+
+function resolveImportedAssetParty(record, rowNumber, options = {}) {
+  const owner = String(record.owner || "").trim();
+  const suppliedSubject = String(record.ownerSubject || "").trim();
+  if (options.allowUnassigned && owner === "未分配") return { name: "未分配", subject: "", user: null };
+  const user = suppliedSubject ? directoryUserBySubject(suppliedSubject) : directoryUserByName(owner);
+  const subject = suppliedSubject || user?.subject || "";
+  if (!subject) throw new Error(`第 ${rowNumber} 行缺少可验证的 ECP 人员 Subject`);
+  return {
+    name: user?.name || owner || "待服务端解析",
+    subject,
+    user,
+  };
+}
+
+function buildAssetUpdateImportOperation(record, rowNumber, assetsById) {
+  const id = String(record.id || "").trim();
+  if (!id) throw new Error(`第 ${rowNumber} 行缺少资产编码`);
+  const asset = assetsById.get(id);
+  if (!asset) throw new Error(`第 ${rowNumber} 行资产编码“${id}”不存在或不在当前数据范围`);
+  const fields = {};
+  const textFields = ["name", "brand", "model", "custodian", "ownerCompany", "purchaseMethod", "orderNo", "unit", "note"];
+  textFields.forEach((field) => {
+    if (importRecordHasValue(record, field)) fields[field] = String(record[field]).trim();
+  });
+  if (importRecordHasValue(record, "category")) {
+    if (!assetCategoryFormOptions().includes(record.category)) throw new Error(`第 ${rowNumber} 行资产分类“${record.category}”不存在`);
+    fields.category = record.category;
+    fields.type = record.category;
+  }
+  if (importRecordHasValue(record, "location")) {
+    const location = normalizeLocationValue(record.location);
+    const message = locationValidationMessage(location);
+    if (message) throw new Error(`第 ${rowNumber} 行${message}`);
+    fields.location = location;
+  }
+  if (importRecordHasValue(record, "price")) fields.price = parseNumberValue(record.price);
+  if (importRecordHasValue(record, "rent")) fields.rent = parseNumberValue(record.rent);
+  if (importRecordHasValue(record, "condition")) fields.condition = normalizeImportCondition(record.condition);
+  if (importRecordHasValue(record, "purchaseDate")) fields.purchaseDate = normalizeImportDate(record.purchaseDate);
+  if (importRecordHasValue(record, "receiveDate")) fields.receiveDate = normalizeImportDate(record.receiveDate);
+  if (importRecordHasValue(record, "owner") || importRecordHasValue(record, "ownerSubject")) {
+    const party = resolveImportedAssetParty(record, rowNumber, { allowUnassigned: true });
+    fields.owner = party.name;
+    fields.ownerSubject = party.subject;
+    if (party.user?.company) fields.company = party.user.company;
+    if (party.user?.department) fields.department = party.user.department;
+  } else {
+    if (importRecordHasValue(record, "company")) fields.company = record.company;
+    if (importRecordHasValue(record, "department")) fields.department = record.department;
+  }
+  if (!Object.keys(fields).length) throw new Error(`第 ${rowNumber} 行没有可更新的字段`);
+  fields.date = todayValue();
+  return { id, rowNumber, fields };
+}
+
+function buildAssetReceiveImportOperation(record, rowNumber, assetsById) {
+  const id = String(record.id || "").trim();
+  if (!id) throw new Error(`第 ${rowNumber} 行缺少资产编码`);
+  const asset = assetsById.get(id);
+  if (!asset) throw new Error(`第 ${rowNumber} 行资产编码“${id}”不存在或不在当前数据范围`);
+  if (!isReceivableAsset(asset)) throw new Error(`第 ${rowNumber} 行资产“${id}”当前状态不能领用`);
+  const party = resolveImportedAssetParty(record, rowNumber);
+  const date = normalizeImportDate(record.receiveDate);
+  if (!date) throw new Error(`第 ${rowNumber} 行缺少领用日期`);
+  const location = normalizeLocationValue(record.location);
+  if (!location) throw new Error(`第 ${rowNumber} 行缺少领用后位置`);
+  const locationMessage = locationValidationMessage(location);
+  if (locationMessage) throw new Error(`第 ${rowNumber} 行${locationMessage}`);
+  return {
+    id,
+    rowNumber,
+    fields: {
+      receiver: party.name,
+      receiverSubject: party.subject,
+      company: party.user?.company || record.company || "",
+      department: party.user?.department || record.department || "",
+      location,
+      note: record.note || "",
+      date,
+    },
+  };
+}
+
+async function runAssetImportOperations(operations, action) {
+  try {
+    const operationFields = Object.fromEntries(operations.map((operation) => [operation.id, operation.fields]));
+    await executeAssetCommand(action, operations.map((operation) => operation.id), { operations: operationFields });
+  } catch (error) {
+    await hydrateAssetsFromServer();
+    throw new Error(error?.message || "批量写入失败");
+  }
+  await hydrateAssetsFromServer();
+  state.selectedAssetIds = operations.map((operation) => operation.id);
+  state.assetListPage = 1;
+  render();
+  return operations.length;
+}
+
+async function importAssetUpdateWorkbook(file) {
+  const rows = await readAssetWorkbookRows(file);
+  const records = assetImportRecordsFromRows(rows);
+  if (!records.length) throw new Error("模板中没有可更新的资产数据");
+  if (records.length > 5000) throw new Error("最大数据行数不超过5000行");
+  const assetsById = new Map(state.assets.map((asset) => [asset.id, asset]));
+  const seen = new Set();
+  const operations = records.map(({ record, rowNumber }) => {
+    const operation = buildAssetUpdateImportOperation(record, rowNumber, assetsById);
+    if (seen.has(operation.id)) throw new Error(`第 ${rowNumber} 行资产编码“${operation.id}”重复`);
+    seen.add(operation.id);
+    return operation;
+  });
+  return runAssetImportOperations(operations, "update-import");
+}
+
+async function importAssetReceiveWorkbook(file) {
+  const rows = await readAssetWorkbookRows(file);
+  const records = assetImportRecordsFromRows(rows);
+  if (!records.length) throw new Error("模板中没有可领用的资产数据");
+  if (records.length > 5000) throw new Error("最大数据行数不超过5000行");
+  const assetsById = new Map(state.assets.map((asset) => [asset.id, asset]));
+  const seen = new Set();
+  const operations = records.map(({ record, rowNumber }) => {
+    const operation = buildAssetReceiveImportOperation(record, rowNumber, assetsById);
+    if (seen.has(operation.id)) throw new Error(`第 ${rowNumber} 行资产编码“${operation.id}”重复`);
+    seen.add(operation.id);
+    return operation;
+  });
+  return runAssetImportOperations(operations, "receive-import");
 }
 
 async function submitAssetImportForm(form) {
@@ -13701,8 +12836,20 @@ async function submitAssetImportForm(form) {
     return false;
   }
   const kind = form.dataset.importKind || "asset";
-  if (kind !== "asset") {
-    setAssetImportStatus(form, "当前仅支持资产新增导入。", "error");
+  const requiredPermission = {
+    asset: "asset:item:assetImport",
+    update: "asset:item:updateImport",
+    receive: "asset:item:receiveImport",
+  }[kind];
+  if (!requiredPermission || !ensureAnyPermission([requiredPermission])) return false;
+  const importers = {
+    asset: importAssetWorkbook,
+    update: importAssetUpdateWorkbook,
+    receive: importAssetReceiveWorkbook,
+  };
+  const importer = importers[kind];
+  if (!importer) {
+    setAssetImportStatus(form, "不支持的导入类型。", "error");
     return false;
   }
   const submitButton = form.querySelector('button[type="submit"]');
@@ -13711,11 +12858,12 @@ async function submitAssetImportForm(form) {
     submitButton.disabled = true;
     submitButton.textContent = "导入中...";
   }
-  setAssetImportStatus(form, "正在解析表格并写入资产台账...", "info");
+  setAssetImportStatus(form, "正在解析表格并通过服务端写入资产台账...", "info");
   try {
-    const count = await importAssetWorkbook(file);
+    const count = await importer(file);
     closeModal();
-    showToast(`已导入 ${count} 条资产`);
+    const actionLabel = kind === "update" ? "更新" : kind === "receive" ? "领用" : "导入";
+    showToast(`已${actionLabel} ${count} 条资产`);
     return true;
   } catch (error) {
     console.error(error);
@@ -13731,7 +12879,7 @@ async function submitAssetImportForm(form) {
 }
 
 function requiredLabel(label) {
-  return `<span class="required-star">*</span>${label}`;
+  return `<span class="required-star">*</span>${escapeHtml(label)}`;
 }
 
 function formValue(form, name) {
@@ -13752,10 +12900,12 @@ function validateManagedAssetLocation(location, message = "请选择位置管理
 
 function createAssetFromForm(form) {
   const category = formValue(form, "category");
-  const id = formValue(form, "assetCode") || generateAssetCode(category);
+  const id = formValue(form, "assetCode");
   const name = formValue(form, "assetName");
   const purchaseDate = formValue(form, "purchaseDate");
-  const owner = formValue(form, "personName");
+  const ownerSubject = formValue(form, "ownerSubject");
+  const ownerUser = directoryUserBySubject(ownerSubject);
+  const owner = ownerUser?.name || "";
   const condition = formValue(form, "condition");
   const receiveDate = owner ? formValue(form, "receiveDate") || todayValue() : "";
   const lifecycle = [[purchaseDate || todayValue(), "资产入库", "通过新增资产表单录入"]];
@@ -13768,8 +12918,9 @@ function createAssetFromForm(form) {
     model: formValue(form, "model"),
     sn: formValue(form, "serialNo"),
     owner: owner || "未分配",
+    ownerSubject: ownerUser?.subject || "",
     custodian: formValue(form, "custodian"),
-    department: formValue(form, "department"),
+    department: ownerUser?.department || formValue(form, "department"),
     status: condition === "维修中" ? "维修中" : owner ? "在用" : "空闲",
     location: normalizeLocationValue(formValue(form, "location")),
     supplier: formValue(form, "supplier"),
@@ -13792,7 +12943,7 @@ function createAssetFromForm(form) {
     unit: formValue(form, "unit"),
     note: formValue(form, "note"),
     brand: formValue(form, "brand"),
-    company: formValue(form, "company"),
+    company: ownerUser?.company || formValue(form, "company"),
     ownerCompany: formValue(form, "ownerCompany"),
     condition,
     usageMonths: formValue(form, "usageMonths"),
@@ -13802,10 +12953,11 @@ function createAssetFromForm(form) {
 }
 
 async function saveCreatedAsset(form) {
+  if (!ensureAnyPermission(["asset:item:create"])) return false;
   if (!validateManagedAssetCategory(formValue(form, "category"))) return false;
   if (!validateManagedAssetLocation(formValue(form, "location"))) return false;
   const asset = createAssetFromForm(form);
-  if (state.assets.some((item) => item.id === asset.id)) {
+  if (asset.id && state.assets.some((item) => item.id === asset.id)) {
     showToast("资产编码已存在，请修改后再提交");
     return false;
   }
@@ -13813,15 +12965,18 @@ async function saveCreatedAsset(form) {
 }
 
 async function saveAssetReceiveForm(form) {
+  if (!ensureAnyPermission(["asset:receive_return:receive"])) return false;
   const selected = getFlowSelectedAssets(form);
   if (!selected.length) {
     showToast("请先选择要领用的资产");
     return false;
   }
-  const receiver = formValue(form, "receiver");
+  const receiverSubject = formValue(form, "receiverSubject");
+  const receiverUser = directoryUserBySubject(receiverSubject);
+  const receiver = receiverUser?.name || "";
   const receiveDate = formValue(form, "receiveDate");
-  const department = formValue(form, "department") || "默认部门";
-  const company = formValue(form, "company") || "默认公司";
+  const department = receiverUser?.department || formValue(form, "department") || "默认部门";
+  const company = receiverUser?.company || formValue(form, "company") || "默认公司";
   const location = normalizeLocationValue(formValue(form, "receiveLocation"));
   const note = formValue(form, "receiveNote");
   if (!receiver || !receiveDate || !location) {
@@ -13830,12 +12985,15 @@ async function saveAssetReceiveForm(form) {
   }
   if (!validateManagedAssetLocation(location, "请选择位置管理中的领用后位置")) return false;
 
-  await executeAssetCommand("receive", selected.map((asset) => asset.id), { receiver, department, company, location, note, date: receiveDate });
+  await executeAssetCommand("receive", selected.map((asset) => asset.id), {
+    receiver, receiverSubject, department, company, location, note, date: receiveDate,
+  });
   state.selectedAssetIds = [];
   return true;
 }
 
 async function saveAssetReturnForm(form) {
+  if (!ensureAnyPermission(["asset:receive_return:return"])) return false;
   const selected = getFlowSelectedAssets(form);
   if (!selected.length) {
     showToast("请先选择要退库的资产");
@@ -13859,16 +13017,19 @@ async function saveAssetReturnForm(form) {
 }
 
 async function saveAssetBorrowForm(form) {
+  if (!ensureAnyPermission(["asset:borrow_return:borrow"])) return false;
   const selected = getSelectedAssets();
   if (!selected.length) {
     showToast("请先选择要借用的资产");
     return false;
   }
-  const borrower = formValue(form, "borrower");
+  const borrowerSubject = formValue(form, "borrowerSubject");
+  const borrowerUser = directoryUserBySubject(borrowerSubject);
+  const borrower = borrowerUser?.name || "";
   const borrowDate = formValue(form, "borrowDate");
   const expectedReturnDate = formValue(form, "expectedReturnDate");
-  const company = formValue(form, "company") || "默认公司";
-  const department = formValue(form, "department") || "默认部门";
+  const company = borrowerUser?.company || formValue(form, "company") || "默认公司";
+  const department = borrowerUser?.department || formValue(form, "department") || "默认部门";
   const location = normalizeLocationValue(formValue(form, "borrowLocation"));
   const note = formValue(form, "borrowNote");
   if (!borrower || !borrowDate || !location) {
@@ -13886,7 +13047,7 @@ async function saveAssetBorrowForm(form) {
   }
 
   await executeAssetCommand("borrow", selected.map((asset) => asset.id), {
-    borrower, department, company, location, note, date: borrowDate, expectedReturnDate,
+    borrower, borrowerSubject, department, company, location, note, date: borrowDate, expectedReturnDate,
     expectedReturnDates: Object.fromEntries(expectedDateByAsset),
   });
   state.selectedAssetIds = [];
@@ -13894,6 +13055,7 @@ async function saveAssetBorrowForm(form) {
 }
 
 async function saveAssetBorrowReturnForm(form) {
+  if (!ensureAnyPermission(["asset:borrow_return:return"])) return false;
   const selected = getFlowSelectedAssets(form);
   if (!selected.length) {
     showToast("请先选择要归还的资产");
@@ -13915,6 +13077,7 @@ async function saveAssetBorrowReturnForm(form) {
 }
 
 async function saveAssetHandoverForm(form) {
+  if (!ensureAnyPermission(["asset:receive_return:handover"])) return false;
   const selected = getFlowSelectedAssets(form);
   if (!selected.length) {
     showToast("请先选择要交接的资产");
@@ -13922,9 +13085,11 @@ async function saveAssetHandoverForm(form) {
   }
   const handoverDate = formValue(form, "handoverDate");
   const handoverType = formValue(form, "handoverType") || "personal";
-  const receiver = handoverType === "public" ? formValue(form, "receiver") || "公共区域" : formValue(form, "receiver");
-  const company = formValue(form, "receiverCompany") || "默认公司";
-  const department = formValue(form, "receiverDepartment") || "默认部门";
+  const receiverSubject = handoverType === "public" ? "" : formValue(form, "receiverSubject");
+  const receiverUser = handoverType === "public" ? null : directoryUserBySubject(receiverSubject);
+  const receiver = handoverType === "public" ? "公共区域" : receiverUser?.name || "";
+  const company = receiverUser?.company || formValue(form, "receiverCompany") || "默认公司";
+  const department = receiverUser?.department || formValue(form, "receiverDepartment") || "默认部门";
   const location = normalizeLocationValue(formValue(form, "receiverLocation"));
   const note = formValue(form, "handoverNote");
   if (!handoverDate || !location || (handoverType !== "public" && !receiver)) {
@@ -13934,7 +13099,7 @@ async function saveAssetHandoverForm(form) {
   if (!validateManagedAssetLocation(location, "请选择位置管理中的接收位置")) return false;
 
   await executeAssetCommand("handover", selected.map((asset) => asset.id), {
-    receiver, company, department, location, note, date: handoverDate,
+    receiver, receiverSubject, company, department, location, note, date: handoverDate,
     handoverType: handoverType === "public" ? "公共交接" : "员工交接",
   });
   state.selectedAssetIds = [];
@@ -13942,20 +13107,16 @@ async function saveAssetHandoverForm(form) {
 }
 
 async function saveAssetEditForm(form) {
+  if (!ensureAnyPermission(["asset:item:update"])) return false;
   const asset = state.assets.find((item) => item.id === form.dataset.assetId);
   if (!asset) return false;
-  const condition = formValue(form, "condition");
   const category = formValue(form, "category");
   const location = normalizeLocationValue(formValue(form, "location"));
-  const owner = formValue(form, "personName");
-  const receiveDate = owner ? formValue(form, "receiveDate") || asset.receiveDate || todayValue() : "";
   if (category !== asset.category && !validateManagedAssetCategory(category)) return false;
   if (!validateManagedAssetLocation(location)) return false;
   const fields = {
-    owner: owner || "未分配",
     company: formValue(form, "company"),
     department: formValue(form, "department"),
-    receiveDate,
     name: formValue(form, "assetName"),
     category,
     type: category,
@@ -13963,7 +13124,6 @@ async function saveAssetEditForm(form) {
     brand: formValue(form, "brand"),
     model: formValue(form, "model"),
     ownerCompany: formValue(form, "ownerCompany"),
-    condition,
     location,
     price: Number(formValue(form, "price")) || 0,
     purchaseDate: formValue(form, "purchaseDate"),
@@ -13978,6 +13138,7 @@ async function saveAssetEditForm(form) {
 }
 
 async function saveAssetBatchEditForm(form) {
+  if (!ensureAnyPermission(["asset:item:batchUpdate"])) return false;
   const selected = getSelectedAssets();
   if (!selected.length) {
     showToast("请先选择要批量修改的资产");
@@ -14007,7 +13168,7 @@ async function saveAssetBatchEditForm(form) {
 function assetField(label, control, options = {}) {
   const { required = false, wide = false, full = false } = options;
   return `<div class="field ${wide ? "wide" : ""} ${full ? "full" : ""}">
-    <label>${required ? requiredLabel(label) : label}</label>
+    <label>${required ? requiredLabel(label) : escapeHtml(label)}</label>
     ${control}
   </div>`;
 }
@@ -14015,13 +13176,7 @@ function assetField(label, control, options = {}) {
 function assetCreateFormMarkup() {
   const user = state.currentUser;
   const admins = Array.from(
-    new Set(
-      [
-        user?.roleCode !== "employee" ? user?.name : "",
-        ...state.users.filter((item) => item.roleCode !== "employee").map((item) => item.name),
-        ...uniqueAssetFormValues("custodian"),
-      ].filter(Boolean)
-    )
+    new Set([user?.name, ...uniqueAssetFormValues("custodian")].filter(Boolean))
   );
   const categories = assetCategoryFormOptions();
   const locations = assetLocationOptions;
@@ -14032,10 +13187,7 @@ function assetCreateFormMarkup() {
         <h3>使用信息</h3>
       </div>
       <div class="asset-form-grid">
-        ${assetField(
-          "人员姓名",
-          `<div class="field-control has-icon"><input name="personName" placeholder="模糊搜索" autocomplete="off" /><span class="field-icon" aria-hidden="true">⌕</span></div>`
-        )}
+        ${assetField("人员姓名", directoryPersonSelect("ownerSubject", "", false))}
         ${assetField("使用公司", inlineSelect("company", "使用公司", defaultCompanyOptions, { required: true }), { required: true })}
         ${assetField("使用部门", inlineSelect("department", "使用部门", defaultDepartmentOptions))}
         ${assetField("领用/借用日期", `<input name="receiveDate" type="date" value="${todayValue()}" />`)}
@@ -14051,7 +13203,7 @@ function assetCreateFormMarkup() {
         ${assetField("资产编码", `<input name="assetCode" placeholder="未填写按自动编码规则生成" autocomplete="off" data-asset-code-input />`)}
         ${assetField("资产名称", `<input name="assetName" required placeholder="请输入" autocomplete="off" />`)}
         ${assetField("资产分类", inlineSelect("category", "资产分类", categories, { required: true, variant: "asset-category" }), { required: true })}
-        ${assetField("管理员", inlineSelect("custodian", "管理员", admins, { required: true, selected: user?.roleCode !== "employee" ? user?.name : "" }), {
+        ${assetField("管理员", inlineSelect("custodian", "管理员", admins, { required: true, selected: user?.name || "" }), {
           required: true,
         })}
         ${assetField("品牌", `<input name="brand" required placeholder="请输入" autocomplete="off" />`, { required: true })}
@@ -14092,32 +13244,32 @@ function assetCreateFormMarkup() {
 
 function formMarkup(type, asset = null, direct = false) {
   const user = state.currentUser;
-  const approvalSystem = direct ? "管理端直办" : asset?.approval || "飞书审批";
+  const approvalSystem = direct ? "管理端直办" : asset?.approval || "ECP审批";
   const hintText = direct
-    ? "该动作将直接写入资产履历，保留操作日志，不创建外部审批实例。"
-    : user?.roleCode === "employee"
+    ? "该动作将直接写入资产履历，并保留服务端操作记录。"
+    : !hasManagementExperience()
       ? "普通员工默认通过申请流程发起业务单据，审批通过后再执行资产动作。"
-      : "提交后创建飞书/泛微审批实例，审批通过后再执行资产动作。";
+      : "提交后创建资产申请，由 Java 后端在审批通过时校验并执行资产动作。";
 
   return `<form id="demoForm" data-mode="${direct ? "direct" : "approval"}">
     <div class="approval-hint ${direct ? "direct" : ""}">
-      <strong>${direct ? "管理端直办" : "外部审批模式"}</strong>
-      <span>${hintText}</span>
+      <strong>${direct ? "管理端直办" : "资产申请"}</strong>
+      <span>${escapeHtml(hintText)}</span>
     </div>
     <div class="form-grid">
       <div class="field"><label>业务类型</label><input name="businessType" value="${escapeHtml(type)}" readonly /></div>
-      <div class="field"><label>${direct ? "执行方式" : "审批系统"}</label><select><option>${approvalSystem}</option><option>泛微OA</option><option>钉钉审批</option></select></div>
-      <div class="field"><label>${direct ? "操作人" : "申请人"}</label><input value="${escapeHtml(user?.name || "体验用户")}" /></div>
+      <div class="field"><label>${direct ? "执行方式" : "审批系统"}</label><input value="${escapeHtml(approvalSystem)}" readonly /></div>
+      <div class="field"><label>${direct ? "操作人" : "申请人"}</label><input value="${escapeHtml(user?.name || "")}" readonly /></div>
       <div class="field"><label>登录身份</label><input value="${escapeHtml(`${user?.account || "-"} / ${user?.roleName || "-"}`)}" /></div>
-      <div class="field"><label>关联资产/物品</label><input name="asset" required value="${asset ? `${asset.id} · ${asset.name}` : ""}" placeholder="请选择资产、耗材或标准品" /></div>
+      <div class="field"><label>关联资产/物品</label><input name="asset" required value="${escapeHtml(asset ? `${asset.id} · ${asset.name}` : "")}" placeholder="请选择资产、耗材或标准品" /></div>
       <div class="field"><label>期望日期</label><input type="date" value="${todayValue()}" /></div>
       <div class="field"><label>紧急程度</label><select><option>普通</option><option>紧急</option><option>低优先级</option></select></div>
       <div class="field"><label>外部身份</label><input value="${escapeHtml(state.session.provider || "ECP统一认证")}" /></div>
-      <div class="field full"><label>${direct ? "操作说明" : "申请说明"}</label><textarea name="reason" required placeholder="${direct ? "填写直办原因，例如普通管理员盘点纠偏、紧急调拨、台账修正。" : "填写申请原因，提交后会创建审批单据。"}"></textarea></div>
+      <div class="field full"><label>${direct ? "操作说明" : "申请说明"}</label><textarea name="reason" required placeholder="${direct ? "填写直办原因，例如普通管理员盘点纠偏、紧急调拨、台账修正。" : "填写申请原因。"}"></textarea></div>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn" data-cancel-modal>取消</button>
-      <button type="submit" class="btn primary">${direct ? "提交直办申请" : "提交审批"}</button>
+      <button type="submit" class="btn primary">${direct ? "提交直办申请" : "提交申请"}</button>
     </div>
   </form>`;
 }
@@ -14135,7 +13287,6 @@ function openModal() {
   bindAssetLabelPrintControls(modal);
   bindAssetImportControls(modal);
   bindLocationFormControls(modal);
-  bindProfileCenterControls(modal);
   bindEmployeeAssetReceiveForm(modal);
   document.querySelector("[data-cancel-modal]")?.addEventListener("click", closeModal);
   document.querySelector("#demoForm")?.addEventListener("submit", async (event) => {
@@ -14143,43 +13294,30 @@ function openModal() {
     const form = event.currentTarget;
     const mode = form.dataset.mode;
     try {
-    if (mode === "profile-center") {
-      if (!saveProfileCenterForm(form)) return;
-      closeModal();
-      render();
-      showToast("个人信息已保存");
+    if (mode === "system-integration") {
+      const submit = form.querySelector('button[type="submit"]');
+      if (submit) submit.disabled = true;
+      try {
+        if (!await saveSystemIntegrationForm(form)) return;
+        closeModal();
+        render();
+        showToast(form.dataset.systemIntegrationId ? "系统连接已保存" : "系统连接已新增");
+      } finally {
+        if (submit) submit.disabled = false;
+      }
       return;
     }
-    if (mode === "role-definition") {
-      if (!saveRoleDefinitionFromForm(modal)) return;
-      closeModal();
-      render();
-      showToast("角色已保存");
-      return;
-    }
-    if (mode === "role-user") {
-      const role = state.roles.find((item) => item.id === String(new FormData(form).get("roleId") || "admin"));
-      if (!saveRoleUserFromForm(form)) return;
-      closeModal();
-      render();
-      showToast(`${roleUserNoun(role)}已新增`);
-      return;
-    }
-    if (mode === "role-user-edit") {
-      const account = String(new FormData(form).get("accountKey") || "");
-      const user = state.users.find((item) => item.account === account);
-      const role = state.roles.find((item) => item.id === user?.roleDefinitionId) || { type: user?.roleCode };
-      if (!saveRoleUserEditForm(form)) return;
-      closeModal();
-      render();
-      showToast(`${roleUserNoun(role)}信息已保存`);
-      return;
-    }
-    if (mode === "role-user-reset-password") {
-      if (!saveRoleUserResetPasswordForm(form)) return;
-      closeModal();
-      render();
-      showToast("密码已重置");
+    if (mode === "system-form") {
+      const submit = form.querySelector('button[type="submit"]');
+      if (submit) submit.disabled = true;
+      try {
+        if (!await saveSystemFormDefinition(form)) return;
+        closeModal();
+        render();
+        showToast(form.dataset.systemFormId ? "表单已保存" : "表单已新增");
+      } finally {
+        if (submit) submit.disabled = false;
+      }
       return;
     }
     if (mode === "asset-create") {
@@ -14192,7 +13330,7 @@ function openModal() {
       return;
     }
     if (mode === "employee-asset-receive") {
-      if (!validateInlineSelects(form) || !saveEmployeeAssetReceiveRequest(form)) return;
+      if (!validateInlineSelects(form) || !await saveEmployeeAssetReceiveRequest(form)) return;
       closeModal();
       state.route = "requests";
       persistRoute(state.route);
@@ -14201,12 +13339,21 @@ function openModal() {
       return;
     }
     if (mode === "employee-asset-borrow") {
-      if (!validateInlineSelects(form) || !saveEmployeeAssetBorrowRequest(form)) return;
+      if (!validateInlineSelects(form) || !await saveEmployeeAssetBorrowRequest(form)) return;
       closeModal();
       state.route = "requests";
       persistRoute(state.route);
       render();
       showToast("资产借用申请已提交，可在我的申请查看审批进度");
+      return;
+    }
+    if (mode === "employee-owned-asset-request") {
+      if (!validateInlineSelects(form) || !await saveEmployeeOwnedAssetRequest(form)) return;
+      closeModal();
+      state.route = "requests";
+      persistRoute(state.route);
+      render();
+      showToast("资产申请已提交，可在我的申请查看审批进度");
       return;
     }
     if (mode === "asset-receive") {
@@ -14268,35 +13415,39 @@ function openModal() {
       return;
     }
     if (mode === "location-create" || mode === "location-edit") {
-      if (!commitLocationForm(form)) return;
+      if (!await commitLocationForm(form)) return;
       closeModal();
       render();
       showToast(mode === "location-edit" ? "位置已保存" : "位置已新增");
       return;
     }
     if (mode === "category-create" || mode === "category-edit") {
-      if (!commitAssetCategoryForm(form)) return;
+      if (!await commitAssetCategoryForm(form)) return;
       closeModal();
       render();
       showToast(mode === "category-edit" ? "分类已保存" : "分类已新增");
       return;
     }
-    if (mode === "approval" || mode === "direct") {
-      await submitAdHocBusinessRequest(form);
+    if (mode === "approval") {
+      const request = await submitAdHocBusinessRequest(form);
+      if (!request) return;
       closeModal();
       state.route = "requests";
       persistRoute(state.route);
       render();
-      showToast(mode === "direct" ? "直办申请已创建并等待执行" : "审批单据已创建");
+      showToast("审批单据已创建");
       return;
     }
     } catch (error) {
-      console.error("[asset-portal] asset command failed", error);
-      showToast(error?.message || "资产操作失败");
+      console.error("[asset-portal] command failed", error);
+      showToast(error?.message || "操作失败");
     }
   });
   document.querySelector("[data-download-template]")?.addEventListener("click", (event) => {
-    showToast(`已模拟下载 ${event.currentTarget.dataset.downloadTemplate}`);
+    downloadAssetImportTemplate(
+      event.currentTarget.dataset.downloadTemplateKind,
+      event.currentTarget.dataset.downloadTemplate
+    );
   });
   document.querySelector("[data-print-current]")?.addEventListener("click", () => {
     window.print();
@@ -14354,7 +13505,7 @@ function bindAssetFlowActions(root) {
 
 function applyHandoverMode(form) {
   const type = form.querySelector('input[name="handoverType"]:checked')?.value || "personal";
-  const receiverInput = form.querySelector('input[name="receiver"]');
+  const receiverInput = form.querySelector('select[name="receiverSubject"]');
   const receiverLabel = receiverInput?.closest(".field")?.querySelector("label");
   const isPublic = type === "public";
   form.querySelectorAll(".handover-mode-option").forEach((label) => {
@@ -14368,18 +13519,9 @@ function applyHandoverMode(form) {
   });
   if (!receiverInput) return;
   if (isPublic) {
-    receiverInput.value = "公共区域";
-    receiverInput.readOnly = true;
-    receiverInput.dataset.lockedField = "true";
-    receiverInput.required = false;
-    receiverInput.placeholder = "公共区域";
+    receiverInput.value = "";
     if (receiverLabel) receiverLabel.innerHTML = "接收对象：";
   } else {
-    if (receiverInput.value === "公共区域") receiverInput.value = "";
-    receiverInput.readOnly = false;
-    delete receiverInput.dataset.lockedField;
-    receiverInput.required = true;
-    receiverInput.placeholder = "模糊搜索";
     if (receiverLabel) receiverLabel.innerHTML = '<span class="required-star">*</span>接收人：';
   }
   bindInlineSelects(form);
@@ -14406,11 +13548,7 @@ function closeModal() {
   modal.classList.remove("asset-label-print-modal");
   modal.classList.remove("default-label-editor-modal");
   modal.classList.remove("employee-request-modal");
-  modal.classList.remove("profile-center-modal");
   modal.classList.remove("location-modal");
-  modal.classList.remove("role-modal");
-  modal.classList.remove("role-user-modal");
-  modal.classList.remove("role-employee-definition-modal");
   modalBackdrop.classList.remove("open");
   modal.setAttribute("aria-hidden", "true");
 }
@@ -14424,14 +13562,9 @@ window.addEventListener("resize", syncNavIndicator);
 window.addEventListener("afterprint", () => {
   document.body.classList.remove("printing-asset-labels");
 });
-window.addEventListener("hashchange", () => {
+window.addEventListener("asset-portal-route", (event) => {
   if (!isAuthenticated()) return;
-  const route = normalizeRoute(routeFromHash());
-  if (!route || route === state.route || !routeAllowed(route)) return;
-  state.route = route;
-  persistRoute(route);
-  saveLocalSession();
-  render();
+  applyPortalMenuRoute(event.detail, true);
 });
 
 document.addEventListener("click", (event) => {
@@ -14456,17 +13589,13 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-["pointerdown", "keydown", "scroll", "touchstart"].forEach((eventName) => {
-  window.addEventListener(eventName, touchSessionActivity, { passive: true });
-});
-
 async function bootApp() {
   const loadedSharedStore = await loadSharedStore();
   if (loadedSharedStore) applySharedStoreState();
+  await hydrateEcpDirectoryUsers();
   await hydrateAssetsFromServer();
   await hydrateBusinessData();
-  migrateAssetLocations();
-  if (loadedSharedStore) seedSharedStoreFromLocalStorage();
+  await hydrateSystemConfigs();
   if (isEcpAuthEnabled() && applyEcpSession()) {
     render();
     return;

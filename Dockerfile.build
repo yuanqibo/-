@@ -1,0 +1,38 @@
+FROM node:22-alpine AS frontend-build
+WORKDIR /build
+ARG VITE_ECP_APP_CODE=WLY5YG
+ARG VITE_ECP_API_BASE_URL=/api/v1
+ARG VITE_ECP_AUTH_CONFIG_SOURCE_MODE=remote-first
+ENV VITE_ECP_APP_CODE=$VITE_ECP_APP_CODE \
+    VITE_ECP_API_BASE_URL=$VITE_ECP_API_BASE_URL \
+    VITE_ECP_AUTH_CONFIG_SOURCE_MODE=$VITE_ECP_AUTH_CONFIG_SOURCE_MODE
+COPY package.json package-lock.json ./
+COPY vendor/ecp-sdk ./vendor/ecp-sdk
+RUN npm ci
+COPY index.html tsconfig.json vite.config.ts ./
+COPY authz ./authz
+COPY public ./public
+COPY src ./src
+COPY scripts/validate-authz.mjs ./scripts/validate-authz.mjs
+RUN npm run validate:authz && npm run build
+
+FROM maven:3.9.11-eclipse-temurin-17 AS backend-build
+WORKDIR /build
+COPY vendor/ecp-sdk-java ./vendor/ecp-sdk-java
+COPY scripts/install-ecp-java-sdk.sh ./scripts/install-ecp-java-sdk.sh
+RUN bash scripts/install-ecp-java-sdk.sh
+COPY backend/pom.xml ./backend/pom.xml
+COPY backend/src ./backend/src
+COPY --from=frontend-build /build/dist ./dist
+RUN mvn -B -f backend/pom.xml package
+
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /opt/asset-portal
+ENV HOST=0.0.0.0 PORT=5387 ECP_SDK_ENABLED=true
+COPY --from=backend-build /build/backend/target/access-assets-server-1.0.0.jar ./app.jar
+RUN addgroup -S asset && adduser -S asset -G asset
+USER asset
+EXPOSE 5387
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:5387/actuator/health >/dev/null || exit 1
+ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -6,6 +6,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import team.acg.access.assets.ecp.EcpSecurityPolicy;
 
 import java.util.Map;
 import java.util.Optional;
@@ -17,9 +18,11 @@ import java.util.stream.Collectors;
 public class RequestIdentityService {
     private static final String ATTRIBUTE = RequestIdentityService.class.getName() + ".identity";
     private final ObjectProvider<EcpIdentityService> identityService;
+    private final EcpSecurityPolicy securityPolicy;
 
-    public RequestIdentityService(ObjectProvider<EcpIdentityService> identityService) {
+    public RequestIdentityService(ObjectProvider<EcpIdentityService> identityService, EcpSecurityPolicy securityPolicy) {
         this.identityService = identityService;
+        this.securityPolicy = securityPolicy;
     }
 
     public Optional<Identity> current(HttpServletRequest request) {
@@ -27,7 +30,10 @@ public class RequestIdentityService {
         if (cached instanceof Identity identity) return Optional.of(identity);
 
         EcpIdentityService service = identityService.getIfAvailable();
-        if (service == null) return Optional.empty();
+        if (service == null) {
+            if (securityPolicy.testBypassEnabled()) return Optional.empty();
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "ECP server authorization is unavailable");
+        }
 
         String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (authorization == null || !authorization.startsWith("Bearer ")) {
@@ -38,6 +44,15 @@ public class RequestIdentityService {
 
         try {
             Identity identity = Identity.from(service.resolve(token));
+            if (identity.tenantId().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ECP tenant identity is required");
+            }
+            if (identity.subject().isBlank() || identity.directorySubject().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ECP stable user subject is required");
+            }
+            if (!identity.tenantId().equals(securityPolicy.tenantId())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "ECP tenant is not allowed for this deployment");
+            }
             request.setAttribute(ATTRIBUTE, identity);
             return Optional.of(identity);
         } catch (ResponseStatusException error) {
@@ -64,7 +79,8 @@ public class RequestIdentityService {
         return value.trim();
     }
 
-    public record Identity(String name, String account, String department, String roleCode, Set<String> permissions) {
+    public record Identity(String name, String account, String subject, String directorySubject, String tenantId, String department,
+                           Set<String> departmentIds, String roleCode, Set<String> permissions) {
         static Identity from(Map<String, Object> user) {
             String name = text(user.get("name"));
             String account = text(user.get("account"));
@@ -73,11 +89,22 @@ public class RequestIdentityService {
             }
             Set<String> permissions = user.get("permissionCodes") instanceof Collection<?> values
                 ? values.stream().map(Object::toString).collect(Collectors.toUnmodifiableSet()) : Set.of();
-            return new Identity(name, account, text(user.get("department")), text(user.get("roleCode")), permissions);
+            Set<String> departmentIds = user.get("departmentUnionIds") instanceof Collection<?> values
+                ? values.stream().map(Object::toString).collect(Collectors.toUnmodifiableSet()) : Set.of();
+            return new Identity(name, account, text(user.get("subject")), text(user.get("directorySubject")), text(user.get("tenantId")),
+                text(user.get("department")), departmentIds, text(user.get("roleCode")), permissions);
         }
 
         public boolean manager() {
             return "admin".equals(roleCode) || "super_admin".equals(roleCode);
+        }
+
+        public boolean hasPermission(String permission) {
+            return permissions.contains(permission);
+        }
+
+        public boolean hasAnyPermission(Set<String> required) {
+            return required.stream().anyMatch(permissions::contains);
         }
 
         private static String text(Object value) {

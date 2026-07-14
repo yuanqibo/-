@@ -10,37 +10,46 @@ features:
     parentCode: ASSET_PORTAL_ROOT
     sort: 10
     permissions:
-      - asset:view
+      - asset:item:view
   - code: PORTAL_ASSETS
     name: 资产管理
     type: FEATURE
     parentCode: ASSET_PORTAL_ROOT
     sort: 20
     permissions:
-      - asset:view
-      - assetInbound:view
-      - assetReceiveReturn:view
-      - assetBorrowReturn:view
-      - stocktake:view
+      - asset:item:view
+      - asset:inbound:view
+      - asset:receive_return:view
+      - asset:borrow_return:view
+      - asset:stocktake:view
+      - asset:stocktake:update
+      - asset:consumable:view
+      - asset:consumable:create
+      - asset:consumable:adjust
+      - asset:repair:view
+      - asset:repair:create
+      - asset:repair:update
+      - asset:contract:view
+      - asset:contract:create
   - code: PORTAL_REQUESTS
     name: 审批申请
     type: FEATURE
     parentCode: ASSET_PORTAL_ROOT
     sort: 30
     permissions:
-      - request:view
+      - asset:request:view
+      - asset:request:create
   - code: PORTAL_SETTINGS
     name: 系统设置
     type: FEATURE
     parentCode: ASSET_PORTAL_ROOT
     sort: 40
     permissions:
-      - employee:view
-      - department:view
-      - role:view
-      - selfService:view
-      - integration:view
-      - form:view
+      - asset:employee:view
+      - asset:department:view
+      - asset:self_service:view
+      - asset:integration:view
+      - asset:form:view
   - code: APP_WORKSPACE
     name: 账号管理
     type: FEATURE

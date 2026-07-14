@@ -4,41 +4,81 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.idanchuang.ecp.sdk.spring.annotation.PermissionSpec;
+import com.idanchuang.ecp.sdk.spring.annotation.RequireAnyPermission;
 import com.idanchuang.ecp.sdk.spring.annotation.RequirePermission;
 import jakarta.servlet.http.HttpServletRequest;
 import team.acg.access.assets.auth.RequestIdentityService;
+import team.acg.access.assets.asset.AssetPartyResolver;
+import team.acg.access.assets.asset.AssetService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
 import java.util.function.Function;
 import java.util.Map;
 import java.util.Set;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.transaction.annotation.Transactional;
 
 @RestController
 @RequestMapping("/api/business-data")
 public class BusinessDataController {
+    private static final int MAX_BUSINESS_ITEMS = 10_000;
+    private static final int MAX_BUSINESS_SNAPSHOT_BYTES = 10 * 1024 * 1024;
+    private static final int MAX_REQUEST_DETAILS_BYTES = 256 * 1024;
+    private static final Set<String> EXECUTABLE_ASSET_REQUEST_TYPES = Set.of(
+        "资产领用", "资产借用", "资产归还", "资产退还", "资产交接");
     private static final Set<String> TYPES = Set.of("requests", "stocktakes", "consumables", "repairs", "contracts");
+    private static final Map<String, String> VIEW_PERMISSIONS = Map.of(
+        "requests", "asset:request:view",
+        "stocktakes", "asset:stocktake:view",
+        "consumables", "asset:consumable:view",
+        "repairs", "asset:repair:view",
+        "contracts", "asset:contract:view");
     private final BusinessDataRepository repository;
     private final ObjectMapper mapper;
     private final RequestIdentityService identityService;
+    private final SelfServiceRequestPolicy selfServiceRequestPolicy;
+    private final AssetService assetService;
+    private final AssetPartyResolver assetPartyResolver;
 
     public BusinessDataController(BusinessDataRepository repository, ObjectMapper mapper,
-                                  RequestIdentityService identityService) {
+                                  RequestIdentityService identityService,
+                                  SelfServiceRequestPolicy selfServiceRequestPolicy,
+                                  AssetService assetService,
+                                  AssetPartyResolver assetPartyResolver) {
         this.repository = repository;
         this.mapper = mapper;
         this.identityService = identityService;
+        this.selfServiceRequestPolicy = selfServiceRequestPolicy;
+        this.assetService = assetService;
+        this.assetPartyResolver = assetPartyResolver;
     }
 
     @GetMapping
-    @RequirePermission(permissions = "request:view")
+    @RequireAnyPermission({
+        @PermissionSpec("asset:request:view"),
+        @PermissionSpec("asset:stocktake:view"),
+        @PermissionSpec("asset:consumable:view"),
+        @PermissionSpec("asset:repair:view"),
+        @PermissionSpec("asset:contract:view")
+    })
     public Map<String, Object> list(HttpServletRequest request) {
         Map<String, JsonNode> values = new LinkedHashMap<>();
         Map<String, Long> versions = new LinkedHashMap<>();
         var identity = identityService.current(request);
-        Set<String> visibleTypes = identity.isPresent() && !identity.get().manager() ? Set.of("requests") : TYPES;
+        Set<String> visibleTypes = identity
+            .map(value -> VIEW_PERMISSIONS.entrySet().stream()
+                .filter(entry -> value.hasPermission(entry.getValue()))
+                .map(Map.Entry::getKey)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet()))
+            .orElse(TYPES);
         visibleTypes.forEach(type -> {
             values.put(type, mapper.createArrayNode());
             versions.put(type, 0L);
@@ -46,11 +86,16 @@ public class BusinessDataController {
         repository.findAll().forEach((type, snapshot) -> {
             if (visibleTypes.contains(type)) {
                 JsonNode document = snapshot.document();
-                if (identity.isPresent() && !identity.get().manager()) {
-                    if (!"requests".equals(type) || !document.isArray()) return;
+                if (identity.isPresent() && "requests".equals(type)
+                    && !identity.get().manager()
+                    && !"auditor".equals(identity.get().roleCode())) {
+                    if (!document.isArray()) return;
                     ArrayNode scoped = mapper.createArrayNode();
                     document.forEach(item -> {
-                        if (identity.get().name().equals(item.path("applicant").asText())) scoped.add(item);
+                        String applicantSubject = item.path("applicantSubject").asText();
+                        boolean sameSubject = !identity.get().subject().isBlank()
+                            && identity.get().subject().equals(applicantSubject);
+                        if (sameSubject) scoped.add(item);
                     });
                     document = scoped;
                 }
@@ -62,15 +107,23 @@ public class BusinessDataController {
     }
 
     @PostMapping("/requests")
-    @RequirePermission(permissions = "request:view")
+    @RequirePermission(permissions = "asset:request:create")
     public ResponseEntity<?> createRequest(@RequestBody CreateRequest command, HttpServletRequest request) {
-        if (command.type() == null || command.type().isBlank()) throw new IllegalArgumentException("Request type is required");
-        if (command.asset() == null || command.asset().isBlank()) throw new IllegalArgumentException("Request asset is required");
+        requireText(command.type(), 64, "Request type is required");
+        requireText(command.asset(), 4_000, "Request asset is required");
+        requireOptionalText(command.reason(), 4_000, "Request reason is too long");
+        validateRequestDetails(command.details());
+        identityService.current(request).ifPresent(identity ->
+            selfServiceRequestPolicy.enforce(command.type(), command.reason(), command.details(), identity));
         String applicant = identityService.trustedName(request, command.applicant());
         ObjectNode item = mapper.createObjectNode();
-        item.put("id", "REQ" + java.time.format.DateTimeFormatter.ofPattern("yyMMddHHmmssSSS").format(java.time.LocalDateTime.now()));
+        item.put("id", id("REQ"));
         item.put("type", command.type().trim());
         item.put("applicant", applicant);
+        identityService.current(request).ifPresent(identity -> {
+            item.put("applicantSubject", identity.subject());
+            item.put("applicantDirectorySubject", identity.directorySubject());
+        });
         item.put("asset", command.asset().trim());
         item.put("reason", command.reason() == null ? "" : command.reason().trim());
         item.put("status", "审批中");
@@ -78,7 +131,9 @@ public class BusinessDataController {
         item.put("date", java.time.LocalDate.now().toString());
         item.put("currentNode", "直属主管");
         if (command.details() != null && command.details().isObject()) {
-            Set.of("assetCount", "assetIds", "operator", "receiveLocation", "borrowLocation", "expectedReturnDate", "approvalDate")
+            Set.of("assetCount", "assetIds", "receiveLocation", "receiveDate", "borrowLocation", "borrowDate",
+                    "returnLocation", "returnDate", "expectedReturnDate", "handoverLocation", "handoverDate",
+                    "receiverSubject", "handoverType", "approvalDate")
                 .forEach(field -> {
                     JsonNode value = command.details().get(field);
                     if (value != null) item.set(field, value);
@@ -89,7 +144,11 @@ public class BusinessDataController {
             BusinessDataRepository.Snapshot current = repository.find("requests").orElse(null);
             ArrayNode items = current == null || !current.document().isArray()
                 ? mapper.createArrayNode() : (ArrayNode) current.document().deepCopy();
+            if (items.size() >= MAX_BUSINESS_ITEMS) {
+                throw new IllegalStateException("Business request storage has reached its item limit");
+            }
             items.insert(0, item);
+            validateSnapshot("requests", items);
             if (current == null) {
                 try {
                     BusinessDataRepository.Snapshot created = repository.create("requests", items);
@@ -105,30 +164,145 @@ public class BusinessDataController {
     }
 
     @PostMapping("/requests/{id}/decision")
-    @RequirePermission(permissions = "request:review")
+    @RequirePermission(permissions = "asset:request:review")
+    @Transactional
     public ResponseEntity<?> decideRequest(@PathVariable String id, @RequestBody RequestDecision command,
                                            HttpServletRequest request) {
         if (!Set.of("approve", "reject", "cancel").contains(command.decision())) throw new IllegalArgumentException("Unsupported request decision");
         String operator = identityService.trustedName(request, command.operator());
+        if ("approve".equals(command.decision())) {
+            BusinessDataRepository.Snapshot snapshot = repository.findForUpdate("requests")
+                .orElseThrow(() -> new IllegalArgumentException("Business item not found: " + id));
+            if (!snapshot.document().isArray()) throw new IllegalStateException("Business request snapshot is invalid");
+            ArrayNode items = (ArrayNode) snapshot.document().deepCopy();
+            ObjectNode target = findRequest(items, id);
+            String current = target.path("status").asText();
+            if (!Set.of("审批中", "待执行").contains(current)) {
+                throw new IllegalArgumentException("Request is already finalized");
+            }
+            if (EXECUTABLE_ASSET_REQUEST_TYPES.contains(target.path("type").asText())) {
+                executeApprovedAssetRequest(target, request);
+                target.put("status", "已完成");
+                target.put("currentNode", "已归档");
+            } else {
+                target.put("status", "待执行");
+                target.put("currentNode", "普通管理员执行");
+            }
+            recordDecision(target, operator, command.reason(), request);
+            BusinessDataRepository.Snapshot saved = repository.update("requests", items, snapshot.version())
+                .orElseThrow(() -> new IllegalStateException("Business request changed while it was locked"));
+            return ResponseEntity.ok(Map.of("items", saved.document(), "version", saved.version()));
+        }
         return updateItem("requests", id, item -> {
             String current = item.path("status").asText();
             if (!Set.of("审批中", "待执行").contains(current)) throw new IllegalArgumentException("Request is already finalized");
-            String status = switch (command.decision()) {
-                case "approve" -> "待执行";
-                case "reject" -> "已拒绝";
-                default -> "已取消";
-            };
+            String status = "reject".equals(command.decision()) ? "已拒绝" : "已取消";
             item.put("status", status);
-            item.put("currentNode", "approve".equals(command.decision()) ? "普通管理员执行" : "已归档");
-            item.put("decisionOperator", operator);
-            item.put("decisionReason", command.reason() == null ? "" : command.reason().trim());
-            item.put("decisionAt", java.time.Instant.now().toString());
+            item.put("currentNode", "已归档");
+            recordDecision(item, operator, command.reason(), request);
             return item;
         });
     }
 
+    private ObjectNode findRequest(ArrayNode items, String id) {
+        for (JsonNode item : items) {
+            if (item.isObject() && id.equals(item.path("id").asText())) return (ObjectNode) item;
+        }
+        throw new IllegalArgumentException("Business item not found: " + id);
+    }
+
+    private void executeApprovedAssetRequest(ObjectNode item, HttpServletRequest request) {
+        String type = item.path("type").asText();
+        String action = switch (type) {
+            case "资产领用" -> "receive";
+            case "资产借用" -> "borrow";
+            case "资产归还" -> "borrow-return";
+            case "资产退还" -> "return";
+            case "资产交接" -> "handover";
+            default -> throw new IllegalArgumentException("Unsupported executable request type: " + type);
+        };
+        ObjectNode fields = mapper.createObjectNode();
+        List<String> assetIds = requestAssetIds(item);
+        identityService.current(request).ifPresent(identity -> {
+            fields.put("operator", identity.name());
+            fields.put("operatorAccount", identity.account());
+            fields.put("operatorSubject", identity.directorySubject());
+        });
+        fields.put("note", item.path("reason").asText(""));
+        fields.put("company", item.path("company").asText(""));
+        fields.put("department", item.path("department").asText(""));
+        switch (action) {
+            case "receive" -> {
+                fields.put("receiver", item.path("applicant").asText());
+                fields.put("receiverSubject", requiredRequestField(item, "applicantDirectorySubject"));
+                fields.put("location", requiredRequestField(item, "receiveLocation"));
+                fields.put("date", requestDate(item, "receiveDate"));
+            }
+            case "borrow" -> {
+                fields.put("borrower", item.path("applicant").asText());
+                fields.put("borrowerSubject", requiredRequestField(item, "applicantDirectorySubject"));
+                fields.put("location", requiredRequestField(item, "borrowLocation"));
+                fields.put("date", requestDate(item, "borrowDate"));
+                fields.put("expectedReturnDate", requiredRequestField(item, "expectedReturnDate"));
+            }
+            case "borrow-return", "return" -> {
+                assetService.requireOwnedForApprovedRequest(assetIds,
+                    requiredRequestField(item, "applicantDirectorySubject"),
+                    "borrow-return".equals(action) ? Set.of("借用中") : Set.of("在用"));
+                fields.put("location", requiredRequestField(item, "returnLocation"));
+                fields.put("date", requestDate(item, "returnDate"));
+            }
+            case "handover" -> {
+                assetService.requireOwnedForApprovedRequest(assetIds,
+                    requiredRequestField(item, "applicantDirectorySubject"), Set.of("在用", "借用中"));
+                String handoverType = item.path("handoverType").asText("员工交接");
+                if (!"公共交接".equals(handoverType)) {
+                    fields.put("receiverSubject", requiredRequestField(item, "receiverSubject"));
+                }
+                fields.put("location", requiredRequestField(item, "handoverLocation"));
+                fields.put("date", requestDate(item, "handoverDate"));
+                fields.put("handoverType", handoverType);
+            }
+            default -> throw new IllegalStateException("Unsupported asset action: " + action);
+        }
+        assetPartyResolver.normalizeCommand(action, fields);
+        assetService.execute(action, assetIds, fields);
+    }
+
+    private List<String> requestAssetIds(JsonNode item) {
+        JsonNode values = item.path("assetIds");
+        if (!values.isArray() || values.isEmpty() || values.size() > 100) {
+            throw new IllegalArgumentException("Executable request must contain between 1 and 100 asset ids");
+        }
+        List<String> ids = new ArrayList<>();
+        values.forEach(value -> {
+            String id = value.asText("").trim();
+            if (id.isEmpty() || ids.contains(id)) throw new IllegalArgumentException("Executable request contains invalid asset ids");
+            ids.add(id);
+        });
+        return List.copyOf(ids);
+    }
+
+    private String requiredRequestField(JsonNode item, String field) {
+        String value = item.path(field).asText("").trim();
+        if (value.isEmpty()) throw new IllegalArgumentException("Executable request field is required: " + field);
+        return value;
+    }
+
+    private String requestDate(JsonNode item, String field) {
+        String value = item.path(field).asText("").trim();
+        return value.isEmpty() ? java.time.LocalDate.now().toString() : java.time.LocalDate.parse(value).toString();
+    }
+
+    private void recordDecision(ObjectNode item, String operator, String reason, HttpServletRequest request) {
+        item.put("decisionOperator", operator);
+        identityService.current(request).ifPresent(identity -> item.put("decisionOperatorSubject", identity.subject()));
+        item.put("decisionReason", reason == null ? "" : reason.trim());
+        item.put("decisionAt", java.time.Instant.now().toString());
+    }
+
     @PostMapping("/stocktakes")
-    @RequirePermission(permissions = "stocktake:create")
+    @RequirePermission(permissions = "asset:stocktake:create")
     public ResponseEntity<?> createStocktake(@RequestBody CreateStocktake command) {
         requireText(command.name(), "Stocktake name is required");
         requireText(command.scope(), "Stocktake scope is required");
@@ -148,7 +322,7 @@ public class BusinessDataController {
     }
 
     @PatchMapping("/stocktakes/{id}")
-    @RequirePermission(permissions = "stocktake:create")
+    @RequirePermission(permissions = "asset:stocktake:update")
     public ResponseEntity<?> updateStocktake(@PathVariable String id, @RequestBody UpdateStocktake command) {
         return updateItem("stocktakes", id, item -> {
             int total = item.path("total").asInt();
@@ -164,7 +338,7 @@ public class BusinessDataController {
     }
 
     @PostMapping("/consumables")
-    @RequirePermission(permissions = "asset:update")
+    @RequirePermission(permissions = "asset:consumable:create")
     public ResponseEntity<?> createConsumable(@RequestBody CreateConsumable command) {
         requireText(command.name(), "Consumable name is required");
         requireText(command.model(), "Consumable model is required");
@@ -181,7 +355,7 @@ public class BusinessDataController {
     }
 
     @PostMapping("/consumables/{id}/adjust")
-    @RequirePermission(permissions = "asset:update")
+    @RequirePermission(permissions = "asset:consumable:adjust")
     public ResponseEntity<?> adjustConsumable(@PathVariable String id, @RequestBody AdjustStock command) {
         if (command.quantity() == 0) throw new IllegalArgumentException("Adjustment quantity cannot be zero");
         requireText(command.reason(), "Adjustment reason is required");
@@ -196,27 +370,52 @@ public class BusinessDataController {
     }
 
     @PostMapping("/repairs")
-    @RequirePermission(permissions = "asset:update")
+    @RequirePermission(permissions = "asset:repair:create")
+    @Transactional
     public ResponseEntity<?> createRepair(@RequestBody CreateRepair command, HttpServletRequest request) {
         requireText(command.asset(), "Repair asset is required");
         requireText(command.description(), "Repair description is required");
+        String assetId = command.asset().trim();
+        identityService.current(request).ifPresent(identity -> {
+            if (assetService.findAccessibleByIds(identity, List.of(assetId)).isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Repair asset is not accessible");
+            }
+        });
+        ObjectNode fields = commandFields(request);
+        fields.put("date", java.time.LocalDate.now().toString());
+        fields.put("note", command.description().trim());
+        List<JsonNode> repairedAssets = assetService.execute("repair-start", List.of(assetId), fields);
         ObjectNode item = mapper.createObjectNode();
         item.put("id", id("RPR"));
-        item.put("asset", command.asset().trim());
+        item.put("asset", assetId);
+        item.put("assetName", repairedAssets.isEmpty() ? "" : repairedAssets.get(0).path("name").asText(""));
         item.put("description", command.description().trim());
         item.put("reporter", identityService.trustedName(request, command.reporter()));
-        item.put("status", "待处理");
+        identityService.current(request).ifPresent(identity -> item.put("reporterSubject", identity.subject()));
+        item.put("status", "维修中");
         item.put("handler", "-");
+        item.put("previousAssetStatus", repairedAssets.isEmpty() ? "" : repairedAssets.get(0).path("repairPreviousStatus").asText(""));
         item.put("date", java.time.LocalDate.now().toString());
         return append("repairs", item);
     }
 
     @PatchMapping("/repairs/{id}")
-    @RequirePermission(permissions = "asset:update")
-    public ResponseEntity<?> updateRepair(@PathVariable String id, @RequestBody UpdateRepair command) {
+    @RequirePermission(permissions = "asset:repair:update")
+    @Transactional
+    public ResponseEntity<?> updateRepair(@PathVariable String id, @RequestBody UpdateRepair command,
+                                          HttpServletRequest request) {
         Set<String> statuses = Set.of("待处理", "维修中", "已完成", "已取消");
         if (!statuses.contains(command.status())) throw new IllegalArgumentException("Unsupported repair status");
         return updateItem("repairs", id, item -> {
+            String beforeStatus = item.path("status").asText();
+            if (Set.of("已完成", "已取消").contains(command.status())
+                && !Set.of("已完成", "已取消").contains(beforeStatus)) {
+                ObjectNode fields = commandFields(request);
+                fields.put("date", java.time.LocalDate.now().toString());
+                fields.put("restoreStatus", item.path("previousAssetStatus").asText("空闲"));
+                fields.put("note", "维修单" + command.status());
+                assetService.execute("repair-complete", List.of(item.path("asset").asText()), fields);
+            }
             item.put("status", command.status());
             if (command.handler() != null && !command.handler().isBlank()) item.put("handler", command.handler().trim());
             item.put("updatedAt", java.time.Instant.now().toString());
@@ -225,7 +424,7 @@ public class BusinessDataController {
     }
 
     @PostMapping("/contracts")
-    @RequirePermission(permissions = "asset:update")
+    @RequirePermission(permissions = "asset:contract:create")
     public ResponseEntity<?> createContract(@RequestBody CreateContract command) {
         requireText(command.supplier(), "Contract supplier is required");
         requireText(command.name(), "Contract name is required");
@@ -242,6 +441,17 @@ public class BusinessDataController {
 
     private ResponseEntity<?> append(String type, ObjectNode item) {
         return mutate(type, items -> items.insert(0, item), item);
+    }
+
+    private ObjectNode commandFields(HttpServletRequest request) {
+        ObjectNode fields = mapper.createObjectNode();
+        identityService.current(request).ifPresent(identity -> {
+            fields.put("operator", identity.name());
+            fields.put("operatorAccount", identity.account());
+            fields.put("operatorSubject", identity.directorySubject());
+        });
+        if (!fields.has("operator")) fields.put("operator", identityService.trustedName(request, "系统"));
+        return fields;
     }
 
     private ResponseEntity<?> updateItem(String type, String id, Function<ObjectNode, ObjectNode> change) {
@@ -262,6 +472,7 @@ public class BusinessDataController {
             BusinessDataRepository.Snapshot current = repository.find(type).orElse(null);
             ArrayNode items = current == null || !current.document().isArray() ? mapper.createArrayNode() : (ArrayNode) current.document().deepCopy();
             mutation.apply(items);
+            validateSnapshot(type, items);
             try {
                 BusinessDataRepository.Snapshot saved = current == null ? repository.create(type, items) : repository.update(type, items, current.version()).orElse(null);
                 if (saved != null) {
@@ -279,11 +490,38 @@ public class BusinessDataController {
     }
 
     private String id(String prefix) {
-        return prefix + java.time.format.DateTimeFormatter.ofPattern("yyMMddHHmmssSSS").format(java.time.LocalDateTime.now());
+        return prefix + "-" + java.util.UUID.randomUUID();
     }
 
     private void requireText(String value, String message) {
-        if (value == null || value.isBlank()) throw new IllegalArgumentException(message);
+        requireText(value, 4_000, message);
+    }
+
+    private void requireText(String value, int maxLength, String message) {
+        if (value == null || value.isBlank() || value.trim().length() > maxLength) {
+            throw new IllegalArgumentException(message);
+        }
+    }
+
+    private void requireOptionalText(String value, int maxLength, String message) {
+        if (value != null && value.trim().length() > maxLength) throw new IllegalArgumentException(message);
+    }
+
+    private void validateRequestDetails(JsonNode details) {
+        if (details == null || details.isNull()) return;
+        if (!details.isObject()) throw new IllegalArgumentException("Request details must be an object");
+        if (details.toString().getBytes(StandardCharsets.UTF_8).length > MAX_REQUEST_DETAILS_BYTES) {
+            throw new IllegalArgumentException("Request details are too large");
+        }
+    }
+
+    private void validateSnapshot(String type, ArrayNode items) {
+        if (items.size() > MAX_BUSINESS_ITEMS) {
+            throw new IllegalStateException("Business data item limit exceeded: " + type);
+        }
+        if (items.toString().getBytes(StandardCharsets.UTF_8).length > MAX_BUSINESS_SNAPSHOT_BYTES) {
+            throw new IllegalStateException("Business data snapshot is too large: " + type);
+        }
     }
 
     private ResponseEntity<?> conflict(String type) {

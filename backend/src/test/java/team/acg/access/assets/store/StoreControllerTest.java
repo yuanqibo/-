@@ -6,6 +6,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -16,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@ActiveProfiles("test")
 @TestPropertySource(properties = "spring.datasource.url=jdbc:h2:mem:store-test;MODE=MySQL;DB_CLOSE_DELAY=-1")
 class StoreControllerTest {
     @Autowired MockMvc mvc;
@@ -23,7 +25,11 @@ class StoreControllerTest {
     @Test
     void persistsDeclaredPortalDocuments() throws Exception {
         mvc.perform(post("/api/store").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"key\":\"assetLabelCustomTemplatesV1\",\"value\":[]}"))
+                .content("""
+                    {"operation":"create","key":"assetLabelCustomTemplatesV1","value":[
+                      {"key":"custom_test","name":"测试模板","settings":{}}
+                    ]}
+                    """))
             .andExpect(status().isOk()).andExpect(jsonPath("$.ok").value(true));
 
         mvc.perform(get("/api/store/item").param("key", "assetLabelCustomTemplatesV1"))
@@ -34,32 +40,32 @@ class StoreControllerTest {
     @Test
     void rejectsTheAssetKeyThatMigratedToTheDomainApi() throws Exception {
         mvc.perform(post("/api/store").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"key\":\"assetPortalAssets\",\"value\":[]}"))
+                .content("{\"operation\":\"create\",\"key\":\"assetPortalAssets\",\"value\":[]}"))
             .andExpect(status().isBadRequest());
     }
 
     @Test
     void rejectsUnsafeKeys() throws Exception {
         mvc.perform(post("/api/store").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"key\":\"../unsafe\",\"value\":true}"))
+                .content("{\"operation\":\"save\",\"key\":\"../unsafe\",\"value\":true}"))
             .andExpect(status().isBadRequest());
     }
 
     @Test
     void rejectsUnknownOrMalformedPortalDocuments() throws Exception {
         mvc.perform(post("/api/store").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"key\":\"arbitraryFeatureFlag\",\"value\":true}"))
+                .content("{\"operation\":\"save\",\"key\":\"arbitraryFeatureFlag\",\"value\":true}"))
             .andExpect(status().isBadRequest());
 
         mvc.perform(post("/api/store").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"key\":\"assetLocationTree\",\"value\":{}}"))
+                .content("{\"operation\":\"save\",\"key\":\"assetLocationTree\",\"value\":{}}"))
             .andExpect(status().isBadRequest());
     }
 
     @Test
     void rejectsPrivilegeEscalationAndDuplicateTreeNodes() throws Exception {
         mvc.perform(post("/api/store").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"key\":\"assetPortalRegisteredUsers\",\"value\":[{\"account\":\"user\",\"name\":\"用户\",\"roleCode\":\"super_admin\"}]}"))
+                .content("{\"operation\":\"create\",\"key\":\"assetPortalRegisteredUsers\",\"value\":[{\"account\":\"user\",\"name\":\"用户\",\"roleCode\":\"super_admin\"}]}"))
             .andExpect(status().isBadRequest());
 
         mvc.perform(put("/api/config/catalog/locations").contentType(MediaType.APPLICATION_JSON)
@@ -70,12 +76,15 @@ class StoreControllerTest {
     @Test
     void writesCatalogThroughDedicatedEndpointButRejectsLocalIdentityWrites() throws Exception {
         mvc.perform(post("/api/store").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"key\":\"assetCategoryTree\",\"value\":[{\"id\":\"cat-1\",\"name\":\"电脑\",\"children\":[]}]}"))
+                .content("{\"operation\":\"save\",\"key\":\"assetCategoryTree\",\"value\":[{\"id\":\"cat-1\",\"name\":\"电脑\",\"children\":[]}]}"))
             .andExpect(status().isBadRequest());
 
         mvc.perform(put("/api/config/catalog/categories").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"value\":[{\"id\":\"cat-1\",\"name\":\"电脑\",\"children\":[]}]}"))
             .andExpect(status().isOk());
+        mvc.perform(get("/api/store"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.values.assetCategoryTree[0].id").value("cat-1"));
         mvc.perform(put("/api/config/security/users").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"value\":[{\"account\":\"user\",\"name\":\"用户\",\"roleCode\":\"employee\"}]}"))
             .andExpect(status().isNotFound());
