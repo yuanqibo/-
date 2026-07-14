@@ -54,5 +54,5 @@ ecp:
     connect-timeout: 3s
     read-timeout: 10s
     permission:
-      enabled: true
+      enabled: ${ECP_SDK_PERMISSION_ENABLED:false}
       snapshot-signing-secret: ${ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET:}

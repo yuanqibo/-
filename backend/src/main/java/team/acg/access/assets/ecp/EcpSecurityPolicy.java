@@ -13,7 +13,6 @@ public class EcpSecurityPolicy {
     private final boolean enabled;
     private final String appCode;
     private final String appSecret;
-    private final String snapshotSigningSecret;
     private final String tenantId;
     private final boolean allowUnauthenticatedApiForTests;
     private final Environment environment;
@@ -22,7 +21,6 @@ public class EcpSecurityPolicy {
         @Value("${ecp.sdk.enabled:true}") boolean enabled,
         @Value("${ecp.sdk.app-code:}") String appCode,
         @Value("${ecp.sdk.app-secret:}") String appSecret,
-        @Value("${ecp.sdk.permission.snapshot-signing-secret:}") String snapshotSigningSecret,
         @Value("${asset-portal.security.tenant-id:}") String tenantId,
         @Value("${asset-portal.security.allow-unauthenticated-api-for-tests:false}") boolean allowUnauthenticatedApiForTests,
         Environment environment
@@ -30,7 +28,6 @@ public class EcpSecurityPolicy {
         this.enabled = enabled;
         this.appCode = appCode;
         this.appSecret = appSecret;
-        this.snapshotSigningSecret = snapshotSigningSecret;
         this.tenantId = trim(tenantId);
         this.allowUnauthenticatedApiForTests = allowUnauthenticatedApiForTests;
         this.environment = environment;
@@ -48,13 +45,6 @@ public class EcpSecurityPolicy {
         if (trim(appSecret).isEmpty()) {
             throw new IllegalStateException("ECP_APP_SECRET is required when ECP SDK is enabled");
         }
-        if (trim(snapshotSigningSecret).isEmpty()) {
-            throw new IllegalStateException(
-                "ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET is required when ECP SDK permission checks are enabled");
-        }
-        if (tenantId.isEmpty()) {
-            throw new IllegalStateException("ECP_TENANT_ID is required when ECP SDK is enabled");
-        }
     }
 
     public boolean enabled() {
@@ -67,6 +57,10 @@ public class EcpSecurityPolicy {
 
     public String tenantId() {
         return tenantId;
+    }
+
+    public boolean tenantRestrictionEnabled() {
+        return !tenantId.isEmpty();
     }
 
     private boolean isTestProfile() {

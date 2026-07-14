@@ -35,6 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "ecp.sdk.enabled=true",
     "ecp.sdk.app-code=WLY5YG",
     "ecp.sdk.app-secret=test-app-secret",
+    "ecp.sdk.permission.enabled=true",
     "ecp.sdk.permission.snapshot-signing-secret=test-snapshot-secret",
     "asset-portal.security.tenant-id=tenant-test",
     "asset-portal.system-config.encryption-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="

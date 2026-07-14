@@ -8,27 +8,25 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class EcpSecurityPolicyTest {
     @Test
-    void requiresBothServerSecretsWhenEcpIsEnabled() {
-        EcpSecurityPolicy missingAppSecret = policy(true, "WLY5YG", "", "snapshot", "tenant-1", false);
-        EcpSecurityPolicy missingSnapshotSecret = policy(true, "WLY5YG", "app", "", "tenant-1", false);
+    void requiresTheApplicationSecretWhenEcpIsEnabled() {
+        EcpSecurityPolicy missingAppSecret = policy(true, "WLY5YG", "", "tenant-1", false);
 
         assertThatThrownBy(missingAppSecret::validate)
             .isInstanceOf(IllegalStateException.class).hasMessageContaining("ECP_APP_SECRET");
-        assertThatThrownBy(missingSnapshotSecret::validate)
-            .isInstanceOf(IllegalStateException.class).hasMessageContaining("SNAPSHOT_SIGNING_SECRET");
     }
 
     @Test
-    void requiresDeploymentTenantWhenEcpIsEnabled() {
-        EcpSecurityPolicy missingTenant = policy(true, "WLY5YG", "app", "snapshot", "", false);
+    void treatsTheDeploymentTenantAsOptionalRestriction() {
+        EcpSecurityPolicy missingTenant = policy(true, "WLY5YG", "app", "", false);
 
-        assertThatThrownBy(missingTenant::validate)
-            .isInstanceOf(IllegalStateException.class).hasMessageContaining("ECP_TENANT_ID");
+        missingTenant.validate();
+
+        assertThat(missingTenant.tenantRestrictionEnabled()).isFalse();
     }
 
     @Test
     void rejectsAnUnexpectedApplicationCode() {
-        EcpSecurityPolicy policy = policy(true, "OTHER_APP", "app", "snapshot", "tenant-1", false);
+        EcpSecurityPolicy policy = policy(true, "OTHER_APP", "app", "tenant-1", false);
 
         assertThatThrownBy(policy::validate)
             .isInstanceOf(IllegalStateException.class).hasMessageContaining("WLY5YG");
@@ -39,17 +37,16 @@ class EcpSecurityPolicyTest {
         MockEnvironment testEnvironment = new MockEnvironment();
         testEnvironment.setActiveProfiles("test");
         EcpSecurityPolicy testPolicy = new EcpSecurityPolicy(
-            false, "WLY5YG", "", "", "", true, testEnvironment);
+            false, "WLY5YG", "", "", true, testEnvironment);
         testPolicy.validate();
 
         assertThat(testPolicy.testBypassEnabled()).isTrue();
-        assertThatThrownBy(() -> policy(false, "WLY5YG", "", "", "", true).validate())
+        assertThatThrownBy(() -> policy(false, "WLY5YG", "", "", true).validate())
             .isInstanceOf(IllegalStateException.class).hasMessageContaining("test profile");
     }
 
-    private EcpSecurityPolicy policy(boolean enabled, String appCode, String appSecret,
-                                     String snapshotSecret, String tenantId, boolean testBypass) {
+    private EcpSecurityPolicy policy(boolean enabled, String appCode, String appSecret, String tenantId, boolean testBypass) {
         return new EcpSecurityPolicy(
-            enabled, appCode, appSecret, snapshotSecret, tenantId, testBypass, new MockEnvironment());
+            enabled, appCode, appSecret, tenantId, testBypass, new MockEnvironment());
     }
 }

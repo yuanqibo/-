@@ -30,6 +30,7 @@ class RequestIdentityServiceTest {
             "permissionCodes", List.of("asset:item:view")));
         EcpSecurityPolicy policy = mock(EcpSecurityPolicy.class);
         when(policy.tenantId()).thenReturn("tenant-1");
+        when(policy.tenantRestrictionEnabled()).thenReturn(true);
         RequestIdentityService service = new RequestIdentityService(provider, policy);
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer valid-token");
@@ -53,6 +54,7 @@ class RequestIdentityServiceTest {
             "name", "李雷", "account", "lilei", "permissionCodes", List.of("asset:item:view")));
         EcpSecurityPolicy policy = mock(EcpSecurityPolicy.class);
         when(policy.tenantId()).thenReturn("tenant-1");
+        when(policy.tenantRestrictionEnabled()).thenReturn(true);
         RequestIdentityService service = new RequestIdentityService(provider, policy);
         MockHttpServletRequest request = requestWithToken("missing-tenant");
 
@@ -77,6 +79,7 @@ class RequestIdentityServiceTest {
             "permissionCodes", List.of("asset:item:view")));
         EcpSecurityPolicy policy = mock(EcpSecurityPolicy.class);
         when(policy.tenantId()).thenReturn("tenant-1");
+        when(policy.tenantRestrictionEnabled()).thenReturn(true);
         RequestIdentityService service = new RequestIdentityService(provider, policy);
         MockHttpServletRequest request = requestWithToken("other-tenant");
 
@@ -87,6 +90,23 @@ class RequestIdentityServiceTest {
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("403 FORBIDDEN");
         verify(ecp, times(2)).resolve("other-tenant");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void acceptsAnyEcpTenantWhenNoDeploymentTenantRestrictionIsConfigured() {
+        ObjectProvider<EcpIdentityService> provider = mock(ObjectProvider.class);
+        EcpIdentityService ecp = mock(EcpIdentityService.class);
+        when(provider.getIfAvailable()).thenReturn(ecp);
+        when(ecp.resolve("valid-token")).thenReturn(Map.of(
+            "name", "韩梅梅", "account", "hanmeimei", "tenantId", "tenant-2",
+            "subject", "account-2", "directorySubject", "user-2",
+            "permissionCodes", List.of("asset:item:view")));
+        EcpSecurityPolicy policy = mock(EcpSecurityPolicy.class);
+        when(policy.tenantRestrictionEnabled()).thenReturn(false);
+        RequestIdentityService service = new RequestIdentityService(provider, policy);
+
+        assertThat(service.current(requestWithToken("valid-token")).orElseThrow().tenantId()).isEqualTo("tenant-2");
     }
 
     @Test

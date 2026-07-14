@@ -50,8 +50,13 @@ public class RequestIdentityService {
             if (identity.subject().isBlank() || identity.directorySubject().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ECP stable user subject is required");
             }
-            if (!identity.tenantId().equals(securityPolicy.tenantId())) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "ECP tenant is not allowed for this deployment");
+            if (securityPolicy.tenantRestrictionEnabled()) {
+                if (identity.tenantId().isBlank()) {
+                    throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ECP tenant identity is required");
+                }
+                if (!identity.tenantId().equals(securityPolicy.tenantId())) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "ECP tenant is not allowed for this deployment");
+                }
             }
             request.setAttribute(ATTRIBUTE, identity);
             return Optional.of(identity);

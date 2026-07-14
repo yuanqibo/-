@@ -54,8 +54,7 @@ npm run test:backend
 ```text
 ECP_SDK_ENABLED=true
 ECP_APP_SECRET=...
-ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET=...
-ECP_TENANT_ID=...
+ECP_SDK_PERMISSION_ENABLED=false
 ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY=...
 DATABASE_URL=jdbc:mysql://127.0.0.1:3306/asset_portal?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
 DATABASE_USER=asset_portal
@@ -64,7 +63,7 @@ DATABASE_PASSWORD=...
 
 `ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY` 用于 Java 后端加密系统对接凭据，必须是 Base64 编码的 32 字节随机值。首次部署可用 `openssl rand -base64 32` 生成，后续必须保持不变并通过密钥管理系统注入，不能提交到 Git。
 
-`ECP_TENANT_ID` 是当前部署唯一允许访问该 MySQL 数据库的 ECP 租户 ID（会话中的 `tenantId` / `authzTenantId`），不是应用编码 `WLY5YG`。Java 会拒绝未携带租户信息的令牌以及其他租户的有效令牌。该值必须从目标租户的 ECP 配置或登录会话中确认，并在同一部署生命周期内保持不变。
+`ECP_TENANT_ID` 是可选租户白名单；配置后 Java 会拒绝其他租户的有效令牌，不配置则按 ECP 会话本身解析用户与权限。`ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET` 只在显式开启 `ECP_SDK_PERMISSION_ENABLED=true`、需要 SDK 签名快照权限切面时提供。默认生产模式使用 Java 后端基于 ECP session context 的 Bearer 权限守卫。
 
 直接启动：
 
@@ -115,8 +114,6 @@ scripts/                 SDK 安装、部署和更新脚本
 ```bash
 DATABASE_PASSWORD='...' \
 ECP_APP_SECRET='...' \
-ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET='...' \
-ECP_TENANT_ID='...' \
 ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY='...' \
 bash scripts/setup-server.sh
 ```
