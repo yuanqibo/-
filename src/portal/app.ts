@@ -1999,6 +1999,16 @@ function calculateAssetCompleteness(asset) {
   return Math.round((fields.filter((value) => String(value || "").trim()).length / fields.length) * 100);
 }
 
+const terminalModeStorageKey = "assetPortalTerminalMode";
+
+function loadTerminalMode() {
+  try {
+    return localStorage.getItem(terminalModeStorageKey) === "employee" ? "employee" : "management";
+  } catch {
+    return "management";
+  }
+}
+
 const state = {
   route: "home",
   query: "",
@@ -2035,6 +2045,7 @@ const state = {
   locationImportBusy: false,
   assetCategoryImportBusy: false,
   locationSettingsQuery: "",
+  terminalMode: loadTerminalMode(),
   currentUser: null,
   session: {
     authenticated: false,
@@ -2648,8 +2659,35 @@ const managementViewPermissions = [
   "asset:form:view",
 ];
 
-function hasManagementExperience() {
+function canAccessManagementExperience() {
   return hasAnyPermission(managementViewPermissions);
+}
+
+function currentTerminalMode() {
+  if (!canAccessManagementExperience()) return "employee";
+  return state.terminalMode === "employee" ? "employee" : "management";
+}
+
+function hasManagementExperience() {
+  return currentTerminalMode() === "management";
+}
+
+function setTerminalMode(mode) {
+  const nextMode = mode === "employee" ? "employee" : "management";
+  if (nextMode === "management" && !canAccessManagementExperience()) {
+    showToast("当前账号没有管理端权限");
+    return;
+  }
+  state.terminalMode = nextMode;
+  try {
+    localStorage.setItem(terminalModeStorageKey, nextMode);
+  } catch {
+    // Ignore local persistence failures; the active page state has already switched.
+  }
+  if (!routeAllowed(state.route)) {
+    state.route = firstAccessibleRoute();
+  }
+  render();
 }
 
 function portalMenuItems() {
@@ -2765,10 +2803,17 @@ function resetSessionView() {
   closeModal();
 }
 
+const employeeTerminalNavIds = new Set(["home", "assets", "requests"]);
+
+function isNavItemAllowedInCurrentTerminal(item) {
+  return hasManagementExperience() || employeeTerminalNavIds.has(item.id);
+}
+
 function getAccessibleNav(items = nav) {
   if (!isAuthenticated()) return [];
   const accessibleIds = new Set(portalMenuItems().map((item) => item.id));
   return items
+    .filter(isNavItemAllowedInCurrentTerminal)
     .map((item) => ({
       ...item,
       label: portalMenuById(item.id)?.title || item.label,
@@ -2785,7 +2830,7 @@ function flattenNav(items = getAccessibleNav()) {
 
 function getPrimaryNavItems() {
   return getAccessibleNav().map((item) => (
-    item.id === "requests" && !hasPermission("asset:request:review")
+    item.id === "requests" && (!hasManagementExperience() || !hasPermission("asset:request:review"))
       ? { ...item, label: "申请", icon: applicationNavIcon }
       : item
   ));
@@ -2804,8 +2849,10 @@ function normalizeRoute(route) {
 
 function routeAllowed(route) {
   const normalized = normalizeRoute(route);
-  if (portalMenuById(normalized)) return true;
-  return normalized === "settings" && portalMenuItems().some((item) => item.parentId === "settings");
+  if (portalMenuById(normalized)) return flattenNav().some((item) => item.id === normalized);
+  return normalized === "settings"
+    && hasManagementExperience()
+    && portalMenuItems().some((item) => item.parentId === "settings");
 }
 
 function firstAccessibleRoute() {
@@ -3096,21 +3143,40 @@ async function logout() {
 function renderAccountMenu() {
   const user = state.currentUser;
   if (!user) return "";
+  const canSwitchTerminal = canAccessManagementExperience();
+  const terminalMode = currentTerminalMode();
+  const terminalSelector = canSwitchTerminal
+    ? `<div class="terminal-selector" role="group" aria-label="端模式切换">
+        <button class="terminal-option ${terminalMode === "management" ? "active" : ""}" type="button" data-terminal-mode="management" aria-pressed="${terminalMode === "management" ? "true" : "false"}">
+          <span>管</span>
+          <strong>管理端</strong>
+          <small>资产台账、入库、审批、系统配置和账号授权</small>
+        </button>
+        <button class="terminal-option ${terminalMode === "employee" ? "active" : ""}" type="button" data-terminal-mode="employee" aria-pressed="${terminalMode === "employee" ? "true" : "false"}">
+          <span>员</span>
+          <strong>员工端</strong>
+          <small>我的资产、我的申请、领用/借用/归还/交接</small>
+        </button>
+      </div>
+      <div class="account-panel-line"></div>`
+    : "";
   return `<div class="account-menu sidebar-account-menu" data-account-menu>
     <button class="account-entry sidebar-account-entry" type="button" data-account-toggle aria-expanded="false" title="${escapeHtml(user.name)}" aria-label="账号管理">
       ${avatarMarkup(user, "account-avatar")}
       <span class="account-entry-text">
         <strong>${escapeHtml(user.name)}</strong>
-        <span>${escapeHtml(user.roleName)}</span>
+        <span>${escapeHtml(user.roleName)} · ${terminalMode === "management" ? "管理端" : "员工端"}</span>
       </span>
     </button>
     <div class="account-popover" data-account-popover>
       <div class="account-profile">
         <div class="account-profile-main">
           <strong>${escapeHtml(user.name)}</strong>
+          <span>${escapeHtml(user.roleName)}</span>
         </div>
       </div>
       <div class="account-panel-line"></div>
+      ${terminalSelector}
       <button class="account-logout" type="button" data-logout>退出登录</button>
     </div>
   </div>`;
@@ -3723,7 +3789,7 @@ function renderEmployeeHome() {
 function assetRowActionMarkup(item) {
   if (!state.currentUser) return "";
 
-  if (!hasAnyPermission(["asset:receive_return:handover", "asset:item:update"])) {
+  if (!hasManagementExperience() || !hasAnyPermission(["asset:receive_return:handover", "asset:item:update"])) {
     const action = item.owner === state.currentUser.name
       ? item.status === "借用中" ? "归还" : "退还"
       : "领用";
@@ -3904,15 +3970,17 @@ function renderAssetListTable(rows) {
   const filtered = scopedRows.filter(matchesAssetQuery);
   const pagination = paginateRows(filtered, "assetList");
   const displayRows = pagination.rows;
+  const managementMode = hasManagementExperience();
 
   return `<section class="asset-list-page">
     <div class="asset-list-toolbar">
       <div class="asset-list-actions">
-        <button class="table-action primary" data-open-kind="asset">＋ 新增</button>
-        ${assetOperationDropdown()}
-        ${assetEditDropdown()}
-        ${assetImportExportDropdown()}
-        <button class="table-action" data-print-asset-labels>打印标签</button>
+        ${managementMode && hasPermission("asset:item:create") ? `<button class="table-action primary" data-open-kind="asset">＋ 新增</button>` : ""}
+        ${managementMode ? assetOperationDropdown() : ""}
+        ${managementMode ? assetEditDropdown() : ""}
+        ${managementMode ? assetImportExportDropdown() : ""}
+        ${managementMode && hasPermission("asset:item:printLabel") ? `<button class="table-action" data-print-asset-labels>打印标签</button>` : ""}
+        ${!managementMode && hasPermission("asset:request:create") ? `<button class="table-action primary" data-open-request="资产领用">发起领用申请</button>` : ""}
       </div>
       <div class="asset-list-search">
         <input class="local-search" type="search" placeholder="搜索" value="${escapeHtml(state.assetListQuery)}" autocomplete="off">
@@ -8917,7 +8985,7 @@ function renderEmployeeRequestCard(item) {
 }
 
 function renderRequests() {
-  if (hasPermission("asset:request:review")) {
+  if (hasManagementExperience() && hasPermission("asset:request:review")) {
     return `${pageHeader("审批管理", "处理资产及业务申请，审批结果由服务端记录。", "新建申请", "request")}
       <section class="panel"><div class="table-wrap"><table>
         <thead><tr><th>单据编号</th><th>类型</th><th>申请人</th><th>关联物品</th><th>原因</th><th>状态</th><th>当前节点</th><th>操作</th></tr></thead>
@@ -10611,6 +10679,9 @@ function bindPageEvents() {
   bindDashboardBarTooltips();
   document.querySelectorAll("[data-route]").forEach((el) =>
     el.addEventListener("click", () => setRoute(el.dataset.route))
+  );
+  document.querySelectorAll("[data-terminal-mode]").forEach((el) =>
+    el.addEventListener("click", () => setTerminalMode(el.dataset.terminalMode))
   );
   document.querySelectorAll(
     ".table-action, .receive-return-action-link, [data-open-kind], [data-import-action], [data-start-asset-receive], [data-start-asset-return], [data-start-asset-borrow]"
