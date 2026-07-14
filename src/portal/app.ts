@@ -1,4 +1,6 @@
 // @ts-nocheck
+import { match as pinyinMatch, pinyin } from "pinyin-pro";
+
 const selfServiceSettingsStorageKey = "assetPortalSelfServiceSettingsV9";
 const assetCodeRuleStorageKey = "assetPortalAssetCodeRuleSettingsV1";
 const sharedStoreKeys = [
@@ -2353,6 +2355,131 @@ function escapeCssString(value = "") {
 
 function cssEscape(value = "") {
   return window.CSS?.escape ? window.CSS.escape(String(value)) : String(value).replaceAll('"', '\\"');
+}
+
+function normalizeDirectoryQuery(value = "") {
+  return String(value || "")
+    .trim()
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function compactSearchText(value = "") {
+  return normalizeDirectoryQuery(value).replace(/[\s·•.\-_()/\\]+/g, "");
+}
+
+function hasCjkText(value = "") {
+  return /[\u3400-\u9fff]/.test(String(value || ""));
+}
+
+function isAsciiSearch(value = "") {
+  return /^[a-z0-9]+$/i.test(compactSearchText(value));
+}
+
+function pinyinParts(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return { tokens: [], full: "", compact: "", initials: "" };
+  const tokens = pinyin(text, { toneType: "none", type: "array" })
+    .map((token) => String(token || "").toLowerCase())
+    .filter(Boolean);
+  const initials = pinyin(text, { pattern: "first", toneType: "none", type: "array" })
+    .map((token) => String(token || "").toLowerCase())
+    .join("");
+  return {
+    tokens,
+    full: tokens.join(" "),
+    compact: tokens.join(""),
+    initials,
+  };
+}
+
+function scoreTextField(value, query, base = 0) {
+  const text = normalizeDirectoryQuery(value);
+  const keyword = normalizeDirectoryQuery(query);
+  if (!text || !keyword) return Number.NEGATIVE_INFINITY;
+  const compactText = compactSearchText(text);
+  const compactKeyword = compactSearchText(keyword);
+  if (text === keyword || compactText === compactKeyword) return base + 1000;
+  if (text.startsWith(keyword) || compactText.startsWith(compactKeyword)) return base + 850;
+  if (text.includes(keyword) || compactText.includes(compactKeyword)) return base + 650;
+  return Number.NEGATIVE_INFINITY;
+}
+
+function scorePinyinField(value, query, base = 0) {
+  const keyword = compactSearchText(query);
+  if (!value || !keyword || !isAsciiSearch(keyword) || !hasCjkText(value)) return Number.NEGATIVE_INFINITY;
+  const parts = pinyinParts(value);
+  if (parts.compact === keyword) return base + 960;
+  if (parts.initials === keyword) return base + 930;
+  if (parts.tokens.some((token) => token === keyword)) return base + 900;
+  if (parts.compact.startsWith(keyword)) return base + 820;
+  if (parts.initials.startsWith(keyword)) return base + 800;
+  if (parts.tokens.some((token) => token.startsWith(keyword))) return base + 760;
+  if (pinyinMatch(String(value), keyword)) return base + 720;
+  if (parts.compact.includes(keyword)) return base + 520;
+  if (parts.initials.includes(keyword)) return base + 480;
+  return Number.NEGATIVE_INFINITY;
+}
+
+function maxScore(...scores) {
+  return scores.reduce((best, score) => Math.max(best, Number.isFinite(score) ? score : Number.NEGATIVE_INFINITY), Number.NEGATIVE_INFINITY);
+}
+
+function scoreDirectoryUser(user, rawQuery) {
+  const query = normalizeDirectoryQuery(rawQuery);
+  if (!query) return 0;
+  const compactQuery = compactSearchText(query);
+  const ascii = isAsciiSearch(query);
+  const allowAuxiliaryPinyin = !ascii || compactQuery.length >= 3;
+  return maxScore(
+    scoreTextField(user.name, query, 4000),
+    scorePinyinField(user.name, compactQuery, 3900),
+    scoreTextField(user.employeeNo, query, 3600),
+    scoreTextField(user.jobTitle, query, 2400),
+    allowAuxiliaryPinyin ? scorePinyinField(user.jobTitle, compactQuery, 2300) : Number.NEGATIVE_INFINITY,
+    scoreTextField(user.department, query, 2200),
+    allowAuxiliaryPinyin ? scorePinyinField(user.department, compactQuery, 2100) : Number.NEGATIVE_INFINITY,
+    scoreTextField(user.company, query, 1800),
+    allowAuxiliaryPinyin ? scorePinyinField(user.company, compactQuery, 1700) : Number.NEGATIVE_INFINITY,
+    ascii && compactQuery.length >= 6 ? scoreTextField(user.subject, query, 800) : Number.NEGATIVE_INFINITY
+  );
+}
+
+function searchDirectoryUsers(users, rawQuery) {
+  const query = normalizeDirectoryQuery(rawQuery);
+  if (!query) return [...users].sort((left, right) => String(left.name || "").localeCompare(String(right.name || ""), "zh-CN"));
+  return users
+    .map((user) => ({ user, score: scoreDirectoryUser(user, query) }))
+    .filter((item) => item.score > Number.NEGATIVE_INFINITY)
+    .sort((left, right) => right.score - left.score
+      || String(left.user.name || "").localeCompare(String(right.user.name || ""), "zh-CN")
+      || String(left.user.employeeNo || "").localeCompare(String(right.user.employeeNo || ""), "zh-CN"))
+    .map((item) => item.user);
+}
+
+function scoreDirectoryDepartment(item, rawQuery) {
+  const query = normalizeDirectoryQuery(rawQuery);
+  if (!query) return 0;
+  const compactQuery = compactSearchText(query);
+  return maxScore(
+    scoreTextField(item.name, query, 3000),
+    scorePinyinField(item.name, compactQuery, 2900),
+    scoreTextField(item.path, query, 2600),
+    scorePinyinField(item.path, compactQuery, 2500),
+    scoreTextField(item.company, query, 1800),
+    scorePinyinField(item.company, compactQuery, 1700)
+  );
+}
+
+function searchDirectoryDepartments(items, rawQuery) {
+  const query = normalizeDirectoryQuery(rawQuery);
+  return items
+    .map((item) => ({ item, score: query ? scoreDirectoryDepartment(item, query) : 0 }))
+    .filter((entry) => !query || entry.score > Number.NEGATIVE_INFINITY)
+    .sort((left, right) => right.score - left.score
+      || `${left.item.company}/${left.item.path}`.localeCompare(`${right.item.company}/${right.item.path}`, "zh-CN"))
+    .map((entry) => entry.item);
 }
 
 function todayValue() {
@@ -9778,21 +9905,14 @@ function renderSystemPlaceholder(title, description) {
 }
 
 function renderEmployeeDirectory() {
-  const query = String(state.query || "").trim().toLowerCase();
-  const rows = ecpDirectoryUsers.filter((user) => !query || [
-    user.name,
-    user.employeeNo,
-    user.jobTitle,
-    user.company,
-    user.department,
-    user.subject,
-  ].some((value) => String(value || "").toLowerCase().includes(query)));
+  const query = normalizeDirectoryQuery(state.query);
+  const rows = searchDirectoryUsers(ecpDirectoryUsers, query);
   return `<div class="system-content">
     <section class="panel">
       <div class="panel-header">
         <div><h2 class="panel-title">员工信息</h2><div class="panel-subtitle">${rows.length} 个 ECP 目录账号</div></div>
       </div>
-      <div class="toolbar"><input class="local-search" type="search" placeholder="姓名、工号、岗位或组织" value="${escapeHtml(state.query)}"><button class="btn primary" data-search>查询</button><button class="btn" data-reset>重置</button></div>
+      <div class="toolbar"><input class="local-search" type="search" placeholder="中文姓名 / 拼音 / 首字母 / 工号 / 岗位 / 组织" value="${escapeHtml(state.query)}" autocomplete="off" spellcheck="false"><button class="btn primary" data-search>查询</button><button class="btn" data-reset>重置</button></div>
       <div class="table-wrap"><table>
         <thead><tr><th>姓名</th><th>工号</th><th>岗位</th><th>所属公司</th><th>部门</th><th>ECP Subject</th><th>状态</th></tr></thead>
         <tbody>${rows.length ? rows.map((user) => `<tr>
@@ -9823,14 +9943,12 @@ function renderDepartmentDirectory() {
       departments.set(key, entry);
     });
   });
-  const query = String(state.query || "").trim().toLowerCase();
-  const rows = Array.from(departments.values())
-    .filter((item) => !query || [item.company, item.name, item.path].some((value) => String(value).toLowerCase().includes(query)))
-    .sort((left, right) => `${left.company}/${left.path}`.localeCompare(`${right.company}/${right.path}`, "zh-CN"));
+  const query = normalizeDirectoryQuery(state.query);
+  const rows = searchDirectoryDepartments(Array.from(departments.values()), query);
   return `<div class="system-content">
     <section class="panel">
       <div class="panel-header"><div><h2 class="panel-title">组织架构</h2><div class="panel-subtitle">${rows.length} 个 ECP 目录部门</div></div></div>
-      <div class="toolbar"><input class="local-search" type="search" placeholder="公司、部门或组织路径" value="${escapeHtml(state.query)}"><button class="btn primary" data-search>查询</button><button class="btn" data-reset>重置</button></div>
+      <div class="toolbar"><input class="local-search" type="search" placeholder="中文部门 / 拼音 / 首字母 / 公司 / 组织路径" value="${escapeHtml(state.query)}" autocomplete="off" spellcheck="false"><button class="btn primary" data-search>查询</button><button class="btn" data-reset>重置</button></div>
       <div class="table-wrap"><table>
         <thead><tr><th>所属公司</th><th>部门名称</th><th>组织路径</th><th>目录成员</th></tr></thead>
         <tbody>${rows.length ? rows.map((item) => `<tr><td>${escapeHtml(item.company)}</td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.path)}</td><td>${item.members}</td></tr>`).join("") : '<tr class="empty-row"><td colspan="4">当前范围内没有组织目录数据。</td></tr>'}</tbody>
@@ -10941,8 +11059,19 @@ function bindPageEvents() {
     })
   );
   document.querySelectorAll(".local-search").forEach((el) => {
-    el.addEventListener("input", () => updateSearchQuery(el.value, "local"));
+    el.addEventListener("compositionstart", () => {
+      el.dataset.composing = "true";
+    });
+    el.addEventListener("compositionend", () => {
+      el.dataset.composing = "false";
+      updateSearchQuery(el.value, "local", true);
+    });
+    el.addEventListener("input", (event) => {
+      if (event.isComposing || el.dataset.composing === "true") return;
+      updateSearchQuery(el.value, "local");
+    });
     el.addEventListener("keydown", (event) => {
+      if (event.isComposing || el.dataset.composing === "true") return;
       if (event.key === "Enter") updateSearchQuery(el.value, "local", true);
     });
   });
