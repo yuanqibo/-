@@ -55,8 +55,8 @@ public class EcpDirectoryController {
                                     long totalPages, boolean hasNext) {}
 
     public record DirectoryUser(String subject, String unionId, String externalId, String accountSetUnionId,
-                                String name, String displayName, String employeeNo, String jobTitle, String status, Company company,
-                                List<Department> departments) {
+                                String name, String displayName, String email, String phone, String employeeNo,
+                                String jobTitle, String status, Company company, List<Department> departments) {
         static DirectoryUser from(EcpUserProfile profile) {
             Company company = profile.company() == null ? null : new Company(
                 profile.company().unionId(), profile.company().externalId(), profile.company().name(),
@@ -66,7 +66,8 @@ public class EcpDirectoryController {
                 .toList();
             String subject = first(profile.unionId(), profile.externalId());
             return new DirectoryUser(subject, profile.unionId(), profile.externalId(), profile.accountSetUnionId(),
-                profile.name(), profile.name(), profile.employeeNo(), profile.jobTitle(), profile.status(), company, departments);
+                profile.name(), profile.name(), profile.email(), profile.phone(), profile.employeeNo(), profile.jobTitle(),
+                profile.status(), company, departments);
         }
 
         private static String first(String... values) {

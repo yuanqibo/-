@@ -1,6 +1,6 @@
 resources:
   - code: asset:employee
-    name: 账号目录
+    name: 员工信息
     scopes: [ALL]
     permissions:
       - code: asset:employee:view
