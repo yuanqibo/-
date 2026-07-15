@@ -27,6 +27,7 @@ body {
   margin: 0;
   color: var(--text);
   background: var(--bg);
+  overflow: hidden;
 }
 
 body.auth-view {
@@ -58,9 +59,11 @@ button {
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   display: grid;
   grid-template-columns: 92px 1fr;
+  overflow: hidden;
 }
 
 .auth-view .app-shell {
@@ -80,8 +83,6 @@ button {
   height: 100vh;
   min-height: 0;
   overflow: visible;
-  position: sticky;
-  top: 0;
   z-index: 90;
 }
 
@@ -108,8 +109,6 @@ button {
   height: 100vh;
   min-height: 0;
   overflow: hidden;
-  position: sticky;
-  top: 0;
   z-index: 5;
   background: #ffffff;
   border-right: 1px solid #edf0f5;
@@ -2811,6 +2810,11 @@ button {
 
 .workspace {
   min-width: 0;
+  height: 100vh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .topbar {
@@ -3173,7 +3177,12 @@ button {
 }
 
 .page {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 24px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: auto;
 }
 
 .hero {
@@ -3383,22 +3392,28 @@ button {
 
 .system-menu-shell {
   width: 220px;
-  min-height: calc(100vh - 48px);
+  min-height: 0;
+  height: 100%;
   padding: 0;
   background: #ffffff;
   border-right: 1px solid #edf0f5;
+  overflow: hidden;
 }
 
 .system-menu-shell .system-menu {
-  height: auto;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .system-page {
-  min-height: calc(100vh - 48px);
+  height: 100%;
+  min-height: 0;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   margin: -24px;
   background: #f8fafc;
+  overflow: hidden;
 }
 
 .system-page.self-service-system-page {
@@ -3409,7 +3424,10 @@ button {
 
 .system-content {
   min-width: 0;
+  min-height: 0;
   padding: 18px;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .system-content.self-service-management {
@@ -3417,9 +3435,12 @@ button {
 }
 
 .ecp-org-console {
-  min-height: calc(100vh - 84px);
+  height: 100%;
+  min-height: 0;
   padding: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .ecp-org-tabs {
@@ -3489,14 +3510,20 @@ button {
 .ecp-org-layout {
   display: grid;
   grid-template-columns: 310px minmax(0, 1fr);
-  min-height: 620px;
+  flex: 1 1 auto;
+  min-height: 0;
   border-top: 1px solid #edf2f7;
+  overflow: hidden;
 }
 
 .ecp-org-tree-panel {
   border-right: 1px solid #e5ebf3;
   padding: 18px 16px;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .ecp-org-search input,
@@ -3520,9 +3547,11 @@ button {
 }
 
 .ecp-org-tree-scroll {
-  max-height: 560px;
+  flex: 1 1 auto;
+  min-height: 0;
   margin-top: 16px;
   overflow: auto;
+  overscroll-behavior: contain;
   padding-right: 4px;
 }
 
@@ -3585,7 +3614,11 @@ button {
 
 .ecp-org-member-panel {
   min-width: 0;
+  min-height: 0;
   padding: 18px 22px 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .ecp-org-member-header {
@@ -3599,8 +3632,10 @@ button {
 }
 
 .ecp-org-table-wrap {
-  max-height: 500px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .ecp-org-table {

@@ -2098,6 +2098,7 @@ const state = {
   selfServiceCategoryExpanded: {},
   navOpen: {},
   assetSubnavScrollTop: 0,
+  scrollPositions: {},
   assetDistributionMode: "organization",
   assetCategoryMetricMode: "count",
   assetCategoryCompanyFilter: "所属/承租公司",
@@ -3437,16 +3438,61 @@ function renderSidebarTools() {
 
 function captureAssetSubnavScroll() {
   const scroller = secondarySidebar?.querySelector(".asset-subnav");
-  if (scroller) state.assetSubnavScrollTop = scroller.scrollTop;
+  if (!scroller) return;
+  const positions = state.scrollPositions || (state.scrollPositions = {});
+  positions[`secondary-nav:${state.route || "default"}`] = {
+    top: scroller.scrollTop,
+    left: scroller.scrollLeft,
+  };
+  state.assetSubnavScrollTop = scroller.scrollTop;
 }
 
 function restoreAssetSubnavScroll() {
   const scroller = secondarySidebar?.querySelector(".asset-subnav");
   if (!scroller) return;
-  scroller.scrollTop = state.assetSubnavScrollTop || 0;
+  const positions = state.scrollPositions || (state.scrollPositions = {});
+  const key = `secondary-nav:${state.route || "default"}`;
+  const saved = positions[key];
+  scroller.scrollTop = Number(saved?.top ?? state.assetSubnavScrollTop) || 0;
+  scroller.scrollLeft = Number(saved?.left) || 0;
   scroller.addEventListener("scroll", () => {
+    positions[key] = {
+      top: scroller.scrollTop,
+      left: scroller.scrollLeft,
+    };
     state.assetSubnavScrollTop = scroller.scrollTop;
-  });
+  }, { passive: true });
+}
+
+function scrollMemoryScope() {
+  return `${state.route || "home"}:${state.route === "settings" ? state.systemMenu || "" : ""}`;
+}
+
+function rememberScrollElement(key, element) {
+  if (!element) return;
+  const positions = state.scrollPositions || (state.scrollPositions = {});
+  const saved = positions[key];
+  if (saved) {
+    element.scrollTop = Number(saved.top) || 0;
+    element.scrollLeft = Number(saved.left) || 0;
+  }
+  if (element.dataset.scrollMemoryBound === key) return;
+  element.dataset.scrollMemoryBound = key;
+  element.addEventListener("scroll", () => {
+    positions[key] = {
+      top: element.scrollTop,
+      left: element.scrollLeft,
+    };
+  }, { passive: true });
+}
+
+function restoreLayoutScrollMemory() {
+  const scope = scrollMemoryScope();
+  rememberScrollElement(`page:${scope}`, page);
+  rememberScrollElement(`system-menu:${scope}`, document.querySelector(".system-menu"));
+  rememberScrollElement(`system-content:${scope}`, document.querySelector(".system-content"));
+  rememberScrollElement(`ecp-org-tree:${state.ecpOrgAccountSetUnionId || "default"}`, document.querySelector(".ecp-org-tree-scroll"));
+  rememberScrollElement(`ecp-org-table:${state.ecpOrgAccountSetUnionId || "default"}`, document.querySelector(".ecp-org-table-wrap"));
 }
 
 function getAssetSubnavItems() {
@@ -10868,6 +10914,7 @@ function render() {
   };
   page.innerHTML = (renderers[state.route] || renderHome)();
   bindPageEvents();
+  restoreLayoutScrollMemory();
 }
 
 function setResizableTableWidth(context, columnKey, width) {
@@ -11160,13 +11207,6 @@ function bindPageEvents() {
   );
   document.querySelectorAll("[data-system-menu]").forEach((el) =>
     el.addEventListener("click", () => {
-      if (el.dataset.systemMenuId === "authz.workspace") {
-        state.systemMenu = "账号管理";
-        state.route = "settings";
-        window.history.pushState({ assetPortalSystemMenu: "账号管理" }, "", window.location.href);
-        render();
-        return;
-      }
       state.systemMenu = el.dataset.systemMenu;
       state.route = "settings";
       if (state.systemMenu === "员工自助" && !state.selfServiceMenu) state.selfServiceMenu = "员工自助管理";
@@ -14175,17 +14215,10 @@ window.addEventListener("afterprint", () => {
 });
 window.addEventListener("asset-portal-route", (event) => {
   if (!isAuthenticated()) return;
-  if (window.history.state?.assetPortalSystemMenu === "账号管理" && event.detail?.id !== "authz.workspace") return;
   applyPortalMenuRoute(event.detail, true);
 });
 window.addEventListener("popstate", () => {
   if (!isAuthenticated()) return;
-  if (window.history.state?.assetPortalSystemMenu === "账号管理") {
-    state.route = "settings";
-    state.systemMenu = "账号管理";
-    render();
-    return;
-  }
   const item = readEcpContext()?.getCurrentMenu?.();
   if (item) applyPortalMenuRoute(item, true);
 });
