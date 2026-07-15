@@ -10276,32 +10276,17 @@ function renderAccountManagement() {
     "authz:app_role:update",
   ]);
   return `<div class="system-content">
-    <section class="panel">
+    <section class="panel account-management-panel">
       <div class="panel-header">
         <div>
           <h2 class="panel-title">账号管理</h2>
-          <div class="panel-subtitle">使用 ECP SDK 工作台管理应用角色、账号授权和权限模型。</div>
+          <div class="panel-subtitle">使用 ECP SDK 工作台管理应用角色、账号授权和权限模型，保持在资产系统内操作。</div>
         </div>
-        <button class="btn primary" type="button" data-open-authz-workspace ${canAuthorize ? "" : "disabled"}>打开账号管理</button>
+        <button class="btn primary" type="button" data-refresh-authz-workspace ${canAuthorize ? "" : "disabled"}>刷新账号管理</button>
       </div>
-      <div class="overview-grid">
-        <article class="overview-card">
-          <span class="card-label">账号来源</span>
-          <strong>ECP / 飞书账号目录</strong>
-          <p>人员、组织、账号状态以 ECP 同步后的目录为准。</p>
-        </article>
-        <article class="overview-card">
-          <span class="card-label">账号管理</span>
-          <strong>应用角色 + 权限模型</strong>
-          <p>应用管理员在 ECP 工作台给成员分配角色，业务接口由 Java 后端二次校验。</p>
-        </article>
-        <article class="overview-card">
-          <span class="card-label">当前身份</span>
-          <strong>${escapeHtml(state.currentUser?.name || "-")}</strong>
-          <p>${escapeHtml(state.currentUser?.roleName || "ECP用户")} · ${escapeHtml(state.currentUser?.company || "ECP组织")}</p>
-        </article>
-      </div>
-      ${canAuthorize ? '<p class="empty-note">点击“打开账号管理”会在当前资产系统内进入 /workspace，不需要单独去外部系统找入口。</p>' : '<p class="empty-note">当前账号没有 ECP 账号管理权限，请先让应用管理员授予 authz:app_role:view / assign 等权限。</p>'}
+      ${canAuthorize ? `<div class="account-management-frame-shell">
+        <iframe class="account-management-frame" src="/workspace" title="ECP 账号管理工作台" loading="lazy"></iframe>
+      </div>` : '<p class="empty-note">当前账号没有 ECP 账号管理权限，请先让应用管理员授予 authz:app_role:view / assign 等权限。</p>'}
     </section>
   </div>`;
 }
@@ -11176,16 +11161,10 @@ function bindPageEvents() {
   document.querySelectorAll("[data-system-menu]").forEach((el) =>
     el.addEventListener("click", () => {
       if (el.dataset.systemMenuId === "authz.workspace") {
-        const context = readEcpContext();
-        const target = portalMenuById("authz.workspace");
-        if (target && context?.navigate) {
-          void context.navigate(target.id).catch((error) => {
-            showToast(error?.message || "账号管理打开失败");
-            window.location.href = "/workspace";
-          });
-        } else {
-          window.location.href = "/workspace";
-        }
+        state.systemMenu = "账号管理";
+        state.route = "settings";
+        window.history.pushState({ assetPortalSystemMenu: "账号管理" }, "", window.location.href);
+        render();
         return;
       }
       state.systemMenu = el.dataset.systemMenu;
@@ -11195,18 +11174,12 @@ function bindPageEvents() {
       render();
     })
   );
-  document.querySelectorAll("[data-open-authz-workspace]").forEach((el) =>
+  document.querySelectorAll("[data-refresh-authz-workspace]").forEach((el) =>
     el.addEventListener("click", () => {
-      const context = readEcpContext();
-      const target = portalMenuById("authz.workspace");
-      if (target && context?.navigate) {
-        void context.navigate(target.id).catch((error) => {
-          showToast(error?.message || "账号管理打开失败");
-          window.location.href = "/workspace";
-        });
-      } else {
-        window.location.href = "/workspace";
-      }
+      const frame = document.querySelector(".account-management-frame");
+      if (!frame) return;
+      frame.setAttribute("src", "/workspace");
+      showToast("账号管理已刷新");
     })
   );
   document.querySelectorAll("[data-ecp-org-node]").forEach((el) =>
@@ -14202,7 +14175,19 @@ window.addEventListener("afterprint", () => {
 });
 window.addEventListener("asset-portal-route", (event) => {
   if (!isAuthenticated()) return;
+  if (window.history.state?.assetPortalSystemMenu === "账号管理" && event.detail?.id !== "authz.workspace") return;
   applyPortalMenuRoute(event.detail, true);
+});
+window.addEventListener("popstate", () => {
+  if (!isAuthenticated()) return;
+  if (window.history.state?.assetPortalSystemMenu === "账号管理") {
+    state.route = "settings";
+    state.systemMenu = "账号管理";
+    render();
+    return;
+  }
+  const item = readEcpContext()?.getCurrentMenu?.();
+  if (item) applyPortalMenuRoute(item, true);
 });
 
 document.addEventListener("click", (event) => {
