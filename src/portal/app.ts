@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { match as pinyinMatch, pinyin } from "pinyin-pro";
 
 const selfServiceSettingsStorageKey = "assetPortalSelfServiceSettingsV9";
 const assetCodeRuleStorageKey = "assetPortalAssetCodeRuleSettingsV1";
@@ -2030,7 +2031,7 @@ const state = {
   assetCategoryPageSize: 20,
   assetReceiveReturnTab: "receive",
   assetBorrowReturnTab: "borrow",
-  systemMenu: "员工自助",
+  systemMenu: "账号目录",
   selfServiceMenu: "员工自助管理",
   selfServiceSignOpen: false,
   selfServiceCategoryExpanded: {},
@@ -2356,6 +2357,131 @@ function cssEscape(value = "") {
   return window.CSS?.escape ? window.CSS.escape(String(value)) : String(value).replaceAll('"', '\\"');
 }
 
+function normalizeDirectoryQuery(value = "") {
+  return String(value || "")
+    .trim()
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function compactSearchText(value = "") {
+  return normalizeDirectoryQuery(value).replace(/[\s·•.\-_()/\\]+/g, "");
+}
+
+function hasCjkText(value = "") {
+  return /[\u3400-\u9fff]/.test(String(value || ""));
+}
+
+function isAsciiSearch(value = "") {
+  return /^[a-z0-9]+$/i.test(compactSearchText(value));
+}
+
+function pinyinParts(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return { tokens: [], full: "", compact: "", initials: "" };
+  const tokens = pinyin(text, { toneType: "none", type: "array" })
+    .map((token) => String(token || "").toLowerCase())
+    .filter(Boolean);
+  const initials = pinyin(text, { pattern: "first", toneType: "none", type: "array" })
+    .map((token) => String(token || "").toLowerCase())
+    .join("");
+  return {
+    tokens,
+    full: tokens.join(" "),
+    compact: tokens.join(""),
+    initials,
+  };
+}
+
+function scoreTextField(value, query, base = 0) {
+  const text = normalizeDirectoryQuery(value);
+  const keyword = normalizeDirectoryQuery(query);
+  if (!text || !keyword) return Number.NEGATIVE_INFINITY;
+  const compactText = compactSearchText(text);
+  const compactKeyword = compactSearchText(keyword);
+  if (text === keyword || compactText === compactKeyword) return base + 1000;
+  if (text.startsWith(keyword) || compactText.startsWith(compactKeyword)) return base + 850;
+  if (text.includes(keyword) || compactText.includes(compactKeyword)) return base + 650;
+  return Number.NEGATIVE_INFINITY;
+}
+
+function scorePinyinField(value, query, base = 0) {
+  const keyword = compactSearchText(query);
+  if (!value || !keyword || !isAsciiSearch(keyword) || !hasCjkText(value)) return Number.NEGATIVE_INFINITY;
+  const parts = pinyinParts(value);
+  if (parts.compact === keyword) return base + 960;
+  if (parts.initials === keyword) return base + 930;
+  if (parts.tokens.some((token) => token === keyword)) return base + 900;
+  if (parts.compact.startsWith(keyword)) return base + 820;
+  if (parts.initials.startsWith(keyword)) return base + 800;
+  if (parts.tokens.some((token) => token.startsWith(keyword))) return base + 760;
+  if (pinyinMatch(String(value), keyword)) return base + 720;
+  if (parts.compact.includes(keyword)) return base + 520;
+  if (parts.initials.includes(keyword)) return base + 480;
+  return Number.NEGATIVE_INFINITY;
+}
+
+function maxScore(...scores) {
+  return scores.reduce((best, score) => Math.max(best, Number.isFinite(score) ? score : Number.NEGATIVE_INFINITY), Number.NEGATIVE_INFINITY);
+}
+
+function scoreDirectoryUser(user, rawQuery) {
+  const query = normalizeDirectoryQuery(rawQuery);
+  if (!query) return 0;
+  const compactQuery = compactSearchText(query);
+  const ascii = isAsciiSearch(query);
+  const allowAuxiliaryPinyin = !ascii || compactQuery.length >= 3;
+  return maxScore(
+    scoreTextField(user.name, query, 4000),
+    scorePinyinField(user.name, compactQuery, 3900),
+    scoreTextField(user.employeeNo, query, 3600),
+    scoreTextField(user.jobTitle, query, 2400),
+    allowAuxiliaryPinyin ? scorePinyinField(user.jobTitle, compactQuery, 2300) : Number.NEGATIVE_INFINITY,
+    scoreTextField(user.department, query, 2200),
+    allowAuxiliaryPinyin ? scorePinyinField(user.department, compactQuery, 2100) : Number.NEGATIVE_INFINITY,
+    scoreTextField(user.company, query, 1800),
+    allowAuxiliaryPinyin ? scorePinyinField(user.company, compactQuery, 1700) : Number.NEGATIVE_INFINITY,
+    ascii && compactQuery.length >= 6 ? scoreTextField(user.subject, query, 800) : Number.NEGATIVE_INFINITY
+  );
+}
+
+function searchDirectoryUsers(users, rawQuery) {
+  const query = normalizeDirectoryQuery(rawQuery);
+  if (!query) return [...users].sort((left, right) => String(left.name || "").localeCompare(String(right.name || ""), "zh-CN"));
+  return users
+    .map((user) => ({ user, score: scoreDirectoryUser(user, query) }))
+    .filter((item) => item.score > Number.NEGATIVE_INFINITY)
+    .sort((left, right) => right.score - left.score
+      || String(left.user.name || "").localeCompare(String(right.user.name || ""), "zh-CN")
+      || String(left.user.employeeNo || "").localeCompare(String(right.user.employeeNo || ""), "zh-CN"))
+    .map((item) => item.user);
+}
+
+function scoreDirectoryDepartment(item, rawQuery) {
+  const query = normalizeDirectoryQuery(rawQuery);
+  if (!query) return 0;
+  const compactQuery = compactSearchText(query);
+  return maxScore(
+    scoreTextField(item.name, query, 3000),
+    scorePinyinField(item.name, compactQuery, 2900),
+    scoreTextField(item.path, query, 2600),
+    scorePinyinField(item.path, compactQuery, 2500),
+    scoreTextField(item.company, query, 1800),
+    scorePinyinField(item.company, compactQuery, 1700)
+  );
+}
+
+function searchDirectoryDepartments(items, rawQuery) {
+  const query = normalizeDirectoryQuery(rawQuery);
+  return items
+    .map((item) => ({ item, score: query ? scoreDirectoryDepartment(item, query) : 0 }))
+    .filter((entry) => !query || entry.score > Number.NEGATIVE_INFINITY)
+    .sort((left, right) => right.score - left.score
+      || `${left.item.company}/${left.item.path}`.localeCompare(`${right.item.company}/${right.item.path}`, "zh-CN"))
+    .map((entry) => entry.item);
+}
+
 function todayValue() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -2644,6 +2770,9 @@ const portalWritePermissions = [
 ];
 
 const managementViewPermissions = [
+  "asset:employee:view",
+  "asset:department:view",
+  "authz:app_role:view",
   "asset:inbound:view",
   "asset:receive_return:view",
   "asset:borrow_return:view",
@@ -9776,6 +9905,116 @@ function renderSystemPlaceholder(title, description) {
   </div>`;
 }
 
+function renderEmployeeDirectory() {
+  const query = normalizeDirectoryQuery(state.query);
+  const rows = searchDirectoryUsers(ecpDirectoryUsers, query);
+  return `<div class="system-content">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">账号目录</h2>
+          <div class="panel-subtitle">${rows.length} 个 ECP / 飞书目录账号 · 数据源来自 ECP Control Plane</div>
+        </div>
+        <button class="btn" type="button" data-open-authz-workspace>进入成员授权</button>
+      </div>
+      <div class="toolbar">
+        <input class="local-search" type="search" placeholder="中文姓名 / 拼音 / 首字母 / 工号 / 岗位 / 组织 / Subject" value="${escapeHtml(state.query)}" autocomplete="off" spellcheck="false">
+        <button class="btn primary" data-search>查询</button>
+        <button class="btn" data-reset>重置</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>姓名</th><th>工号</th><th>岗位</th><th>所属公司</th><th>部门</th><th>ECP Subject</th><th>状态</th></tr></thead>
+        <tbody>${rows.length ? rows.map((user) => `<tr>
+          <td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.employeeNo || "-")}</td><td>${escapeHtml(user.jobTitle || "-")}</td>
+          <td>${escapeHtml(user.company || "-")}</td><td>${escapeHtml(user.department || "-")}</td><td><code>${escapeHtml(user.subject)}</code></td>
+          <td>${statusTag(user.status || "在用")}</td>
+        </tr>`).join("") : '<tr class="empty-row"><td colspan="7">当前范围内没有 ECP 账号目录数据。</td></tr>'}</tbody>
+      </table></div>
+      <p class="empty-note">这里不再维护本地员工主数据；账号、飞书同步、状态和授权以 ECP 为准，资产系统只读取并用于业务流转。</p>
+    </section>
+  </div>`;
+}
+
+function renderDepartmentDirectory() {
+  const departments = new Map();
+  ecpDirectoryUsers.forEach((user) => {
+    const userDepartments = user.departments?.length
+      ? user.departments
+      : user.department ? [{ id: user.department, name: user.department, path: user.department }] : [];
+    userDepartments.forEach((department) => {
+      const key = `${user.company || ""}\u0000${department.id || department.path || department.name}`;
+      const entry = departments.get(key) || {
+        company: user.company || "-",
+        name: department.name,
+        path: department.path || department.name,
+        members: 0,
+      };
+      entry.members += 1;
+      departments.set(key, entry);
+    });
+  });
+  const query = normalizeDirectoryQuery(state.query);
+  const rows = searchDirectoryDepartments(Array.from(departments.values()), query);
+  return `<div class="system-content">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">组织架构</h2>
+          <div class="panel-subtitle">${rows.length} 个 ECP / 飞书目录部门 · 由账号目录实时归集</div>
+        </div>
+        <button class="btn" type="button" data-open-authz-workspace>进入成员授权</button>
+      </div>
+      <div class="toolbar">
+        <input class="local-search" type="search" placeholder="中文部门 / 拼音 / 首字母 / 公司 / 组织路径" value="${escapeHtml(state.query)}" autocomplete="off" spellcheck="false">
+        <button class="btn primary" data-search>查询</button>
+        <button class="btn" data-reset>重置</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>所属公司</th><th>部门名称</th><th>组织路径</th><th>目录成员</th></tr></thead>
+        <tbody>${rows.length ? rows.map((item) => `<tr><td>${escapeHtml(item.company)}</td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.path)}</td><td>${item.members}</td></tr>`).join("") : '<tr class="empty-row"><td colspan="4">当前范围内没有 ECP 组织目录数据。</td></tr>'}</tbody>
+      </table></div>
+      <p class="empty-note">组织结构不在资产系统二次编辑；如需同步飞书、调整账号集或成员状态，请在 ECP Control Plane 执行。</p>
+    </section>
+  </div>`;
+}
+
+function renderMemberAuthorization() {
+  const canAuthorize = hasAnyPermission([
+    "authz:app_role:view",
+    "authz:app_role:assign",
+    "authz:app_role:update",
+  ]);
+  return `<div class="system-content">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">成员授权</h2>
+          <div class="panel-subtitle">使用 ECP SDK 工作台管理应用角色、成员授权和权限模型。</div>
+        </div>
+        <button class="btn primary" type="button" data-open-authz-workspace ${canAuthorize ? "" : "disabled"}>打开授权工作台</button>
+      </div>
+      <div class="overview-grid">
+        <article class="overview-card">
+          <span class="card-label">账号来源</span>
+          <strong>ECP / 飞书账号目录</strong>
+          <p>人员、组织、账号状态以 ECP 同步后的目录为准。</p>
+        </article>
+        <article class="overview-card">
+          <span class="card-label">授权方式</span>
+          <strong>应用角色 + 权限模型</strong>
+          <p>应用管理员在 ECP 工作台给成员分配角色，业务接口由 Java 后端二次校验。</p>
+        </article>
+        <article class="overview-card">
+          <span class="card-label">当前身份</span>
+          <strong>${escapeHtml(state.currentUser?.name || "-")}</strong>
+          <p>${escapeHtml(state.currentUser?.roleName || "ECP用户")} · ${escapeHtml(state.currentUser?.company || "ECP组织")}</p>
+        </article>
+      </div>
+      ${canAuthorize ? '<p class="empty-note">点击“打开授权工作台”会在当前资产系统内进入 /workspace，不需要单独去外部系统找入口。</p>' : '<p class="empty-note">当前账号没有 ECP 成员授权权限，请先让应用管理员授予 authz:app_role:view / assign 等权限。</p>'}
+    </section>
+  </div>`;
+}
+
 function renderSelfServiceReadOnly() {
   const rows = selfServiceSettingItems.map((meta) => {
     const settings = state.selfServiceSettings[meta.key] || {};
@@ -10227,6 +10466,9 @@ function bindSelfServiceSettingsEvents() {
 }
 
 function renderSystemMainContent() {
+  if (state.systemMenu === "账号目录" || state.systemMenu === "员工信息") return renderEmployeeDirectory();
+  if (state.systemMenu === "组织架构") return renderDepartmentDirectory();
+  if (state.systemMenu === "成员授权") return renderMemberAuthorization();
   if (state.systemMenu === "员工自助") {
     return hasPermission("asset:self_service:update")
       ? renderSelfServiceManagement()
@@ -10235,6 +10477,10 @@ function renderSystemMainContent() {
   if (state.systemMenu === "系统对接") return renderSystemIntegrations();
   if (state.systemMenu === "表单管理") return renderSystemForms();
   const descriptions = {
+    账号目录: "查看 ECP / 飞书账号目录，人员主数据以 ECP 为准。",
+    员工信息: "查看 ECP / 飞书账号目录，人员主数据以 ECP 为准。",
+    组织架构: "查看 ECP 同步后的组织结构和部门成员。",
+    成员授权: "进入 ECP SDK 授权工作台，配置应用角色和成员权限。",
     员工自助: "配置员工领用、退库、借用、报修和签字确认能力。",
   };
   return renderSystemPlaceholder(state.systemMenu, descriptions[state.systemMenu] || "系统配置模块。");
@@ -10643,6 +10889,20 @@ function bindPageEvents() {
       if (state.systemMenu === "员工自助" && !state.selfServiceMenu) state.selfServiceMenu = "员工自助管理";
       persistRoute("settings");
       render();
+    })
+  );
+  document.querySelectorAll("[data-open-authz-workspace]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const context = readEcpContext();
+      const target = portalMenuById("authz.workspace");
+      if (target && context?.navigate) {
+        void context.navigate(target.id).catch((error) => {
+          showToast(error?.message || "授权工作台打开失败");
+          window.location.href = "/workspace";
+        });
+      } else {
+        window.location.href = "/workspace";
+      }
     })
   );
   document.querySelector("[data-system-integration-create]")?.addEventListener("click", () => openSystemIntegrationModal());

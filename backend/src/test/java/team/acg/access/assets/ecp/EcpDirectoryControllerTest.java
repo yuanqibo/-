@@ -18,7 +18,7 @@ import static org.mockito.Mockito.when;
 
 class EcpDirectoryControllerTest {
     @Test
-    void allowsAssetOperatorsToReadDirectoryForBusinessSelection() throws Exception {
+    void allowsEcpGovernanceAndAssetOperatorsToReadDirectory() throws Exception {
         RequireAnyPermission annotation = EcpDirectoryController.class
             .getMethod("users", String.class, int.class, int.class)
             .getAnnotation(RequireAnyPermission.class);
@@ -26,6 +26,8 @@ class EcpDirectoryControllerTest {
         assertThat(annotation).isNotNull();
         assertThat(Arrays.stream(annotation.value()).map(spec -> spec.value()).toList())
             .containsExactlyInAnyOrder(
+                "asset:employee:view",
+                "asset:department:view",
                 "asset:item:create",
                 "asset:item:update",
                 "asset:item:batchUpdate",

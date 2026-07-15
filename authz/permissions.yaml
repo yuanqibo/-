@@ -1,4 +1,20 @@
 resources:
+  - code: asset:employee
+    name: 账号目录
+    scopes: [ALL]
+    permissions:
+      - code: asset:employee:view
+        action: view
+        riskLevel: L1
+        approvalRequired: false
+  - code: asset:department
+    name: 组织架构
+    scopes: [ALL]
+    permissions:
+      - code: asset:department:view
+        action: view
+        riskLevel: L1
+        approvalRequired: false
   - code: asset:item
     name: 资产列表
     scopes: [ALL]

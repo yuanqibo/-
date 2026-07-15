@@ -24,7 +24,8 @@
     "@acg/ecp-sdk": "file:vendor/ecp-sdk/acg-ecp-sdk-0.1.36.tgz",
     "@acg/ecp-ui": "file:vendor/ecp-sdk/acg-ecp-ui-0.1.35.tgz",
     "element-plus": "^2.13.2",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "pinyin-pro": "^3.28.1"
   },
   "devDependencies": {
     "@types/sortablejs": "^1.15.9",

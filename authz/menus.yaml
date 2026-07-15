@@ -175,19 +175,56 @@ menus:
     pageKey: asset.portal.system
     file: /src/views/PortalView.vue
     order: 50
+    permissionMode: ANY
     permissionCodes:
+      - asset:employee:view
+      - asset:department:view
       - asset:self_service:view
       - asset:integration:view
       - asset:form:view
+      - authz:app_role:view
     featureCodes:
       - PORTAL_SETTINGS
+  - id: settingsEmployee
+    parentId: settings
+    title: 账号目录
+    path: /system/employees
+    pageKey: asset.portal.system.employees
+    file: /src/views/PortalView.vue
+    order: 51
+    permissionCodes:
+      - asset:employee:view
+    featureCodes:
+      - PORTAL_SETTINGS
+  - id: settingsDepartment
+    parentId: settings
+    title: 组织架构
+    path: /system/departments
+    pageKey: asset.portal.system.departments
+    file: /src/views/PortalView.vue
+    order: 52
+    permissionCodes:
+      - asset:department:view
+    featureCodes:
+      - PORTAL_SETTINGS
+  - id: settingsAuthorization
+    parentId: settings
+    title: 成员授权
+    path: /system/authorization
+    pageKey: asset.portal.system.authorization
+    file: /src/views/PortalView.vue
+    order: 53
+    permissionCodes:
+      - authz:app_role:view
+    featureCodes:
+      - APP_WORKSPACE
   - id: settingsSelfService
     parentId: settings
     title: 员工自助
     path: /system/self-service
     pageKey: asset.portal.system.self-service
     file: /src/views/PortalView.vue
-    order: 53
+    order: 54
     permissionCodes:
       - asset:self_service:view
     featureCodes:
@@ -198,7 +235,7 @@ menus:
     path: /system/integrations
     pageKey: asset.portal.system.integrations
     file: /src/views/PortalView.vue
-    order: 54
+    order: 55
     permissionCodes:
       - asset:integration:view
     featureCodes:
@@ -209,7 +246,7 @@ menus:
     path: /system/forms
     pageKey: asset.portal.system.forms
     file: /src/views/PortalView.vue
-    order: 55
+    order: 56
     permissionCodes:
       - asset:form:view
     featureCodes:

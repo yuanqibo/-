@@ -25,6 +25,8 @@ public class EcpDirectoryController {
 
     @GetMapping("/users")
     @RequireAnyPermission({
+        @PermissionSpec("asset:employee:view"),
+        @PermissionSpec("asset:department:view"),
         @PermissionSpec("asset:item:create"),
         @PermissionSpec("asset:item:update"),
         @PermissionSpec("asset:item:batchUpdate"),

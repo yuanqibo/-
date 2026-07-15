@@ -45,9 +45,12 @@ features:
     parentCode: ASSET_PORTAL_ROOT
     sort: 40
     permissions:
+      - asset:employee:view
+      - asset:department:view
       - asset:self_service:view
       - asset:integration:view
       - asset:form:view
+      - authz:app_role:view
   - code: APP_WORKSPACE
     name: 账号管理
     type: FEATURE
