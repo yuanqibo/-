@@ -21,6 +21,7 @@ function ecpSessionHeaders(headers = {}) {
 }
 
 let ecpDirectoryUsers = [];
+let ecpOrganization = null;
 let systemIntegrations = [];
 let systemForms = [];
 let assetOperationRecords = [];
@@ -127,6 +128,29 @@ async function hydrateEcpDirectoryUsers() {
   }
   if (fallback && !ecpDirectoryUsers.some((user) => user.subject === fallback.subject)) {
     ecpDirectoryUsers.unshift(fallback);
+  }
+}
+
+async function hydrateEcpOrganization() {
+  try {
+    const response = await fetch("/api/ecp/organization", {
+      cache: "no-store",
+      headers: ecpSessionHeaders(),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    ecpOrganization = await response.json();
+    const selectedAccountSet = ecpOrganization?.accountSets?.find?.((item) => item.unionId === state.ecpOrgAccountSetUnionId)
+      || ecpOrganization?.accountSets?.[0];
+    if (selectedAccountSet) state.ecpOrgAccountSetUnionId = selectedAccountSet.unionId || "";
+    if (!state.ecpOrgSelectedKey) {
+      const firstRoot = ecpOrganization?.roots?.[0];
+      if (firstRoot?.key) state.ecpOrgSelectedKey = firstRoot.key;
+    }
+    return true;
+  } catch (error) {
+    console.warn("[asset-portal] ECP organization unavailable", error);
+    ecpOrganization = null;
+    return false;
   }
 }
 
@@ -2037,6 +2061,7 @@ const state = {
   assetBorrowReturnTab: "borrow",
   systemMenu: "员工信息",
   ecpOrgSelectedKey: "",
+  ecpOrgAccountSetUnionId: "",
   ecpOrgMemberScope: "all",
   ecpOrgAccountStatus: "all",
   selfServiceMenu: "员工自助管理",
@@ -9969,143 +9994,155 @@ function splitEcpDepartmentPath(path = "", fallback = "") {
   return names.length ? names : fallbackName ? [fallbackName] : [];
 }
 
-function buildEcpOrganizationModel() {
-  const rootName = ecpDirectoryUsers.find((user) => user.company)?.company || state.currentUser?.company || "ECP组织";
-  const nodeMap = new Map();
-  const root = {
-    key: `company:${rootName}`,
-    name: rootName,
-    path: rootName,
-    company: rootName,
-    level: 0,
-    children: [],
-    directSubjects: new Set(),
-    memberSubjects: new Set(),
-  };
-  nodeMap.set(root.key, root);
-
-  const ensureChild = (parent, name) => {
-    const cleanName = String(name || "").trim();
-    if (!cleanName) return parent;
-    const key = `${parent.key}/${cleanName}`;
-    let child = nodeMap.get(key);
-    if (!child) {
-      child = {
-        key,
-        name: cleanName,
-        path: `${parent.path}/${cleanName}`,
-        company: rootName,
-        level: parent.level + 1,
-        children: [],
-        directSubjects: new Set(),
-        memberSubjects: new Set(),
-      };
-      nodeMap.set(key, child);
-      parent.children.push(child);
-    }
-    return child;
-  };
-
-  ecpDirectoryUsers.forEach((user) => {
-    const userDepartments = user.departments?.length
-      ? user.departments
-      : user.department ? [{ id: user.department, name: user.department, path: user.department }] : [];
-    if (!userDepartments.length) {
-      root.directSubjects.add(user.subject);
-      return;
-    }
-    userDepartments.forEach((department) => {
-      let names = splitEcpDepartmentPath(department.path, department.name);
-      if (names[0] === rootName) names = names.slice(1);
-      const leaf = names.reduce((parent, name) => ensureChild(parent, name), root);
-      leaf.directSubjects.add(user.subject);
-    });
-  });
-
-  const computeMembers = (node) => {
-    node.memberSubjects = new Set(node.directSubjects);
-    node.children
-      .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
-      .forEach((child) => {
-        computeMembers(child).forEach((subject) => node.memberSubjects.add(subject));
-      });
-    return node.memberSubjects;
-  };
-  computeMembers(root);
-  if (!state.ecpOrgSelectedKey || !nodeMap.has(state.ecpOrgSelectedKey)) {
-    state.ecpOrgSelectedKey = root.key;
-  }
-  return { root, nodeMap, selected: nodeMap.get(state.ecpOrgSelectedKey) || root };
+function ecpOrganizationUsersBySubject() {
+  return new Map((ecpOrganization?.users || []).map((user) => [
+    user.subject,
+    {
+      subject: String(user.subject || "").trim(),
+      name: String(user.name || "").trim(),
+      email: String(user.email || "").trim(),
+      phone: String(user.phone || "").trim(),
+      employeeNo: String(user.employeeNo || "").trim(),
+      jobTitle: String(user.jobTitle || "").trim(),
+      status: String(user.status || "").trim(),
+      company: String(user.companyName || "").trim(),
+      companyUnionId: String(user.companyUnionId || "").trim(),
+      accountSetUnionId: String(user.accountSetUnionId || "").trim(),
+      department: String(user.departments?.[0]?.name || "").trim(),
+      departments: Array.isArray(user.departments)
+        ? user.departments.map((department) => ({
+            id: String(department.unionId || department.externalId || "").trim(),
+            name: String(department.name || "").trim(),
+            path: String(department.path || department.name || "").trim(),
+            leaderName: String(department.leaderName || "").trim(),
+          })).filter((department) => department.name)
+        : [],
+    },
+  ]));
 }
 
-function filteredEcpOrganizationMembers(model = buildEcpOrganizationModel()) {
-  const subjects = state.ecpOrgMemberScope === "direct"
-    ? model.selected.directSubjects
-    : model.selected.memberSubjects;
-  const scoped = ecpDirectoryUsers
-    .filter((user) => subjects.has(user.subject))
+function selectedEcpAccountSet() {
+  const accountSets = Array.isArray(ecpOrganization?.accountSets) ? ecpOrganization.accountSets : [];
+  return accountSets.find((item) => item.unionId === state.ecpOrgAccountSetUnionId) || accountSets[0] || null;
+}
+
+function ecpAccountSetLabel(accountSet) {
+  const source = String(accountSet?.sourceType || "").toUpperCase();
+  if (source === "FEISHU" || source === "LARK") return "飞书";
+  if (source === "DINGTALK") return "钉钉";
+  if (source === "WECHAT_WORK") return "企微";
+  return accountSet?.name || source || "账号集";
+}
+
+function filterEcpOrgRootsByAccountSet(roots, accountSetUnionId) {
+  if (!accountSetUnionId) return roots;
+  const matchesNode = (node) => node.accountSetUnionId === accountSetUnionId
+    || node.children?.some((child) => matchesNode(child));
+  const filterNode = (node) => {
+    const children = (node.children || []).map(filterNode).filter(Boolean);
+    if (node.accountSetUnionId === accountSetUnionId || children.length) return { ...node, children };
+    return null;
+  };
+  const filtered = roots.filter(matchesNode).map(filterNode).filter(Boolean);
+  return filtered.length ? filtered : roots;
+}
+
+function flattenEcpOrgNodes(nodes = [], map = new Map()) {
+  nodes.forEach((node) => {
+    map.set(node.key, node);
+    flattenEcpOrgNodes(node.children || [], map);
+  });
+  return map;
+}
+
+function ecpOrganizationModel() {
+  const selectedAccountSet = selectedEcpAccountSet();
+  const roots = filterEcpOrgRootsByAccountSet(ecpOrganization?.roots || [], selectedAccountSet?.unionId || "");
+  const nodeMap = flattenEcpOrgNodes(roots);
+  if (!state.ecpOrgSelectedKey || !nodeMap.has(state.ecpOrgSelectedKey)) {
+    state.ecpOrgSelectedKey = roots[0]?.key || "";
+  }
+  const selected = nodeMap.get(state.ecpOrgSelectedKey) || roots[0] || null;
+  return { selectedAccountSet, roots, nodeMap, selected };
+}
+
+function filteredEcpOrganizationMembers(model = ecpOrganizationModel()) {
+  if (!model.selected) return [];
+  const userMap = ecpOrganizationUsersBySubject();
+  const subjectList = state.ecpOrgMemberScope === "direct"
+    ? model.selected.directSubjects || []
+    : model.selected.memberSubjects || [];
+  const scoped = subjectList
+    .map((subject) => userMap.get(subject))
+    .filter(Boolean)
     .filter((user) => directoryUserStatusMatches(user, state.ecpOrgAccountStatus));
   return searchDirectoryUsers(scoped, state.query);
 }
 
 function renderEcpOrgTreeNode(node, selectedKey) {
-  const hasChildren = node.children.length > 0;
-  return `<div class="ecp-org-tree-group" style="--org-level:${node.level}">
+  const hasChildren = (node.children || []).length > 0;
+  const count = Array.isArray(node.memberSubjects) ? node.memberSubjects.length : 0;
+  return `<div class="ecp-org-tree-group" style="--org-level:${Number(node.level) || 0}">
     <button class="ecp-org-tree-node ${node.key === selectedKey ? "active" : ""}" type="button" data-ecp-org-node="${escapeHtml(node.key)}" aria-current="${node.key === selectedKey ? "true" : "false"}">
       <span class="ecp-org-tree-caret ${hasChildren ? "" : "empty"}" aria-hidden="true">${hasChildren ? "›" : ""}</span>
-      <span class="ecp-org-tree-name">${escapeHtml(node.name)}</span>
-      <span class="ecp-org-tree-count">${node.memberSubjects.size}</span>
+      <span class="ecp-org-tree-name">${escapeHtml(node.name || "未命名组织")}</span>
+      <span class="ecp-org-tree-count">${count}</span>
     </button>
     ${hasChildren ? `<div class="ecp-org-tree-children">${node.children.map((child) => renderEcpOrgTreeNode(child, selectedKey)).join("")}</div>` : ""}
   </div>`;
 }
 
-function ecpControlPlaneAccountsUrl() {
-  const accountSetUnionId = ecpDirectoryUsers.find((user) => user.accountSetUnionId)?.accountSetUnionId || "";
-  return accountSetUnionId
-    ? `https://access.acg.team/ecp/accounts?accountSetUnionId=${encodeURIComponent(accountSetUnionId)}`
-    : "https://access.acg.team/ecp/accounts";
-}
-
 function renderDepartmentDirectory() {
-  const model = buildEcpOrganizationModel();
+  if (!ecpOrganization) {
+    return `<div class="system-content">
+      <section class="panel">
+        <h2 class="panel-title">组织架构</h2>
+        <p class="empty-note">ECP 组织架构暂未加载成功。请确认当前账号有 asset:department:view，并刷新页面重试。</p>
+      </section>
+    </div>`;
+  }
+  const model = ecpOrganizationModel();
   const rows = filteredEcpOrganizationMembers(model);
   const pagination = paginateRows(rows, "ecpOrg");
   const displayRows = pagination.rows;
-  const root = model.root;
   const selected = model.selected;
+  const selectedTotal = Array.isArray(selected?.memberSubjects) ? selected.memberSubjects.length : 0;
+  const accountSets = Array.isArray(ecpOrganization.accountSets) ? ecpOrganization.accountSets : [];
+  const warnings = Array.isArray(ecpOrganization.warnings) ? ecpOrganization.warnings : [];
+  const capabilities = ecpOrganization.capabilities || {};
   return `<div class="system-content">
     <section class="panel ecp-org-console">
       <div class="ecp-org-tabs">
         <button class="ecp-org-tab muted" type="button">初始化账号</button>
-        <button class="ecp-org-tab active" type="button">飞书</button>
-        <button class="ecp-org-tab add" type="button" data-open-ecp-control-plane>+</button>
+        ${accountSets.length ? accountSets.map((accountSet) => `<button class="ecp-org-tab ${accountSet.unionId === model.selectedAccountSet?.unionId ? "active" : ""}" type="button" data-ecp-org-account-set="${escapeHtml(accountSet.unionId)}">${escapeHtml(ecpAccountSetLabel(accountSet))}</button>`).join("") : '<button class="ecp-org-tab active" type="button" disabled>ECP账号集</button>'}
+        <button class="ecp-org-tab add" type="button" disabled title="账号集新增属于 ECP 管理台 admin 写能力，当前 SDK 未开放">+</button>
       </div>
       <div class="ecp-org-policy-bar">
         <div>
           <h2 class="panel-title">账号策略配置</h2>
-          <div class="panel-subtitle">用于管理账号集的数据来源、同步状态与组织结构配置。账号集类型：内部账号集 · 数据源：飞书</div>
+          <div class="panel-subtitle">账号集类型：${escapeHtml(model.selectedAccountSet?.setType || "-")} · 数据源：${escapeHtml(model.selectedAccountSet?.sourceType || "-")} · 同步状态：${escapeHtml(model.selectedAccountSet?.syncStatus || "-")} · 最近同步：${escapeHtml(model.selectedAccountSet?.lastSyncAt || "-")}</div>
         </div>
         <div class="ecp-org-actions">
-          <button class="btn primary" type="button" data-open-ecp-control-plane>立即同步</button>
-          <button class="btn" type="button" data-open-ecp-control-plane>同步配置</button>
-          <button class="btn primary" type="button" data-open-ecp-control-plane>账号集设置</button>
+          <button class="btn primary" type="button" disabled title="${escapeHtml(capabilities.unavailableReason || "当前 ECP SDK 未开放该写接口")}">立即同步</button>
+          <button class="btn" type="button" disabled title="${escapeHtml(capabilities.unavailableReason || "当前 ECP SDK 未开放该写接口")}">同步配置</button>
+          <button class="btn primary" type="button" disabled title="${escapeHtml(capabilities.unavailableReason || "当前 ECP SDK 未开放该写接口")}">账号集设置</button>
         </div>
       </div>
+      ${warnings.length ? `<div class="empty-note">${warnings.map((warning) => escapeHtml(warning)).join("；")}</div>` : ""}
       <div class="ecp-org-layout">
         <aside class="ecp-org-tree-panel">
           <div class="ecp-org-search">
             <input class="local-search" type="search" placeholder="搜索名称或编码" value="${escapeHtml(state.query)}" autocomplete="off" spellcheck="false">
           </div>
           <div class="ecp-org-tree-scroll">
-            ${renderEcpOrgTreeNode(root, selected.key)}
+            ${model.roots.length ? model.roots.map((root) => renderEcpOrgTreeNode(root, selected?.key || "")).join("") : '<p class="empty-note">ECP 当前未返回组织树。</p>'}
           </div>
         </aside>
         <main class="ecp-org-member-panel">
           <div class="ecp-org-member-header">
             <div>
-              <h2>${escapeHtml(selected.name)}</h2>
-              <div class="panel-subtitle">总人数 ${selected.memberSubjects.size} · 当前展示 ${rows.length}</div>
+              <h2>${escapeHtml(selected?.name || "组织架构")}</h2>
+              <div class="panel-subtitle">总人数 ${selectedTotal} · 当前展示 ${rows.length} · 路径：${escapeHtml(selected?.fullPath || selected?.path || "-")}</div>
             </div>
             <div class="ecp-org-filters">
               <select data-ecp-org-member-scope aria-label="成员范围">
@@ -10126,8 +10163,8 @@ function renderDepartmentDirectory() {
               <td>${escapeHtml(user.employeeNo || "-")}</td>
               <td>${escapeHtml(user.email || "-")}</td>
               <td>${escapeHtml(user.department || "-")}</td>
-              <td>--</td>
-              <td><button class="link" type="button" data-open-ecp-control-plane>详情</button></td>
+              <td>${escapeHtml(user.departments?.[0]?.leaderName || "--")}</td>
+              <td><button class="link" type="button" data-ecp-org-user-detail="${escapeHtml(user.subject)}">详情</button></td>
             </tr>`).join("") : '<tr class="empty-row"><td colspan="6">当前组织节点没有可展示的成员。</td></tr>'}</tbody>
           </table></div>
           ${renderPagination(pagination, "ecpOrg")}
@@ -11071,6 +11108,14 @@ function bindPageEvents() {
       render();
     })
   );
+  document.querySelectorAll("[data-ecp-org-account-set]").forEach((el) =>
+    el.addEventListener("click", () => {
+      state.ecpOrgAccountSetUnionId = el.dataset.ecpOrgAccountSet || "";
+      state.ecpOrgSelectedKey = "";
+      state.ecpOrgPage = 1;
+      render();
+    })
+  );
   document.querySelector("[data-ecp-org-member-scope]")?.addEventListener("change", (event) => {
     state.ecpOrgMemberScope = event.target.value === "direct" ? "direct" : "all";
     state.ecpOrgPage = 1;
@@ -11081,9 +11126,22 @@ function bindPageEvents() {
     state.ecpOrgPage = 1;
     render();
   });
-  document.querySelectorAll("[data-open-ecp-control-plane]").forEach((el) =>
+  document.querySelectorAll("[data-ecp-org-user-detail]").forEach((el) =>
     el.addEventListener("click", () => {
-      window.open(ecpControlPlaneAccountsUrl(), "_blank", "noopener,noreferrer");
+      const user = ecpOrganizationUsersBySubject().get(el.dataset.ecpOrgUserDetail || "");
+      if (!user) return showToast("当前成员详情已刷新，请重新选择");
+      const departments = user.departments?.map((department) => department.path || department.name).filter(Boolean).join("\n") || "-";
+      window.alert([
+        `姓名：${user.name || "-"}`,
+        `工号：${user.employeeNo || "-"}`,
+        `岗位：${user.jobTitle || "-"}`,
+        `邮箱：${user.email || "-"}`,
+        `手机：${user.phone || "-"}`,
+        `公司：${user.company || "-"}`,
+        `状态：${user.status || "-"}`,
+        `ECP Subject：${user.subject || "-"}`,
+        `部门：\n${departments}`,
+      ].join("\n"));
     })
   );
   document.querySelector("[data-system-integration-create]")?.addEventListener("click", () => openSystemIntegrationModal());
@@ -14051,6 +14109,7 @@ async function bootApp() {
   const loadedSharedStore = await loadSharedStore();
   if (loadedSharedStore) applySharedStoreState();
   await hydrateEcpDirectoryUsers();
+  await hydrateEcpOrganization();
   await hydrateAssetsFromServer();
   await hydrateBusinessData();
   await hydrateSystemConfigs();
