@@ -10244,16 +10244,26 @@ function renderDepartmentDirectory() {
               </select>
             </div>
           </div>
-          <div class="table-wrap ecp-org-table-wrap"><table>
+          <div class="table-wrap ecp-org-table-wrap"><table class="ecp-org-table">
+            <colgroup>
+              <col class="ecp-org-col-name" />
+              <col class="ecp-org-col-no" />
+              <col class="ecp-org-col-email" />
+              <col class="ecp-org-col-department" />
+              <col class="ecp-org-col-owner" />
+              <col class="ecp-org-col-status" />
+              <col class="ecp-org-col-job" />
+              <col class="ecp-org-col-action" />
+            </colgroup>
             <thead><tr><th>姓名</th><th>工号</th><th>邮箱</th><th>部门</th><th>负责部门</th><th>账号状态</th><th>岗位</th><th>操作</th></tr></thead>
             <tbody>${displayRows.length ? displayRows.map((user) => `<tr>
-              <td><span class="ecp-org-avatar">${escapeHtml(accountInitial(user.name).toUpperCase())}</span>${escapeHtml(user.name)}</td>
-              <td>${escapeHtml(user.employeeNo || "-")}</td>
-              <td>${escapeHtml(user.email || "-")}</td>
-              <td>${escapeHtml(user.department || "-")}</td>
-              <td>${escapeHtml(user.departments?.[0]?.leaderName || "--")}</td>
+              <td title="${escapeHtml(user.name || "-")}"><span class="ecp-org-user-cell"><span class="ecp-org-avatar">${escapeHtml(accountInitial(user.name).toUpperCase())}</span><span class="ecp-org-user-name">${escapeHtml(user.name || "-")}</span></span></td>
+              <td title="${escapeHtml(user.employeeNo || "-")}">${escapeHtml(user.employeeNo || "-")}</td>
+              <td title="${escapeHtml(user.email || "-")}">${escapeHtml(user.email || "-")}</td>
+              <td title="${escapeHtml(user.department || "-")}">${escapeHtml(user.department || "-")}</td>
+              <td title="${escapeHtml(user.departments?.[0]?.leaderName || "--")}">${escapeHtml(user.departments?.[0]?.leaderName || "--")}</td>
               <td>${statusTag(user.status || "enabled")}</td>
-              <td>${escapeHtml(user.jobTitle || "-")}</td>
+              <td title="${escapeHtml(user.jobTitle || "-")}">${escapeHtml(user.jobTitle || "-")}</td>
               <td><button class="link" type="button" data-ecp-org-user-detail="${escapeHtml(user.subject)}">详情</button></td>
             </tr>`).join("") : '<tr class="empty-row"><td colspan="8">当前组织节点没有可展示的成员。</td></tr>'}</tbody>
           </table></div>
