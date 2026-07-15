@@ -2357,11 +2357,6 @@ const nav = [
     label: "系统",
     icon: systemNavIcon,
   },
-  {
-    id: "authz.workspace",
-    label: "账号管理",
-    icon: systemNavIcon,
-  },
 ];
 
 const page = document.querySelector("#page");
@@ -10274,7 +10269,7 @@ function renderDepartmentDirectory() {
   </div>`;
 }
 
-function renderMemberAuthorization() {
+function renderAccountManagement() {
   const canAuthorize = hasAnyPermission([
     "authz:app_role:view",
     "authz:app_role:assign",
@@ -10284,10 +10279,10 @@ function renderMemberAuthorization() {
     <section class="panel">
       <div class="panel-header">
         <div>
-          <h2 class="panel-title">成员授权</h2>
-          <div class="panel-subtitle">使用 ECP SDK 工作台管理应用角色、成员授权和权限模型。</div>
+          <h2 class="panel-title">账号管理</h2>
+          <div class="panel-subtitle">使用 ECP SDK 工作台管理应用角色、账号授权和权限模型。</div>
         </div>
-        <button class="btn primary" type="button" data-open-authz-workspace ${canAuthorize ? "" : "disabled"}>打开授权工作台</button>
+        <button class="btn primary" type="button" data-open-authz-workspace ${canAuthorize ? "" : "disabled"}>打开账号管理</button>
       </div>
       <div class="overview-grid">
         <article class="overview-card">
@@ -10296,7 +10291,7 @@ function renderMemberAuthorization() {
           <p>人员、组织、账号状态以 ECP 同步后的目录为准。</p>
         </article>
         <article class="overview-card">
-          <span class="card-label">授权方式</span>
+          <span class="card-label">账号管理</span>
           <strong>应用角色 + 权限模型</strong>
           <p>应用管理员在 ECP 工作台给成员分配角色，业务接口由 Java 后端二次校验。</p>
         </article>
@@ -10306,7 +10301,7 @@ function renderMemberAuthorization() {
           <p>${escapeHtml(state.currentUser?.roleName || "ECP用户")} · ${escapeHtml(state.currentUser?.company || "ECP组织")}</p>
         </article>
       </div>
-      ${canAuthorize ? '<p class="empty-note">点击“打开授权工作台”会在当前资产系统内进入 /workspace，不需要单独去外部系统找入口。</p>' : '<p class="empty-note">当前账号没有 ECP 成员授权权限，请先让应用管理员授予 authz:app_role:view / assign 等权限。</p>'}
+      ${canAuthorize ? '<p class="empty-note">点击“打开账号管理”会在当前资产系统内进入 /workspace，不需要单独去外部系统找入口。</p>' : '<p class="empty-note">当前账号没有 ECP 账号管理权限，请先让应用管理员授予 authz:app_role:view / assign 等权限。</p>'}
     </section>
   </div>`;
 }
@@ -10764,7 +10759,7 @@ function bindSelfServiceSettingsEvents() {
 function renderSystemMainContent() {
   if (state.systemMenu === "员工信息") return renderEmployeeDirectory();
   if (state.systemMenu === "组织架构") return renderDepartmentDirectory();
-  if (state.systemMenu === "成员授权") return renderMemberAuthorization();
+  if (state.systemMenu === "账号管理") return renderAccountManagement();
   if (state.systemMenu === "员工自助") {
     return hasPermission("asset:self_service:update")
       ? renderSelfServiceManagement()
@@ -10775,7 +10770,7 @@ function renderSystemMainContent() {
   const descriptions = {
     员工信息: "查看员工档案、账号归属和员工端登录基础信息。",
     组织架构: "按 ECP 管理台结构查看飞书账号集、组织树和成员状态。",
-    成员授权: "进入 ECP SDK 授权工作台，配置应用角色和成员权限。",
+    账号管理: "进入 ECP SDK 账号管理工作台，配置应用角色和成员权限。",
     员工自助: "配置员工领用、退库、借用、报修和签字确认能力。",
   };
   return renderSystemPlaceholder(state.systemMenu, descriptions[state.systemMenu] || "系统配置模块。");
@@ -11180,6 +11175,19 @@ function bindPageEvents() {
   );
   document.querySelectorAll("[data-system-menu]").forEach((el) =>
     el.addEventListener("click", () => {
+      if (el.dataset.systemMenuId === "authz.workspace") {
+        const context = readEcpContext();
+        const target = portalMenuById("authz.workspace");
+        if (target && context?.navigate) {
+          void context.navigate(target.id).catch((error) => {
+            showToast(error?.message || "账号管理打开失败");
+            window.location.href = "/workspace";
+          });
+        } else {
+          window.location.href = "/workspace";
+        }
+        return;
+      }
       state.systemMenu = el.dataset.systemMenu;
       state.route = "settings";
       if (state.systemMenu === "员工自助" && !state.selfServiceMenu) state.selfServiceMenu = "员工自助管理";
@@ -11193,7 +11201,7 @@ function bindPageEvents() {
       const target = portalMenuById("authz.workspace");
       if (target && context?.navigate) {
         void context.navigate(target.id).catch((error) => {
-          showToast(error?.message || "授权工作台打开失败");
+          showToast(error?.message || "账号管理打开失败");
           window.location.href = "/workspace";
         });
       } else {

@@ -207,14 +207,17 @@ menus:
       - asset:department:view
     featureCodes:
       - PORTAL_SETTINGS
-  - id: settingsAuthorization
+  - id: authz.workspace
     parentId: settings
-    title: 成员授权
-    path: /system/authorization
-    pageKey: asset.portal.system.authorization
-    file: /src/views/PortalView.vue
+    title: 账号管理
+    icon: Lock
+    path: /workspace
+    pageKey: authz.workspace
     order: 53
+    permissionMode: ALL
     permissionCodes:
+      - authz:application:view
+      - authz:model:view
       - authz:app_role:view
     featureCodes:
       - APP_WORKSPACE
@@ -251,16 +254,3 @@ menus:
       - asset:form:view
     featureCodes:
       - PORTAL_SETTINGS
-  - id: authz.workspace
-    title: 账号管理
-    icon: Lock
-    path: /workspace
-    pageKey: authz.workspace
-    order: 90
-    permissionMode: ALL
-    permissionCodes:
-      - authz:application:view
-      - authz:model:view
-      - authz:app_role:view
-    featureCodes:
-      - APP_WORKSPACE
