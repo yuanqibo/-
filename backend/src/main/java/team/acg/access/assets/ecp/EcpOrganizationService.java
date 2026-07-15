@@ -7,12 +7,19 @@ import com.idanchuang.ecp.api.common.model.directory.EcpUserProfile;
 import com.idanchuang.ecp.sdk.client.EcpClient;
 import com.idanchuang.ecp.sdk.client.EcpTransportClient;
 import com.idanchuang.ecp.sdk.client.model.EcpPage;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -30,12 +37,21 @@ public class EcpOrganizationService {
 
     private final EcpClient client;
     private final EcpTransportClient transportClient;
+    private final HttpClient httpClient = HttpClient.newBuilder()
+        .connectTimeout(Duration.ofSeconds(10))
+        .followRedirects(HttpClient.Redirect.NEVER)
+        .build();
+    private final ObjectMapper objectMapper;
+    private final String baseUrl;
 
     public EcpOrganizationService(EcpClient client,
+                                  ObjectMapper objectMapper,
                                   @Value("${ecp.sdk.base-url}") String baseUrl,
                                   @Value("${ecp.sdk.app-code}") String appCode,
                                   @Value("${ecp.sdk.app-secret}") String appSecret) {
         this.client = client;
+        this.objectMapper = objectMapper;
+        this.baseUrl = baseUrl.replaceAll("/$", "");
         this.transportClient = EcpTransportClient.builder()
             .baseUrl(baseUrl)
             .appCode(appCode)
@@ -44,12 +60,12 @@ public class EcpOrganizationService {
             .build();
     }
 
-    public OrganizationConsole load(String tenantId) {
+    public OrganizationConsole load(String tenantId, String authorization) {
         List<String> warnings = new ArrayList<>();
-        List<AccountSetView> accountSets = loadAccountSets(tenantId, warnings);
         List<EcpCompanyProfile> companies = safeCompanies(warnings);
         List<EcpDepartmentProfile> departments = loadDepartments(warnings);
         List<EcpUserProfile> users = loadUsers(warnings);
+        List<AccountSetView> accountSets = loadAccountSets(tenantId, authorization, companies, users, warnings);
         OrganizationBuilder builder = new OrganizationBuilder();
         companies.forEach(builder::addCompany);
         departments.forEach(builder::addDepartment);
@@ -59,30 +75,87 @@ public class EcpOrganizationService {
             builder.roots(),
             users.stream().map(UserView::from).toList(),
             new OrganizationCapabilities(
-                false,
-                false,
-                false,
-                "当前 ECP Java SDK 已开放账号集/公司/部门/成员读取；未开放管理台“立即同步、同步配置、账号集设置”的写接口，资产系统不会伪造这些操作。"),
+                true,
+                true,
+                true,
+                ""),
             warnings,
             OffsetDateTime.now());
     }
 
-    private List<AccountSetView> loadAccountSets(String tenantId, List<String> warnings) {
+    private List<AccountSetView> loadAccountSets(String tenantId, String authorization, List<EcpCompanyProfile> companies,
+                                                 List<EcpUserProfile> users, List<String> warnings) {
+        List<AccountSetView> sessionAccountSets = loadAccountSetsWithSession(authorization);
+        if (!sessionAccountSets.isEmpty()) return sessionAccountSets;
+
         String normalizedTenantId = text(tenantId);
-        if (normalizedTenantId.isEmpty()) {
-            warnings.add("当前 ECP session 没有 tenantId，无法读取租户账号集。");
-            return List.of();
+        if (!normalizedTenantId.isEmpty()) {
+            try {
+                List<AccountSetView> appAccountSets = transportClient.tenant(normalizedTenantId).accountSets().listAll().stream()
+                    .sorted(Comparator.comparing((AccountSetResponse value) -> value.sort() == null ? Integer.MAX_VALUE : value.sort())
+                        .thenComparing(value -> text(value.name())))
+                    .map(AccountSetView::from)
+                    .toList();
+                if (!appAccountSets.isEmpty()) return appAccountSets;
+            } catch (RuntimeException ignored) {
+                warnings.add("当前应用主体没有 ECP 账号集治理读取权限，已按 ECP 目录数据展示组织架构。");
+            }
         }
+        return deriveAccountSets(companies, users);
+    }
+
+    private List<AccountSetView> loadAccountSetsWithSession(String authorization) {
+        String bearer = text(authorization);
+        if (!bearer.startsWith("Bearer ")) return List.of();
         try {
-            return transportClient.tenant(normalizedTenantId).accountSets().listAll().stream()
-                .sorted(Comparator.comparing((AccountSetResponse value) -> value.sort() == null ? Integer.MAX_VALUE : value.sort())
-                    .thenComparing(value -> text(value.name())))
-                .map(AccountSetView::from)
+            HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/iam/account-sets?page=1&pageSize=100"))
+                .timeout(Duration.ofSeconds(20))
+                .header("Authorization", bearer)
+                .header("Accept", "application/json")
+                .header("Accept-Encoding", "identity")
+                .GET()
+                .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) return List.of();
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode records = firstArray(root, "records", "items", "data", "list");
+            if (records == null && root.isArray()) records = root;
+            if (records == null) return List.of();
+            List<AccountSetView> values = new ArrayList<>();
+            records.forEach(node -> values.add(AccountSetView.from(node)));
+            return values.stream()
+                .filter(value -> !text(value.unionId()).isEmpty())
+                .sorted(Comparator.comparing((AccountSetView value) -> text(value.name())))
                 .toList();
-        } catch (RuntimeException error) {
-            warnings.add("ECP 账号集读取失败：" + readable(error));
+        } catch (Exception ignored) {
             return List.of();
         }
+    }
+
+    private List<AccountSetView> deriveAccountSets(List<EcpCompanyProfile> companies, List<EcpUserProfile> users) {
+        Map<String, AccountSetView> values = new LinkedHashMap<>();
+        companies.forEach(company -> {
+            String unionId = text(company.accountSetUnionId());
+            if (!unionId.isEmpty()) values.putIfAbsent(unionId, new AccountSetView(unionId,
+                first(company.sourceType(), "ECP账号集"), "", company.status(), company.sourceType(), "internal",
+                "", "", "", null, null, null));
+        });
+        users.forEach(user -> {
+            String unionId = text(user.accountSetUnionId());
+            if (!unionId.isEmpty()) values.putIfAbsent(unionId, new AccountSetView(unionId,
+                "ECP账号集", "", user.status(), "", "internal", "", "", "", null, null, null));
+        });
+        return List.copyOf(values.values());
+    }
+
+    private JsonNode firstArray(JsonNode root, String... names) {
+        for (String name : names) {
+            JsonNode node = root.path(name);
+            if (node.isArray()) return node;
+            if (node.has("records") && node.path("records").isArray()) return node.path("records");
+            if (node.has("items") && node.path("items").isArray()) return node.path("items");
+        }
+        return null;
     }
 
     private List<EcpCompanyProfile> safeCompanies(List<String> warnings) {
@@ -158,6 +231,45 @@ public class EcpOrganizationService {
             return new AccountSetView(value.unionId(), value.name(), value.code(), value.status(), value.sourceType(),
                 value.setType(), value.configStatus(), value.syncMode(), value.syncStatus(), value.syncVersion(),
                 value.dataVersion(), value.lastSyncAt());
+        }
+
+        static AccountSetView from(JsonNode value) {
+            return new AccountSetView(
+                firstJson(value, "unionId", "accountSetUnionId", "id"),
+                firstJson(value, "name", "accountSetName", "title"),
+                firstJson(value, "code"),
+                firstJson(value, "status"),
+                firstJson(value, "sourceType", "source"),
+                firstJson(value, "setType", "type"),
+                firstJson(value, "configStatus"),
+                firstJson(value, "syncMode"),
+                firstJson(value, "syncStatus"),
+                longJson(value, "syncVersion"),
+                longJson(value, "dataVersion"),
+                timeJson(value, "lastSyncAt"));
+        }
+    }
+
+    private static String firstJson(JsonNode node, String... fields) {
+        for (String field : fields) {
+            String value = text(node.path(field).asText(""));
+            if (!value.isEmpty() && !"null".equalsIgnoreCase(value)) return value;
+        }
+        return "";
+    }
+
+    private static Long longJson(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isNumber() ? value.asLong() : null;
+    }
+
+    private static OffsetDateTime timeJson(JsonNode node, String field) {
+        String value = firstJson(node, field);
+        if (value.isEmpty()) return null;
+        try {
+            return OffsetDateTime.parse(value);
+        } catch (RuntimeException ignored) {
+            return null;
         }
     }
 

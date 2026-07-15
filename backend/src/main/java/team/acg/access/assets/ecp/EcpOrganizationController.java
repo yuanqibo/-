@@ -2,6 +2,7 @@ package team.acg.access.assets.ecp;
 
 import com.idanchuang.ecp.sdk.spring.annotation.RequirePermission;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,6 +25,6 @@ public class EcpOrganizationController {
     @RequirePermission(permissions = "asset:department:view")
     public EcpOrganizationService.OrganizationConsole organization(HttpServletRequest request) {
         RequestIdentityService.Identity identity = identityService.current(request).orElseThrow();
-        return organizationService.load(identity.tenantId());
+        return organizationService.load(identity.tenantId(), request.getHeader(HttpHeaders.AUTHORIZATION));
     }
 }
