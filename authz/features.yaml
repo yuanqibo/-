@@ -45,8 +45,6 @@ features:
     parentCode: ASSET_PORTAL_ROOT
     sort: 40
     permissions:
-      - asset:employee:view
-      - asset:department:view
       - asset:self_service:view
       - asset:integration:view
       - asset:form:view

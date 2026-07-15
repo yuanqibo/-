@@ -18,14 +18,21 @@ import static org.mockito.Mockito.when;
 
 class EcpDirectoryControllerTest {
     @Test
-    void allowsEitherEmployeeOrDepartmentReaders() throws Exception {
+    void allowsAssetOperatorsToReadDirectoryForBusinessSelection() throws Exception {
         RequireAnyPermission annotation = EcpDirectoryController.class
             .getMethod("users", String.class, int.class, int.class)
             .getAnnotation(RequireAnyPermission.class);
 
         assertThat(annotation).isNotNull();
         assertThat(Arrays.stream(annotation.value()).map(spec -> spec.value()).toList())
-            .containsExactlyInAnyOrder("asset:employee:view", "asset:department:view");
+            .containsExactlyInAnyOrder(
+                "asset:item:create",
+                "asset:item:update",
+                "asset:item:batchUpdate",
+                "asset:receive_return:receive",
+                "asset:receive_return:handover",
+                "asset:borrow_return:borrow",
+                "asset:request:review");
     }
 
     @Test

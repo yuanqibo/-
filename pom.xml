@@ -21,10 +21,21 @@
     <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
     <node.version>v14.21.3</node.version>
     <npm.version>9.9.4</npm.version>
+    <ecp-sdk-java.version>1.0.3-release</ecp-sdk-java.version>
     <vite.ecp.app-code>WLY5YG</vite.ecp.app-code>
     <vite.ecp.api-base-url>/api/v1</vite.ecp.api-base-url>
     <vite.ecp.config-source-mode>remote-first</vite.ecp.config-source-mode>
   </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>com.idanchuang.ecp</groupId>
+        <artifactId>ecp-sdk-spring-boot-starter</artifactId>
+        <version>${ecp-sdk-java.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <build>
     <plugins>

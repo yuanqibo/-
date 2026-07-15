@@ -176,33 +176,9 @@ menus:
     file: /src/views/PortalView.vue
     order: 50
     permissionCodes:
-      - asset:employee:view
-      - asset:department:view
       - asset:self_service:view
       - asset:integration:view
       - asset:form:view
-    featureCodes:
-      - PORTAL_SETTINGS
-  - id: settingsEmployee
-    parentId: settings
-    title: 员工信息
-    path: /system/employees
-    pageKey: asset.portal.system.employees
-    file: /src/views/PortalView.vue
-    order: 51
-    permissionCodes:
-      - asset:employee:view
-    featureCodes:
-      - PORTAL_SETTINGS
-  - id: settingsDepartment
-    parentId: settings
-    title: 组织架构
-    path: /system/departments
-    pageKey: asset.portal.system.departments
-    file: /src/views/PortalView.vue
-    order: 52
-    permissionCodes:
-      - asset:department:view
     featureCodes:
       - PORTAL_SETTINGS
   - id: settingsSelfService

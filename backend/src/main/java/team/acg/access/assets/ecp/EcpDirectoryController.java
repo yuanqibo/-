@@ -25,8 +25,13 @@ public class EcpDirectoryController {
 
     @GetMapping("/users")
     @RequireAnyPermission({
-        @PermissionSpec("asset:employee:view"),
-        @PermissionSpec("asset:department:view")
+        @PermissionSpec("asset:item:create"),
+        @PermissionSpec("asset:item:update"),
+        @PermissionSpec("asset:item:batchUpdate"),
+        @PermissionSpec("asset:receive_return:receive"),
+        @PermissionSpec("asset:receive_return:handover"),
+        @PermissionSpec("asset:borrow_return:borrow"),
+        @PermissionSpec("asset:request:review")
     })
     public DirectoryUserPage users(@RequestParam(defaultValue = "") String query,
                                    @RequestParam(defaultValue = "1") int page,

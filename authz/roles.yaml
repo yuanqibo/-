@@ -5,8 +5,6 @@ roles:
     systemRole: true
     description: 管理资产系统的全部业务、配置和账号授权。
     permissions:
-      - asset:employee:view
-      - asset:department:view
       - asset:item:view
       - asset:item:create
       - asset:item:receive
@@ -119,8 +117,6 @@ roles:
     roleType: OPERATOR
     description: 负责资产台账、入库、领用、借用、盘点和审批处理，不具备账号授权能力。
     permissions:
-      - asset:employee:view
-      - asset:department:view
       - asset:item:view
       - asset:item:create
       - asset:item:receive
@@ -219,8 +215,6 @@ roles:
     roleType: AUDITOR
     description: 只读查看资产、审批、系统配置和授权说明。
     permissions:
-      - asset:employee:view
-      - asset:department:view
       - asset:item:view
       - asset:inbound:view
       - asset:receive_return:view
