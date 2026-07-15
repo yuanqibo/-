@@ -3530,6 +3530,10 @@ button {
   margin: 2px 0;
 }
 
+.ecp-org-tree-children.collapsed {
+  display: none;
+}
+
 .ecp-org-tree-node {
   width: 100%;
   min-height: 40px;

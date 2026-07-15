@@ -10121,7 +10121,7 @@ function renderEcpOrgTreeNode(node, selectedKey) {
       <span class="ecp-org-tree-name">${escapeHtml(node.name || "未命名组织")}</span>
       <span class="ecp-org-tree-count">${count}</span>
     </button>
-    ${hasChildren && expanded ? `<div class="ecp-org-tree-children">${node.children.map((child) => renderEcpOrgTreeNode(child, selectedKey)).join("")}</div>` : ""}
+    ${hasChildren ? `<div class="ecp-org-tree-children ${expanded ? "" : "collapsed"}">${node.children.map((child) => renderEcpOrgTreeNode(child, selectedKey)).join("")}</div>` : ""}
   </div>`;
 }
 
@@ -10245,19 +10245,17 @@ function renderDepartmentDirectory() {
             </div>
           </div>
           <div class="table-wrap ecp-org-table-wrap"><table>
-            <thead><tr><th>姓名</th><th>工号</th><th>岗位</th><th>邮箱</th><th>手机</th><th>部门</th><th>账号集</th><th>状态</th><th>ECP Subject</th><th>操作</th></tr></thead>
+            <thead><tr><th>姓名</th><th>工号</th><th>邮箱</th><th>部门</th><th>负责部门</th><th>账号状态</th><th>岗位</th><th>操作</th></tr></thead>
             <tbody>${displayRows.length ? displayRows.map((user) => `<tr>
               <td><span class="ecp-org-avatar">${escapeHtml(accountInitial(user.name).toUpperCase())}</span>${escapeHtml(user.name)}</td>
               <td>${escapeHtml(user.employeeNo || "-")}</td>
-              <td>${escapeHtml(user.jobTitle || "-")}</td>
               <td>${escapeHtml(user.email || "-")}</td>
-              <td>${escapeHtml(user.phone || "-")}</td>
               <td>${escapeHtml(user.department || "-")}</td>
-              <td>${escapeHtml(user.accountSetName || user.accountSetUnionId || "-")}</td>
+              <td>${escapeHtml(user.departments?.[0]?.leaderName || "--")}</td>
               <td>${statusTag(user.status || "enabled")}</td>
-              <td><code>${escapeHtml(user.subject || "-")}</code></td>
+              <td>${escapeHtml(user.jobTitle || "-")}</td>
               <td><button class="link" type="button" data-ecp-org-user-detail="${escapeHtml(user.subject)}">详情</button></td>
-            </tr>`).join("") : '<tr class="empty-row"><td colspan="10">当前组织节点没有可展示的成员。</td></tr>'}</tbody>
+            </tr>`).join("") : '<tr class="empty-row"><td colspan="8">当前组织节点没有可展示的成员。</td></tr>'}</tbody>
           </table></div>
           ${renderPagination(pagination, "ecpOrg")}
         </main>
@@ -11207,7 +11205,8 @@ function bindPageEvents() {
       const key = el.dataset.ecpOrgToggle || "";
       if (!key) return;
       state.ecpOrgTreeOpen[key] = !(state.ecpOrgTreeOpen[key] ?? true);
-      render();
+      el.classList.toggle("expanded", state.ecpOrgTreeOpen[key]);
+      el.closest(".ecp-org-tree-group")?.querySelector(":scope > .ecp-org-tree-children")?.classList.toggle("collapsed", !state.ecpOrgTreeOpen[key]);
     })
   );
   document.querySelectorAll("[data-ecp-org-account-set]").forEach((el) =>
