@@ -2335,9 +2335,6 @@ const nav = [
       { id: "assetReceiveReturn", label: "领用退库" },
       { id: "assetBorrowReturn", label: "借用归还" },
       { id: "stocktake", label: "资产盘点" },
-      { id: "consumables", label: "耗材库存" },
-      { id: "repair", label: "故障维修" },
-      { id: "contracts", label: "合同供应商" },
       {
         id: "assetSettings",
         label: "资产设置",
@@ -3025,7 +3022,7 @@ function getAccessibleNav(items = nav) {
     .filter(isNavItemAllowedInCurrentTerminal)
     .map((item) => ({
       ...item,
-      label: portalMenuById(item.id)?.title || item.label,
+      label: item.id === "requests" ? "审批" : portalMenuById(item.id)?.title || item.label,
       children: getAccessibleNav(item.children || []),
     }))
     .filter((item) => accessibleIds.has(item.id)
