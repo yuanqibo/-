@@ -10,6 +10,17 @@ body {
   background: #f7f8fb;
 }
 
+html:has(.authz-workspace-host),
+body:has(.authz-workspace-host) {
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+body:has(.authz-workspace-host) #app {
+  height: 100vh !important;
+  overflow: hidden !important;
+}
+
 /*
  * ECP 账号管理工作台在 iframe /workspace 独立路由中渲染，不一定会加载
  * PortalView 的业务样式；这里用 SDK 暴露的严格作用域做窄范围覆盖。
@@ -27,9 +38,17 @@ body {
 
 .authz-workspace-host,
 .authz-workspace-host .target-workspace {
-  height: 100vh !important;
+  height: 100% !important;
   min-height: 0 !important;
+  max-height: 100vh !important;
   overflow: hidden !important;
+}
+
+.authz-workspace-host {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
 }
 
 .authz-workspace-host .target-workspace {
@@ -150,10 +169,9 @@ body {
   height: 100% !important;
   min-height: 0 !important;
   max-height: none !important;
-  overflow: auto !important;
+  overflow: hidden !important;
   overscroll-behavior: contain !important;
   padding-right: 4px !important;
-  scrollbar-gutter: stable both-edges !important;
   touch-action: pan-x pan-y !important;
 }
 
@@ -167,8 +185,13 @@ body {
 
 .authz-workspace-host .workspace-account-management__tree-scroll .el-scrollbar__wrap {
   overflow: auto !important;
-  scrollbar-gutter: stable both-edges !important;
   overscroll-behavior: contain !important;
+  scrollbar-width: none !important;
+}
+
+.authz-workspace-host .workspace-account-management__tree-scroll .el-scrollbar__wrap::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .authz-workspace-host .workspace-account-management__tree-scroll .el-scrollbar__bar {
@@ -243,9 +266,8 @@ body {
 .authz-workspace-host .workspace-account-management__detail-pane .ecp-table-shell,
 .authz-workspace-host .workspace-account-management__table {
   flex: 1 1 auto !important;
-  overflow: auto !important;
+  overflow: hidden !important;
   overscroll-behavior: contain !important;
-  scrollbar-gutter: stable both-edges !important;
 }
 
 .authz-workspace-host .workspace-account-management__table {
@@ -265,7 +287,13 @@ body {
 .authz-workspace-host .workspace-account-management__table .el-scrollbar__wrap {
   overflow: auto !important;
   overscroll-behavior: contain !important;
-  scrollbar-gutter: stable both-edges !important;
+  scrollbar-width: none !important;
+}
+
+.authz-workspace-host .workspace-account-management__table .el-table__body-wrapper::-webkit-scrollbar,
+.authz-workspace-host .workspace-account-management__table .el-scrollbar__wrap::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .authz-workspace-host .workspace-account-management__table .el-scrollbar__bar {
@@ -323,7 +351,7 @@ body {
 @media (max-width: 760px) {
   .authz-workspace-host .workspace-account-management .ecp-split {
     grid-template-columns: minmax(0, 1fr) !important;
-    overflow: auto !important;
+    overflow: hidden !important;
   }
 
   .authz-workspace-host .workspace-account-management .ecp-split__left {
