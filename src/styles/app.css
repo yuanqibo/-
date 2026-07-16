@@ -208,7 +208,15 @@ body:has(.authz-workspace-host) #app {
 
 .authz-workspace-host .workspace-account-management__tree-scroll .el-scrollbar__bar {
   display: block !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.16s ease !important;
+}
+
+.authz-workspace-host .workspace-account-management__tree-scroll:hover .el-scrollbar__bar,
+.authz-workspace-host .workspace-account-management__tree-scroll:focus-within .el-scrollbar__bar {
   opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
 .authz-workspace-host .workspace-account-management__tree-scroll .el-scrollbar__bar.is-vertical {
@@ -229,6 +237,29 @@ body:has(.authz-workspace-host) #app {
 .authz-workspace-host .workspace-account-management__tree .el-tree-node__content {
   height: 28px !important;
   min-width: max-content !important;
+}
+
+.authz-workspace-host .workspace-account-management__tree .el-tree-node__expand-icon:not(.is-leaf) {
+  width: 18px !important;
+  height: 18px !important;
+  box-sizing: border-box !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  padding: 5px !important;
+  color: transparent !important;
+}
+
+.authz-workspace-host .workspace-account-management__tree .el-tree-node__expand-icon:not(.is-leaf)::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid #94a3b8;
+}
+
+.authz-workspace-host .workspace-account-management__tree .el-tree-node__expand-icon:not(.is-leaf) svg {
+  display: none !important;
 }
 
 .authz-workspace-host .workspace-account-management__tree-node {
@@ -311,7 +342,15 @@ body:has(.authz-workspace-host) #app {
 
 .authz-workspace-host .workspace-account-management__table .el-scrollbar__bar {
   display: block !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.16s ease !important;
+}
+
+.authz-workspace-host .workspace-account-management__table:hover .el-scrollbar__bar,
+.authz-workspace-host .workspace-account-management__table:focus-within .el-scrollbar__bar {
   opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
 .authz-workspace-host .workspace-account-management__table .el-table {

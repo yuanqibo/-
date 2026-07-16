@@ -3454,6 +3454,34 @@ button {
   overflow: auto;
 }
 
+.employee-directory-panel .panel-header {
+  margin-bottom: 12px;
+}
+
+.employee-directory-panel .panel-title {
+  font-size: 16px;
+}
+
+.employee-directory-panel .panel-subtitle {
+  margin-top: 3px;
+  font-size: 12px;
+}
+
+.employee-directory-toolbar {
+  margin-bottom: 12px;
+}
+
+.employee-directory-toolbar input,
+.employee-directory-toolbar .btn {
+  min-height: 32px;
+  height: 32px;
+  font-size: 13px;
+}
+
+.employee-directory-toolbar .btn {
+  padding: 0 12px;
+}
+
 .system-content-enter {
   opacity: 0;
   transform: translate3d(0, 6px, 0);

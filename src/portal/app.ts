@@ -10038,15 +10038,15 @@ function renderEmployeeDirectory() {
   const query = normalizeDirectoryQuery(state.query);
   const rows = searchDirectoryUsers(ecpDirectoryUsers, query);
   return `<div class="system-content">
-    <section class="panel">
+    <section class="panel employee-directory-panel">
       <div class="panel-header">
         <div>
           <h2 class="panel-title">员工信息</h2>
           <div class="panel-subtitle">${rows.length} 个 ECP 目录账号</div>
         </div>
       </div>
-      <div class="toolbar">
-        <input class="local-search" type="search" placeholder="中文姓名 / 拼音 / 首字母 / 工号 / 岗位 / 组织" value="${escapeHtml(state.query)}" autocomplete="off" spellcheck="false">
+      <div class="toolbar employee-directory-toolbar">
+        <input class="local-search" type="search" placeholder="搜索名称或编码" value="${escapeHtml(state.query)}" autocomplete="off" spellcheck="false">
         <button class="btn primary" data-search>查询</button>
         <button class="btn" data-reset>重置</button>
       </div>
