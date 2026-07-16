@@ -268,7 +268,7 @@ body:has(.authz-workspace-host) #app {
 }
 
 .authz-workspace-host .workspace-account-management__tree-node-label {
-  font-size: 15px !important;
+  font-size: 14px !important;
   line-height: 1.35 !important;
 }
 
