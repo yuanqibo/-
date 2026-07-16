@@ -3537,7 +3537,7 @@ button {
 .ecp-org-filters {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -3576,11 +3576,11 @@ button {
 
 .ecp-org-filter {
   position: relative;
-  width: 170px;
+  width: 132px;
 }
 
 .ecp-org-filter.status {
-  width: 156px;
+  width: 128px;
 }
 
 .ecp-org-filter-trigger {
@@ -3749,7 +3749,7 @@ button {
 }
 
 .drawer.ecp-member-detail-drawer {
-  width: min(720px, 94vw);
+  width: min(620px, 94vw);
 }
 
 .ecp-member-detail-drawer .drawer-header {
@@ -7857,6 +7857,10 @@ body.is-resizing-column * {
   z-index: 30;
 }
 
+.drawer-backdrop {
+  z-index: 100;
+}
+
 .modal-backdrop {
   z-index: 120;
 }
@@ -7868,7 +7872,7 @@ body.is-resizing-column * {
   width: min(560px, 94vw);
   height: 100vh;
   background: white;
-  z-index: 40;
+  z-index: 110;
   transform: translateX(105%);
   transition: transform 0.22s ease;
   box-shadow: -22px 0 40px rgba(15, 23, 42, 0.12);
