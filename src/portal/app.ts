@@ -2884,9 +2884,27 @@ function portalMenuById(id) {
   return portalMenuItems().find((item) => item.id === id) || null;
 }
 
+const embeddedMemberAuthorizationMenuId = "authz.workspace";
+const memberAuthorizationTitle = "成员授权";
+const legacyMemberAuthorizationTitle = "账号管理";
+
+function isMemberAuthorizationMenuLabel(label) {
+  return label === memberAuthorizationTitle || label === legacyMemberAuthorizationTitle;
+}
+
+function displaySystemMenuTitle(item) {
+  if (item?.id === embeddedMemberAuthorizationMenuId) return memberAuthorizationTitle;
+  return item?.title || "";
+}
+
+function systemMenuMatchesItem(item, label) {
+  if (item?.id === embeddedMemberAuthorizationMenuId) return isMemberAuthorizationMenuLabel(label);
+  return item?.title === label;
+}
+
 function portalMenuForState(route = state.route) {
   if (route === "settings") {
-    return portalMenuItems().find((item) => item.parentId === "settings" && item.title === state.systemMenu)
+    return portalMenuItems().find((item) => item.parentId === "settings" && systemMenuMatchesItem(item, state.systemMenu))
       || portalMenuItems().find((item) => item.parentId === "settings")
       || portalMenuById("settings");
   }
@@ -2904,7 +2922,7 @@ function applyPortalMenuRoute(item, shouldRender = false) {
   if (!nextRoute) return false;
   state.route = nextRoute;
   if (item.parentId === "settings" && item.title) {
-    state.systemMenu = item.title;
+    state.systemMenu = displaySystemMenuTitle(item);
     if (state.systemMenu === "员工自助" && !state.selfServiceMenu) state.selfServiceMenu = "员工自助管理";
   }
   if (shouldRender && isAuthenticated()) render();
@@ -10325,14 +10343,14 @@ function renderAccountManagement() {
     <section class="panel account-management-panel">
       <div class="panel-header">
         <div>
-          <h2 class="panel-title">账号管理</h2>
+          <h2 class="panel-title">成员授权</h2>
           <div class="panel-subtitle">使用 ECP SDK 工作台管理应用角色、账号授权和权限模型，保持在资产系统内操作。</div>
         </div>
-        <button class="btn primary" type="button" data-refresh-authz-workspace ${canAuthorize ? "" : "disabled"}>刷新账号管理</button>
+        <button class="btn primary" type="button" data-refresh-authz-workspace ${canAuthorize ? "" : "disabled"}>刷新成员授权</button>
       </div>
       ${canAuthorize ? `<div class="account-management-frame-shell">
-        <iframe class="account-management-frame" src="/workspace" title="ECP 账号管理工作台" loading="lazy"></iframe>
-      </div>` : '<p class="empty-note">当前账号没有 ECP 账号管理权限，请先让应用管理员授予 authz:app_role:view / assign 等权限。</p>'}
+        <iframe class="account-management-frame" src="/workspace" title="ECP 成员授权工作台" loading="lazy"></iframe>
+      </div>` : '<p class="empty-note">当前账号没有 ECP 成员授权权限，请先让应用管理员授予 authz:app_role:view / assign 等权限。</p>'}
     </section>
   </div>`;
 }
@@ -10790,7 +10808,7 @@ function bindSelfServiceSettingsEvents() {
 function renderSystemMainContent() {
   if (state.systemMenu === "员工信息") return renderEmployeeDirectory();
   if (state.systemMenu === "组织架构") return renderDepartmentDirectory();
-  if (state.systemMenu === "账号管理") return renderAccountManagement();
+  if (isMemberAuthorizationMenuLabel(state.systemMenu)) return renderAccountManagement();
   if (state.systemMenu === "员工自助") {
     return hasPermission("asset:self_service:update")
       ? renderSelfServiceManagement()
@@ -10801,7 +10819,7 @@ function renderSystemMainContent() {
   const descriptions = {
     员工信息: "查看员工档案、账号归属和员工端登录基础信息。",
     组织架构: "按 ECP 管理台结构查看飞书账号集、组织树和成员状态。",
-    账号管理: "进入 ECP SDK 账号管理工作台，配置应用角色和成员权限。",
+    成员授权: "在资产系统内嵌入 ECP SDK 成员授权工作台，配置应用角色和成员权限。",
     员工自助: "配置员工领用、退库、借用、报修和签字确认能力。",
   };
   return renderSystemPlaceholder(state.systemMenu, descriptions[state.systemMenu] || "系统配置模块。");
@@ -10810,9 +10828,11 @@ function renderSystemMainContent() {
 function renderSettings() {
   const items = portalMenuItems()
     .filter((item) => item.parentId === "settings")
-    .map((item) => ({ id: item.id, label: item.title }));
+    .map((item) => ({ id: item.id, label: displaySystemMenuTitle(item) }));
   if (!items.some((item) => item.label === state.systemMenu)) {
-    state.systemMenu = items[0]?.label || "";
+    state.systemMenu = isMemberAuthorizationMenuLabel(state.systemMenu) && items.some((item) => item.id === embeddedMemberAuthorizationMenuId)
+      ? memberAuthorizationTitle
+      : items[0]?.label || "";
   }
   if (!items.length) return renderSystemPlaceholder("系统", "当前账号没有系统设置查看权限。");
   return `<section class="system-page ${state.systemMenu === "员工自助" ? "self-service-system-page" : ""}">
@@ -11210,6 +11230,10 @@ function bindPageEvents() {
       state.systemMenu = el.dataset.systemMenu;
       state.route = "settings";
       if (state.systemMenu === "员工自助" && !state.selfServiceMenu) state.selfServiceMenu = "员工自助管理";
+      if (el.dataset.systemMenuId === embeddedMemberAuthorizationMenuId) {
+        render();
+        return;
+      }
       persistRoute("settings");
       render();
     })
@@ -11219,7 +11243,7 @@ function bindPageEvents() {
       const frame = document.querySelector(".account-management-frame");
       if (!frame) return;
       frame.setAttribute("src", "/workspace");
-      showToast("账号管理已刷新");
+      showToast("成员授权已刷新");
     })
   );
   document.querySelectorAll("[data-ecp-org-node]").forEach((el) =>

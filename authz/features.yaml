@@ -52,7 +52,7 @@ features:
       - asset:form:view
       - authz:app_role:view
   - code: APP_WORKSPACE
-    name: 账号管理
+    name: 成员授权
     type: FEATURE
     parentCode: ASSET_PORTAL_ROOT
     sort: 90
