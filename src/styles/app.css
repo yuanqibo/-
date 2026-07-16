@@ -89,6 +89,58 @@ body:has(.authz-workspace-host) #app {
   overflow: hidden !important;
 }
 
+.authz-workspace-host .target-workspace__card--content .ecp-card__body {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.authz-workspace-host .target-workspace__card--content :is(
+  .target-workspace-roles-table,
+  .target-workspace-permission-check,
+  .target-workspace-permission-reason,
+  .target-workspace__permission-panel,
+  .ecp-detail-panel,
+  .ecp-detail-table,
+  .ecp-table-shell,
+  .ecp-table
+) {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+}
+
+.authz-workspace-host .target-workspace__card--content :is(
+  .target-workspace-roles-table,
+  .ecp-table-shell,
+  .ecp-detail-panel
+) {
+  overflow: auto !important;
+  overscroll-behavior: contain !important;
+}
+
+.authz-workspace-host .target-workspace-roles-table {
+  width: 100% !important;
+}
+
+.authz-workspace-host .target-workspace-roles-table__table {
+  min-width: 860px !important;
+  height: 100% !important;
+  table-layout: fixed !important;
+}
+
+.authz-workspace-host .target-workspace-roles-table__table th,
+.authz-workspace-host .target-workspace-roles-table__table td {
+  padding: 8px 10px !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+  white-space: nowrap !important;
+}
+
+.authz-workspace-host .target-workspace__section-head,
+.authz-workspace-host .target-workspace__context-bar,
+.authz-workspace-host .workspace-step-strip {
+  flex: 0 0 auto !important;
+}
+
 .authz-workspace-host .workspace-step-strip {
   gap: 8px !important;
 }
