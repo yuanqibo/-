@@ -1,6 +1,7 @@
 html,
 body,
 #app {
+  height: 100%;
   min-height: 100%;
   margin: 0;
 }
@@ -16,10 +17,24 @@ body {
  * 以下被 SDK 默认媒体查询折叠成上下结构。
  */
 .authz-workspace-host .workspace-account-management {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
   font-size: 12px;
 }
 
+.authz-workspace-host,
 .authz-workspace-host .target-workspace {
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.authz-workspace-host .target-workspace {
+  display: flex !important;
+  flex-direction: column !important;
   gap: 12px !important;
 }
 
@@ -30,6 +45,19 @@ body {
 .authz-workspace-host .target-workspace__hero-card .ecp-card__body,
 .authz-workspace-host .target-workspace__card--content .ecp-card__body {
   padding: 14px 16px !important;
+}
+
+.authz-workspace-host .target-workspace__card--content {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.authz-workspace-host .target-workspace__card--content .ecp-card,
+.authz-workspace-host .target-workspace__card--content .ecp-card__body {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
 }
 
 .authz-workspace-host .workspace-step-strip {
@@ -96,6 +124,8 @@ body {
 
 .authz-workspace-host .workspace-account-management__tree-pane,
 .authz-workspace-host .workspace-account-management__detail-pane {
+  display: flex !important;
+  flex-direction: column !important;
   height: 100% !important;
   min-height: 0 !important;
   overflow: hidden !important;
@@ -117,11 +147,53 @@ body {
 
 .authz-workspace-host .workspace-account-management__tree-scroll {
   flex: 1 1 auto !important;
+  height: 100% !important;
   min-height: 0 !important;
+  max-height: none !important;
+  overflow: auto !important;
+  overscroll-behavior: contain !important;
+  padding-right: 4px !important;
+  scrollbar-gutter: stable both-edges !important;
+  touch-action: pan-x pan-y !important;
+}
+
+.authz-workspace-host .workspace-account-management__tree-scroll .el-scrollbar,
+.authz-workspace-host .workspace-account-management__tree-scroll .el-scrollbar__wrap,
+.authz-workspace-host .workspace-account-management__tree-scroll .el-scrollbar__view {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+.authz-workspace-host .workspace-account-management__tree-scroll .el-scrollbar__wrap {
+  overflow: auto !important;
+  scrollbar-gutter: stable both-edges !important;
+  overscroll-behavior: contain !important;
+}
+
+.authz-workspace-host .workspace-account-management__tree-scroll .el-scrollbar__bar {
+  display: block !important;
+  opacity: 1 !important;
+}
+
+.authz-workspace-host .workspace-account-management__tree-scroll .el-scrollbar__bar.is-vertical {
+  right: 0 !important;
+  width: 8px !important;
+}
+
+.authz-workspace-host .workspace-account-management__tree-scroll .el-scrollbar__bar.is-horizontal {
+  bottom: 0 !important;
+  height: 8px !important;
+}
+
+.authz-workspace-host .workspace-account-management__tree {
+  min-width: max-content !important;
+  padding-bottom: 18px !important;
 }
 
 .authz-workspace-host .workspace-account-management__tree .el-tree-node__content {
   height: 32px !important;
+  min-width: max-content !important;
 }
 
 .authz-workspace-host .workspace-account-management__tree-node {
@@ -156,6 +228,11 @@ body {
   gap: 8px !important;
 }
 
+.authz-workspace-host .workspace-account-management__detail-pane .ecp-detail-panel {
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+}
+
 .authz-workspace-host .workspace-account-management__detail-pane .ecp-detail-panel,
 .authz-workspace-host .workspace-account-management__detail-pane .ecp-detail-table,
 .authz-workspace-host .workspace-account-management__detail-pane .ecp-table-shell,
@@ -163,8 +240,37 @@ body {
   min-height: 0 !important;
 }
 
+.authz-workspace-host .workspace-account-management__detail-pane .ecp-table-shell,
+.authz-workspace-host .workspace-account-management__table {
+  flex: 1 1 auto !important;
+  overflow: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: stable both-edges !important;
+}
+
 .authz-workspace-host .workspace-account-management__table {
   width: 100% !important;
+  min-height: 0 !important;
+}
+
+.authz-workspace-host .workspace-account-management__table .el-table,
+.authz-workspace-host .workspace-account-management__table .el-table__inner-wrapper,
+.authz-workspace-host .workspace-account-management__table .el-table__body-wrapper,
+.authz-workspace-host .workspace-account-management__table .el-scrollbar,
+.authz-workspace-host .workspace-account-management__table .el-scrollbar__wrap {
+  min-height: 0 !important;
+}
+
+.authz-workspace-host .workspace-account-management__table .el-table__body-wrapper,
+.authz-workspace-host .workspace-account-management__table .el-scrollbar__wrap {
+  overflow: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: stable both-edges !important;
+}
+
+.authz-workspace-host .workspace-account-management__table .el-scrollbar__bar {
+  display: block !important;
+  opacity: 1 !important;
 }
 
 .authz-workspace-host .workspace-account-management__table .el-table {
@@ -226,5 +332,9 @@ body {
     padding-right: 0 !important;
     padding-bottom: 12px !important;
     max-height: 320px !important;
+  }
+
+  .authz-workspace-host .workspace-account-management__tree-scroll {
+    max-height: 260px !important;
   }
 }
