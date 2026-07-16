@@ -2718,7 +2718,7 @@ function inlineSelect(name, placeholder, values, options = {}) {
   return `<div class="inline-select ${selected ? "" : "is-placeholder"}" data-inline-select data-required="${required ? "true" : "false"}">
     <button type="button" class="inline-select-trigger" data-inline-select-trigger aria-expanded="false">
       <span data-inline-select-label>${escapeHtml(label)}</span>
-      <span class="inline-select-caret" aria-hidden="true">⌄</span>
+      <span class="inline-select-caret" aria-hidden="true"></span>
     </button>
     <div class="inline-select-menu" hidden>
       ${
@@ -3170,6 +3170,181 @@ function bindPlaceholderSelects(root = document) {
     el.addEventListener("change", () => {
       el.classList.toggle("placeholder-select", !el.value);
     });
+  });
+}
+
+let activePortalSelect = null;
+let portalSelectMenu = null;
+let portalSelectId = 0;
+
+function selectedPortalOption(select) {
+  return select.options[select.selectedIndex] || null;
+}
+
+function syncPortalSelect(select) {
+  const wrapper = select.closest("[data-portal-select]");
+  const trigger = wrapper?.querySelector("[data-portal-select-trigger]");
+  const label = wrapper?.querySelector("[data-portal-select-label]");
+  const option = selectedPortalOption(select);
+  if (!wrapper || !trigger || !label) return;
+  label.textContent = option?.textContent?.trim() || "请选择";
+  wrapper.classList.toggle("is-placeholder", !select.value);
+  wrapper.classList.toggle("is-disabled", select.disabled);
+  if (select.value) wrapper.classList.remove("is-invalid");
+  trigger.disabled = select.disabled;
+  trigger.setAttribute("aria-label", select.getAttribute("aria-label") || label.textContent);
+}
+
+function ensurePortalSelectMenu() {
+  if (portalSelectMenu?.isConnected) return portalSelectMenu;
+  portalSelectMenu = document.createElement("div");
+  portalSelectMenu.className = "portal-select-menu";
+  portalSelectMenu.dataset.portalSelectMenu = "true";
+  portalSelectMenu.setAttribute("role", "listbox");
+  portalSelectMenu.hidden = true;
+  portalSelectMenu.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-portal-select-option]");
+    const select = activePortalSelect;
+    if (!item || !select || item.disabled) return;
+    const option = select.options[Number(item.dataset.optionIndex)];
+    if (!option || option.disabled || option.parentElement?.disabled) return;
+    const previousValue = select.value;
+    select.selectedIndex = Number(item.dataset.optionIndex);
+    syncPortalSelect(select);
+    closePortalSelect();
+    if (select.value !== previousValue) {
+      select.dispatchEvent(new Event("input", { bubbles: true }));
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+  portalSelectMenu.addEventListener("keydown", (event) => {
+    if (!activePortalSelect || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const options = Array.from(portalSelectMenu.querySelectorAll("[data-portal-select-option]:not(:disabled)"));
+    if (!options.length) return;
+    const currentIndex = options.indexOf(document.activeElement);
+    let nextIndex = currentIndex;
+    if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = options.length - 1;
+    else if (event.key === "ArrowDown") nextIndex = Math.min(currentIndex + 1, options.length - 1);
+    else nextIndex = Math.max(currentIndex - 1, 0);
+    event.preventDefault();
+    options[nextIndex]?.focus();
+  });
+  document.body.append(portalSelectMenu);
+  return portalSelectMenu;
+}
+
+function renderPortalSelectMenu(select) {
+  const menu = ensurePortalSelectMenu();
+  const selectedIndex = select.selectedIndex;
+  let optionIndex = 0;
+  const renderOption = (option, groupDisabled = false) => {
+    const currentIndex = optionIndex++;
+    const selected = currentIndex === selectedIndex;
+    const disabled = option.disabled || groupDisabled;
+    return `<button type="button" class="portal-select-option ${selected ? "selected" : ""}" role="option" aria-selected="${selected ? "true" : "false"}" data-portal-select-option data-option-index="${currentIndex}" ${disabled ? "disabled" : ""}>
+      <span class="portal-select-check" aria-hidden="true">${selected ? "✓" : ""}</span>
+      <span>${escapeHtml(option.textContent?.trim() || "")}</span>
+    </button>`;
+  };
+  menu.innerHTML = Array.from(select.children)
+    .map((child) => {
+      if (child.tagName === "OPTGROUP") {
+        const options = Array.from(child.children).map((option) => renderOption(option, child.disabled)).join("");
+        return `<div class="portal-select-group" role="group" aria-label="${escapeHtml(child.label || "")}">
+          <div class="portal-select-group-label">${escapeHtml(child.label || "")}</div>
+          ${options}
+        </div>`;
+      }
+      return renderOption(child);
+    })
+    .join("");
+  menu.setAttribute("aria-labelledby", select.closest("[data-portal-select]")?.dataset.portalSelectTriggerId || "");
+}
+
+function positionPortalSelectMenu(select) {
+  const trigger = select.closest("[data-portal-select]")?.querySelector("[data-portal-select-trigger]");
+  const menu = ensurePortalSelectMenu();
+  if (!trigger) return;
+  const rect = trigger.getBoundingClientRect();
+  menu.style.left = `${Math.round(rect.left)}px`;
+  menu.style.top = `${Math.round(rect.bottom + 4)}px`;
+  menu.style.width = `${Math.round(rect.width)}px`;
+  menu.style.maxHeight = `${Math.min(280, Math.max(72, window.innerHeight - rect.bottom - 16))}px`;
+}
+
+function closePortalSelect({ restoreFocus = false } = {}) {
+  const select = activePortalSelect;
+  const wrapper = select?.closest("[data-portal-select]");
+  const trigger = wrapper?.querySelector("[data-portal-select-trigger]");
+  wrapper?.classList.remove("is-open");
+  trigger?.setAttribute("aria-expanded", "false");
+  if (portalSelectMenu) portalSelectMenu.hidden = true;
+  activePortalSelect = null;
+  if (restoreFocus) trigger?.focus();
+}
+
+function openPortalSelect(select) {
+  if (select.disabled) return;
+  if (activePortalSelect && activePortalSelect !== select) closePortalSelect();
+  closeAllInlineSelects();
+  closeEcpOrgFilterMenus();
+  syncPortalSelect(select);
+  renderPortalSelectMenu(select);
+  const wrapper = select.closest("[data-portal-select]");
+  wrapper?.classList.add("is-open");
+  wrapper?.querySelector("[data-portal-select-trigger]")?.setAttribute("aria-expanded", "true");
+  activePortalSelect = select;
+  positionPortalSelectMenu(select);
+  portalSelectMenu.hidden = false;
+}
+
+function bindPortalSelects(root = document) {
+  const selects = root.matches?.("select") ? [root] : Array.from(root.querySelectorAll?.("select") || []);
+  selects.forEach((select) => {
+    if (select.multiple || select.dataset.portalSelectBound === "true") return;
+    const rect = select.getBoundingClientRect();
+    const computed = window.getComputedStyle(select);
+    const wrapper = document.createElement("span");
+    const trigger = document.createElement("button");
+    const triggerId = `portal-select-trigger-${++portalSelectId}`;
+    wrapper.className = "portal-select-control";
+    wrapper.dataset.portalSelect = "true";
+    wrapper.dataset.portalSelectTriggerId = triggerId;
+    const measuredWidth = rect.width || Number.parseFloat(computed.width) || select.scrollWidth || 120;
+    const measuredHeight = rect.height || Number.parseFloat(computed.height) || 36;
+    wrapper.style.width = `${Math.max(1, Math.ceil(measuredWidth))}px`;
+    wrapper.style.height = `${Math.max(24, Math.ceil(measuredHeight))}px`;
+    wrapper.style.font = computed.font;
+    select.parentNode.insertBefore(wrapper, select);
+    wrapper.append(select);
+    trigger.type = "button";
+    trigger.id = triggerId;
+    trigger.className = "portal-select-trigger";
+    trigger.dataset.portalSelectTrigger = "true";
+    trigger.setAttribute("aria-haspopup", "listbox");
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.innerHTML = `<span class="portal-select-label" data-portal-select-label></span><span class="portal-select-caret" aria-hidden="true"></span>`;
+    wrapper.append(trigger);
+    select.dataset.portalSelectBound = "true";
+    select.classList.add("portal-select-native");
+    select.tabIndex = -1;
+    syncPortalSelect(select);
+    trigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (activePortalSelect === select) closePortalSelect();
+      else openPortalSelect(select);
+    });
+    trigger.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      event.preventDefault();
+      openPortalSelect(select);
+      const options = Array.from(portalSelectMenu.querySelectorAll("[data-portal-select-option]:not(:disabled)"));
+      const selected = portalSelectMenu.querySelector("[data-portal-select-option].selected:not(:disabled)");
+      (selected || (event.key === "ArrowUp" ? options.at(-1) : options[0]))?.focus();
+    });
+    select.addEventListener("change", () => syncPortalSelect(select));
+    select.addEventListener("invalid", () => wrapper.classList.add("is-invalid"));
   });
 }
 
@@ -11308,6 +11483,7 @@ function bindDashboardBarTooltips(root = document) {
 
 function bindPageEvents() {
   bindPlaceholderSelects();
+  bindPortalSelects();
   bindInlineSelects();
   bindAssetCodeRuleControls();
   bindAssetLabelTemplateSettings();
@@ -14054,6 +14230,7 @@ function openModal() {
   modalBackdrop.classList.add("open");
   modal.setAttribute("aria-hidden", "false");
   bindPlaceholderSelects(modal);
+  bindPortalSelects(modal);
   bindInlineSelects(modal);
   bindAssetCodeInputs(modal);
   bindAssetFlowSelection(modal);
@@ -14314,6 +14491,7 @@ function bindHandoverModeControls(root) {
 
 function closeModal() {
   closeAssetPicker();
+  closePortalSelect();
   document.body.classList.remove("printing-asset-labels");
   modal.classList.remove("open");
   modal.classList.remove("asset-create-modal");
@@ -14333,7 +14511,10 @@ drawerBackdrop.addEventListener("click", closeDrawer);
 modalClose.addEventListener("click", closeModal);
 modalBackdrop.addEventListener("click", closeModal);
 
-window.addEventListener("resize", syncNavIndicator);
+window.addEventListener("resize", () => {
+  syncNavIndicator();
+  closePortalSelect();
+});
 window.addEventListener("afterprint", () => {
   document.body.classList.remove("printing-asset-labels");
 });
@@ -14357,10 +14538,22 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest("[data-ecp-org-filter]")) {
     closeEcpOrgFilterMenus();
   }
+  if (!event.target.closest("[data-portal-select], [data-portal-select-menu]")) {
+    closePortalSelect();
+  }
 });
+
+document.addEventListener("scroll", (event) => {
+  if (!activePortalSelect || event.target.closest?.("[data-portal-select-menu]")) return;
+  closePortalSelect();
+}, true);
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
+    if (activePortalSelect) {
+      closePortalSelect({ restoreFocus: true });
+      return;
+    }
     if (assetPickerState) {
       closeAssetPicker();
       return;
@@ -14372,6 +14565,16 @@ document.addEventListener("keydown", (event) => {
     closeModal();
   }
 });
+
+const portalSelectObserver = new MutationObserver((records) => {
+  records.forEach((record) => {
+    record.addedNodes.forEach((node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) bindPortalSelects(node);
+    });
+  });
+  if (activePortalSelect && !activePortalSelect.isConnected) closePortalSelect();
+});
+portalSelectObserver.observe(document.body, { childList: true, subtree: true });
 
 async function bootApp() {
   const loadedSharedStore = await loadSharedStore();
