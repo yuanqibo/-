@@ -3179,7 +3179,7 @@ button {
 .page {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 24px;
+  padding: 18px;
   overflow: auto;
   overscroll-behavior: contain;
   scroll-behavior: auto;
@@ -3362,7 +3362,7 @@ button {
 }
 
 .panel {
-  padding: 18px;
+  padding: 16px;
 }
 
 .empty-note {
@@ -3411,7 +3411,7 @@ button {
   min-height: 0;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  margin: -24px;
+  margin: -18px;
   background: #f8fafc;
   overflow: hidden;
 }
@@ -3425,7 +3425,7 @@ button {
 .system-content {
   min-width: 0;
   min-height: 0;
-  padding: 18px;
+  padding: 14px;
   overflow: auto;
   overscroll-behavior: contain;
   contain: layout paint;
@@ -3444,7 +3444,7 @@ button {
 }
 
 .system-content.self-service-management {
-  padding: 18px;
+  padding: 14px;
 }
 
 .ecp-org-console {
@@ -4078,14 +4078,14 @@ button {
 }
 
 .account-management-panel {
-  min-height: calc(100vh - 56px);
+  min-height: 0;
 }
 
 .account-management-frame-shell {
   position: relative;
   overflow: hidden;
-  height: calc(100vh - 190px);
-  min-height: 620px;
+  height: clamp(460px, calc(100vh - 176px), 620px);
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #ffffff;
@@ -6022,8 +6022,8 @@ td .link {
 }
 
 .asset-list-page {
-  min-height: calc(100vh - 92px);
-  margin: 10px;
+  min-height: auto;
+  margin: 0;
   padding: 12px;
   border: 1px solid #dce4ef;
   border-radius: 4px;
