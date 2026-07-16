@@ -3576,8 +3576,14 @@ button {
 }
 
 .ecp-org-filters select {
-  min-width: 150px;
+  width: 180px;
+  min-width: 0;
+  height: 32px;
   padding: 0 32px 0 12px;
+}
+
+.ecp-org-filters select + select {
+  width: 160px;
 }
 
 .ecp-org-tree-scroll {
@@ -3649,20 +3655,26 @@ button {
 .ecp-org-member-panel {
   min-width: 0;
   min-height: 0;
-  padding: 18px 22px 14px;
+  padding: 10px 22px 14px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
 .ecp-org-member-header {
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .ecp-org-member-header h2 {
-  margin: 0 0 4px;
+  margin: 0;
   color: #1f2937;
-  font-size: 20px;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.ecp-org-member-header .panel-subtitle {
+  margin-top: 2px;
+  font-size: 12px;
 }
 
 .ecp-org-table-wrap {

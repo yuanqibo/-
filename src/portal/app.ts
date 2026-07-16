@@ -10253,7 +10253,7 @@ function renderDepartmentDirectory() {
           <div class="ecp-org-member-header">
             <div>
               <h2>${escapeHtml(selected?.name || "组织架构")}</h2>
-              <div class="panel-subtitle">总人数 ${selectedTotal} · 当前展示 ${rows.length} · 路径：${escapeHtml(selected?.fullPath || selected?.path || "-")}</div>
+              <div class="panel-subtitle">总人数 ${selectedTotal}</div>
             </div>
             <div class="ecp-org-filters">
               <select data-ecp-org-member-scope aria-label="成员范围">
