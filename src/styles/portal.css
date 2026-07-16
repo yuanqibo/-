@@ -3531,10 +3531,9 @@ button {
 }
 
 .ecp-org-policy-bar {
-  padding: 20px 22px;
+  padding: 10px 22px 12px;
 }
 
-.ecp-org-actions,
 .ecp-org-filters {
   display: flex;
   align-items: center;

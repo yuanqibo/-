@@ -10190,10 +10190,6 @@ function renderEcpOrgTreeNode(node, selectedKey) {
   </div>`;
 }
 
-function currentEcpAccountSetUnionId(model = ecpOrganizationModel()) {
-  return model.selectedAccountSet?.unionId || model.selected?.accountSetUnionId || "";
-}
-
 function formatJsonPreview(payload) {
   if (payload == null || payload === "") return "ECP 已返回成功。";
   const text = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
@@ -10201,9 +10197,6 @@ function formatJsonPreview(payload) {
 }
 
 async function handleEcpOrgAction(action) {
-  const model = ecpOrganizationModel();
-  const accountSetUnionId = currentEcpAccountSetUnionId(model);
-  const encodedAccountSet = encodeURIComponent(accountSetUnionId);
   try {
     if (action === "init") {
       const payload = await ecpControlPlaneRequest("/iam/account-sets?page=1&pageSize=100");
@@ -10211,32 +10204,6 @@ async function handleEcpOrgAction(action) {
       await hydrateEcpOrganization();
       render();
       return;
-    }
-    if (!accountSetUnionId) {
-      showToast("当前 ECP 组织没有返回账号集 ID，无法执行该操作");
-      return;
-    }
-    if (action === "sync") {
-      const payload = await ecpControlPlaneRequest(`/iam/account-sets/${encodedAccountSet}/sync`, { method: "POST" });
-      showToast("已向 ECP 发起同步");
-      window.alert(`ECP 同步返回：\n${formatJsonPreview(payload)}`);
-      await hydrateEcpOrganization();
-      render();
-      return;
-    }
-    if (action === "syncConfig") {
-      const payload = await ecpControlPlaneRequest(`/iam/account-sets/${encodedAccountSet}/sync-config`);
-      window.alert(`ECP 同步配置：\n${formatJsonPreview(payload)}`);
-      return;
-    }
-    if (action === "integration") {
-      const payload = await ecpControlPlaneRequest(`/iam/account-sets/${encodedAccountSet}/integrations`);
-      window.alert(`ECP 集成配置：\n${formatJsonPreview(payload)}`);
-      return;
-    }
-    if (action === "settings") {
-      const payload = await ecpControlPlaneRequest(`/iam/account-sets/${encodedAccountSet}`);
-      window.alert(`ECP 账号集设置：\n${formatJsonPreview(payload)}`);
     }
   } catch (error) {
     showToast(error?.message || "ECP 操作失败");
@@ -10260,8 +10227,6 @@ function renderDepartmentDirectory() {
   const selected = model.selected;
   const selectedTotal = Array.isArray(selected?.memberSubjects) ? selected.memberSubjects.length : 0;
   const accountSets = Array.isArray(ecpOrganization.accountSets) ? ecpOrganization.accountSets : [];
-  const warnings = Array.isArray(ecpOrganization.warnings) ? ecpOrganization.warnings : [];
-  const capabilities = ecpOrganization.capabilities || {};
   return `<div class="system-content">
     <section class="panel ecp-org-console">
       <div class="ecp-org-tabs">
@@ -10272,16 +10237,9 @@ function renderDepartmentDirectory() {
       <div class="ecp-org-policy-bar">
         <div>
           <h2 class="panel-title">账号策略配置</h2>
-          <div class="panel-subtitle">账号集类型：${escapeHtml(model.selectedAccountSet?.setType || "-")} · 数据源：${escapeHtml(model.selectedAccountSet?.sourceType || "-")} · 同步状态：${escapeHtml(model.selectedAccountSet?.syncStatus || "-")} · 最近同步：${escapeHtml(model.selectedAccountSet?.lastSyncAt || "-")}</div>
-        </div>
-        <div class="ecp-org-actions">
-          <button class="btn primary" type="button" data-ecp-org-action="sync">立即同步</button>
-          <button class="btn" type="button" data-ecp-org-action="syncConfig">同步配置</button>
-          <button class="btn" type="button" data-ecp-org-action="integration">集成</button>
-          <button class="btn primary" type="button" data-ecp-org-action="settings">账号集设置</button>
+          <div class="panel-subtitle">用于管理账号集的数据来源、同步状态与组织结构配置。</div>
         </div>
       </div>
-      ${warnings.length ? `<div class="empty-note">${warnings.map((warning) => escapeHtml(warning)).join("；")}</div>` : ""}
       <div class="ecp-org-layout">
         <aside class="ecp-org-tree-panel">
           <div class="ecp-org-search">
