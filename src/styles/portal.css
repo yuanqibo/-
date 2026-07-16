@@ -3428,6 +3428,19 @@ button {
   padding: 18px;
   overflow: auto;
   overscroll-behavior: contain;
+  contain: layout paint;
+  will-change: opacity, transform;
+}
+
+.system-content-enter {
+  opacity: 0;
+  transform: translate3d(0, 6px, 0);
+}
+
+.system-content-enter.system-content-enter-active {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition: opacity 0.14s ease, transform 0.14s ease;
 }
 
 .system-content.self-service-management {
@@ -4069,6 +4082,7 @@ button {
 }
 
 .account-management-frame-shell {
+  position: relative;
   overflow: hidden;
   height: calc(100vh - 190px);
   min-height: 620px;
@@ -4078,7 +4092,19 @@ button {
   box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.12);
 }
 
+.account-management-frame-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 14px;
+  background: #ffffff;
+}
+
 .account-management-frame {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;

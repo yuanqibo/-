@@ -25,6 +25,7 @@ let ecpOrganization = null;
 let systemIntegrations = [];
 let systemForms = [];
 let assetOperationRecords = [];
+let authzWorkspaceLoadTimer = 0;
 
 async function systemConfigApiRequest(path, options = {}) {
   const method = options.method || "GET";
@@ -2929,11 +2930,12 @@ function applyPortalMenuRoute(item, shouldRender = false) {
   return true;
 }
 
-function applyEcpSession() {
+function applyEcpSession(options = {}) {
   if (!isEcpAuthEnabled()) return false;
   const ecpUser = normalizeEcpPortalUserPayload();
   if (!ecpUser) return false;
-  resetSessionView();
+  const preserveView = Boolean(options.preserveView);
+  if (!preserveView) resetSessionView();
   state.currentUser = ecpUser;
   state.session = {
     authenticated: true,
@@ -2941,7 +2943,9 @@ function applyEcpSession() {
     provider: "ECP统一认证",
     lastLoginAt: new Date().toLocaleString("zh-CN", { hour12: false }),
   };
-  if (!applyPortalMenuRoute(readEcpContext()?.getCurrentMenu?.())) {
+  if (preserveView) {
+    if (!routeAllowed(state.route)) state.route = preferredAccessibleRoute();
+  } else if (!applyPortalMenuRoute(readEcpContext()?.getCurrentMenu?.())) {
     state.route = preferredAccessibleRoute();
   }
   return true;
@@ -2949,10 +2953,12 @@ function applyEcpSession() {
 
 window.assetPortalApplyEcpSession = applyEcpSession;
 window.addEventListener("asset-portal-ecp-session", () => {
-  if (applyEcpSession()) {
-    render();
+  const wasAuthenticated = isAuthenticated();
+  if (applyEcpSession({ preserveView: wasAuthenticated })) {
+    if (!wasAuthenticated) render();
     return;
   }
+  if (wasAuthenticated) return;
   state.currentUser = null;
   state.session = { ...state.session, authenticated: false };
   render();
@@ -10349,7 +10355,8 @@ function renderAccountManagement() {
         <button class="btn primary" type="button" data-refresh-authz-workspace ${canAuthorize ? "" : "disabled"}>刷新成员授权</button>
       </div>
       ${canAuthorize ? `<div class="account-management-frame-shell">
-        <iframe class="account-management-frame" src="/workspace" title="ECP 成员授权工作台" loading="lazy"></iframe>
+        <div class="account-management-frame-loading">正在加载 ECP 成员授权工作台...</div>
+        <iframe class="account-management-frame" src="about:blank" data-authz-workspace-src="/workspace" title="ECP 成员授权工作台" loading="lazy"></iframe>
       </div>` : '<p class="empty-note">当前账号没有 ECP 成员授权权限，请先让应用管理员授予 authz:app_role:view / assign 等权限。</p>'}
     </section>
   </div>`;
@@ -10859,6 +10866,75 @@ function renderSettings() {
   </section>`;
 }
 
+function captureCurrentSystemScrollMemory() {
+  const content = document.querySelector(".system-content");
+  if (!content) return;
+  const positions = state.scrollPositions || (state.scrollPositions = {});
+  positions[`system-content:${scrollMemoryScope()}`] = {
+    top: content.scrollTop,
+    left: content.scrollLeft,
+  };
+}
+
+function updateSystemMenuActiveDom() {
+  document.querySelectorAll("[data-system-menu]").forEach((el) => {
+    const active = el.dataset.systemMenu === state.systemMenu;
+    el.classList.toggle("active", active);
+    if (active) el.setAttribute("aria-current", "page");
+    else el.removeAttribute("aria-current");
+  });
+}
+
+function refreshSystemContentOnly() {
+  if (state.route !== "settings") {
+    render();
+    return;
+  }
+  const systemPage = document.querySelector(".system-page");
+  const currentContent = systemPage?.querySelector(".system-content");
+  if (!systemPage || !currentContent) {
+    render();
+    return;
+  }
+  renderChrome();
+  systemPage.classList.toggle("self-service-system-page", state.systemMenu === "员工自助");
+  updateSystemMenuActiveDom();
+  currentContent.outerHTML = renderSystemMainContent();
+  const nextContent = systemPage.querySelector(".system-content");
+  if (nextContent) {
+    nextContent.classList.add("system-content-enter");
+    requestAnimationFrame(() => {
+      nextContent.classList.add("system-content-enter-active");
+      window.setTimeout(() => {
+        nextContent.classList.remove("system-content-enter", "system-content-enter-active");
+      }, 180);
+    });
+  }
+  bindPageEvents();
+  restoreLayoutScrollMemory();
+  scheduleAuthzWorkspaceFrameLoad();
+}
+
+function scheduleAuthzWorkspaceFrameLoad() {
+  window.clearTimeout(authzWorkspaceLoadTimer);
+  authzWorkspaceLoadTimer = window.setTimeout(() => {
+    if (!isMemberAuthorizationMenuLabel(state.systemMenu)) return;
+    const frame = document.querySelector(".account-management-frame");
+    if (!frame || frame.dataset.loaded === "true") return;
+    frame.dataset.loaded = "true";
+    frame.setAttribute("src", frame.dataset.authzWorkspaceSrc || "/workspace");
+  }, 900);
+}
+
+function setSystemMenu(menu, menuId = "") {
+  if (!menu) return;
+  captureCurrentSystemScrollMemory();
+  state.systemMenu = menu;
+  state.route = "settings";
+  if (state.systemMenu === "员工自助" && !state.selfServiceMenu) state.selfServiceMenu = "员工自助管理";
+  refreshSystemContentOnly();
+}
+
 function pageHeader(title, subtitle, action = null, kind = null, options = {}) {
   const buttons = [];
   const actionAllowed = !options.actionPermissionCodes?.length || hasAnyPermission(options.actionPermissionCodes);
@@ -10935,6 +11011,7 @@ function render() {
   page.innerHTML = (renderers[state.route] || renderHome)();
   bindPageEvents();
   restoreLayoutScrollMemory();
+  scheduleAuthzWorkspaceFrameLoad();
 }
 
 function setResizableTableWidth(context, columnKey, width) {
@@ -11198,21 +11275,21 @@ function bindPageEvents() {
   bindAssetCodeInputs();
   bindResizableTableColumns();
   bindDashboardBarTooltips();
-  document.querySelectorAll("[data-route]").forEach((el) =>
-    el.addEventListener("click", () => setRoute(el.dataset.route))
-  );
-  document.querySelectorAll("[data-terminal-mode]").forEach((el) =>
-    el.addEventListener("click", () => setTerminalMode(el.dataset.terminalMode))
-  );
+  document.querySelectorAll("[data-route]").forEach((el) => {
+    el.onclick = () => setRoute(el.dataset.route);
+  });
+  document.querySelectorAll("[data-terminal-mode]").forEach((el) => {
+    el.onclick = () => setTerminalMode(el.dataset.terminalMode);
+  });
   document.querySelectorAll(
     ".table-action, .receive-return-action-link, [data-open-kind], [data-import-action], [data-start-asset-receive], [data-start-asset-return], [data-start-asset-borrow]"
   ).forEach((el) => el.addEventListener("click", closeAccountMenus, { capture: true }));
-  document.querySelectorAll("[data-nav-group]").forEach((el) =>
-    el.addEventListener("click", () => toggleNavGroup(el.dataset.navGroup))
-  );
-  document.querySelectorAll("[data-asset-subnav-toggle]").forEach((el) =>
-    el.addEventListener("click", () => toggleAssetSubnavGroup(el.dataset.assetSubnavToggle))
-  );
+  document.querySelectorAll("[data-nav-group]").forEach((el) => {
+    el.onclick = () => toggleNavGroup(el.dataset.navGroup);
+  });
+  document.querySelectorAll("[data-asset-subnav-toggle]").forEach((el) => {
+    el.onclick = () => toggleAssetSubnavGroup(el.dataset.assetSubnavToggle);
+  });
   document.querySelectorAll("[data-asset-distribution-mode]").forEach((el) =>
     el.addEventListener("click", () => {
       state.assetDistributionMode = el.dataset.assetDistributionMode === "location" ? "location" : "organization";
@@ -11225,27 +11302,18 @@ function bindPageEvents() {
       render();
     })
   );
-  document.querySelectorAll("[data-system-menu]").forEach((el) =>
-    el.addEventListener("click", () => {
-      state.systemMenu = el.dataset.systemMenu;
-      state.route = "settings";
-      if (state.systemMenu === "员工自助" && !state.selfServiceMenu) state.selfServiceMenu = "员工自助管理";
-      if (el.dataset.systemMenuId === embeddedMemberAuthorizationMenuId) {
-        render();
-        return;
-      }
-      persistRoute("settings");
-      render();
-    })
-  );
-  document.querySelectorAll("[data-refresh-authz-workspace]").forEach((el) =>
-    el.addEventListener("click", () => {
+  document.querySelectorAll("[data-system-menu]").forEach((el) => {
+    el.onclick = () => setSystemMenu(el.dataset.systemMenu, el.dataset.systemMenuId);
+  });
+  document.querySelectorAll("[data-refresh-authz-workspace]").forEach((el) => {
+    el.onclick = () => {
       const frame = document.querySelector(".account-management-frame");
       if (!frame) return;
+      frame.dataset.loaded = "true";
       frame.setAttribute("src", "/workspace");
       showToast("成员授权已刷新");
-    })
-  );
+    };
+  });
   document.querySelectorAll("[data-ecp-org-node]").forEach((el) =>
     el.addEventListener("click", () => {
       state.ecpOrgSelectedKey = el.dataset.ecpOrgNode || "";
@@ -14272,13 +14340,15 @@ document.addEventListener("keydown", (event) => {
 async function bootApp() {
   const loadedSharedStore = await loadSharedStore();
   if (loadedSharedStore) applySharedStoreState();
+  const wasAuthenticated = isAuthenticated();
   await hydrateEcpDirectoryUsers();
   await hydrateEcpOrganization();
   await hydrateAssetsFromServer();
   await hydrateBusinessData();
   await hydrateSystemConfigs();
-  if (isEcpAuthEnabled() && applyEcpSession()) {
-    render();
+  if (isEcpAuthEnabled() && applyEcpSession({ preserveView: wasAuthenticated })) {
+    if (wasAuthenticated && state.route === "settings") refreshSystemContentOnly();
+    else render();
     return;
   }
   render();
