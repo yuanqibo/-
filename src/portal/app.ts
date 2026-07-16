@@ -10395,7 +10395,6 @@ function renderAccountManagement() {
           <h2 class="panel-title">成员授权</h2>
           <div class="panel-subtitle">使用 ECP SDK 工作台管理应用角色、账号授权和权限模型，保持在资产系统内操作。</div>
         </div>
-        <button class="btn primary" type="button" data-refresh-authz-workspace ${canAuthorize ? "" : "disabled"}>刷新成员授权</button>
       </div>
       ${canAuthorize ? `<div class="account-management-frame-shell">
         <div class="account-management-frame-loading">正在加载 ECP 成员授权工作台...</div>
@@ -11347,15 +11346,6 @@ function bindPageEvents() {
   );
   document.querySelectorAll("[data-system-menu]").forEach((el) => {
     el.onclick = () => setSystemMenu(el.dataset.systemMenu, el.dataset.systemMenuId);
-  });
-  document.querySelectorAll("[data-refresh-authz-workspace]").forEach((el) => {
-    el.onclick = () => {
-      const frame = document.querySelector(".account-management-frame");
-      if (!frame) return;
-      frame.dataset.loaded = "true";
-      frame.setAttribute("src", "/workspace");
-      showToast("成员授权已刷新");
-    };
   });
   document.querySelectorAll("[data-ecp-org-node]").forEach((el) =>
     el.addEventListener("click", () => {
