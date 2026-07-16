@@ -21,6 +21,11 @@ body:has(.authz-workspace-host) #app {
   overflow: hidden !important;
 }
 
+.authz-workspace-host,
+.authz-workspace-host * {
+  box-sizing: border-box !important;
+}
+
 /*
  * ECP 账号管理工作台在 iframe /workspace 独立路由中渲染，不一定会加载
  * PortalView 的业务样式；这里用 SDK 暴露的严格作用域做窄范围覆盖。
@@ -30,8 +35,10 @@ body:has(.authz-workspace-host) #app {
 .authz-workspace-host .workspace-account-management {
   display: flex !important;
   flex-direction: column !important;
+  flex: 1 1 auto !important;
   height: 100% !important;
   min-height: 0 !important;
+  width: 100% !important;
   overflow: hidden !important;
   font-size: 12px;
 }
@@ -54,16 +61,19 @@ body:has(.authz-workspace-host) #app {
 .authz-workspace-host .target-workspace {
   display: flex !important;
   flex-direction: column !important;
-  gap: 12px !important;
+  gap: 6px !important;
 }
 
 .authz-workspace-host .target-workspace__hero-card {
   flex: 0 0 auto !important;
 }
 
-.authz-workspace-host .target-workspace__hero-card .ecp-card__body,
+.authz-workspace-host .target-workspace__hero-card .ecp-card__body {
+  padding: 8px 12px !important;
+}
+
 .authz-workspace-host .target-workspace__card--content .ecp-card__body {
-  padding: 14px 16px !important;
+  padding: 10px 12px 4px !important;
 }
 
 .authz-workspace-host .target-workspace__card--content {
@@ -80,31 +90,32 @@ body:has(.authz-workspace-host) #app {
 }
 
 .authz-workspace-host .workspace-step-strip {
-  gap: 10px !important;
+  gap: 8px !important;
 }
 
 .authz-workspace-host .workspace-step-strip__item {
-  min-height: 46px !important;
-  padding: 10px 12px !important;
+  min-height: 38px !important;
+  padding: 7px 10px !important;
 }
 
 .authz-workspace-host .workspace-step-strip__index {
-  width: 24px !important;
-  height: 24px !important;
+  width: 22px !important;
+  height: 22px !important;
   font-size: 11px !important;
 }
 
 .authz-workspace-host .workspace-step-strip__body strong {
-  font-size: 13px !important;
+  font-size: 12px !important;
 }
 
 .authz-workspace-host .workspace-step-strip__meta {
-  padding: 3px 7px !important;
-  font-size: 11px !important;
+  padding: 2px 6px !important;
+  font-size: 10px !important;
 }
 
 .authz-workspace-host .workspace-account-management .workspace-split-shell {
   flex: 1 1 auto !important;
+  height: 100% !important;
   min-height: 0 !important;
   overflow: hidden !important;
 }
@@ -112,7 +123,7 @@ body:has(.authz-workspace-host) #app {
 .authz-workspace-host .workspace-account-management .ecp-split {
   display: grid !important;
   grid-template-columns: minmax(260px, 31%) minmax(0, 1fr) !important;
-  gap: 14px !important;
+  gap: 10px !important;
   align-items: stretch !important;
   width: 100% !important;
   min-width: 0 !important;
@@ -133,7 +144,7 @@ body:has(.authz-workspace-host) #app {
 .authz-workspace-host .workspace-account-management .ecp-split__left {
   border-right: 1px solid var(--ecp-border-light, #dee0e3) !important;
   border-bottom: 0 !important;
-  padding-right: 14px !important;
+  padding-right: 10px !important;
   padding-bottom: 0 !important;
 }
 
@@ -152,7 +163,8 @@ body:has(.authz-workspace-host) #app {
 
 .authz-workspace-host .workspace-account-management__view-switch,
 .authz-workspace-host .workspace-account-management__tree-search {
-  margin-bottom: 10px !important;
+  flex: 0 0 auto !important;
+  margin-bottom: 6px !important;
 }
 
 .authz-workspace-host .workspace-account-management__view-switch .el-segmented,
@@ -160,7 +172,7 @@ body:has(.authz-workspace-host) #app {
 .authz-workspace-host .workspace-account-management__tree-search .el-input__wrapper,
 .authz-workspace-host .target-workspace__context-search .el-input__wrapper {
   min-height: 30px !important;
-  height: 30px !important;
+  height: 28px !important;
   font-size: 12px !important;
 }
 
@@ -211,11 +223,11 @@ body:has(.authz-workspace-host) #app {
 
 .authz-workspace-host .workspace-account-management__tree {
   min-width: max-content !important;
-  padding-bottom: 18px !important;
+  padding-bottom: 6px !important;
 }
 
 .authz-workspace-host .workspace-account-management__tree .el-tree-node__content {
-  height: 32px !important;
+  height: 28px !important;
   min-width: max-content !important;
 }
 
@@ -237,7 +249,7 @@ body:has(.authz-workspace-host) #app {
 }
 
 .authz-workspace-host .workspace-account-management__detail-title {
-  font-size: 16px !important;
+  font-size: 15px !important;
   line-height: 1.35 !important;
 }
 
@@ -248,7 +260,8 @@ body:has(.authz-workspace-host) #app {
 }
 
 .authz-workspace-host .workspace-account-management__detail-actions {
-  gap: 8px !important;
+  gap: 6px !important;
+  flex: 0 0 auto !important;
 }
 
 .authz-workspace-host .workspace-account-management__detail-pane .ecp-detail-panel {
