@@ -6508,7 +6508,7 @@ function openAssetAdvancedSearch(activeTab = "search", context = currentAdvanced
   const isInbound = context === "inbound";
   const isReceiveReturn = context === "receiveReturn";
   const isBorrowReturn = context === "borrowReturn";
-  drawer.classList.remove("asset-detail-drawer");
+  drawer.classList.remove("asset-detail-drawer", "ecp-member-detail-drawer");
   drawerEyebrow.textContent = "列表操作";
   drawerTitle.textContent = isColumnsTab ? "自定义列" : "高级搜索";
   drawerBody.innerHTML = `
@@ -10098,12 +10098,16 @@ function ecpOrganizationUsersBySubject() {
       email: String(user.email || "").trim(),
       phone: String(user.phone || "").trim(),
       employeeNo: String(user.employeeNo || "").trim(),
+      unionId: String(user.unionId || "").trim(),
+      externalId: String(user.externalId || "").trim(),
       jobTitle: String(user.jobTitle || "").trim(),
       status: String(user.status || "").trim(),
       company: String(user.companyName || "").trim(),
       companyUnionId: String(user.companyUnionId || "").trim(),
       accountSetUnionId: String(user.accountSetUnionId || "").trim(),
       accountSetName: String(accountSetMap.get(user.accountSetUnionId)?.name || "").trim(),
+      accountSetSourceType: String(accountSetMap.get(user.accountSetUnionId)?.sourceType || "").trim(),
+      accountSetSyncMode: String(accountSetMap.get(user.accountSetUnionId)?.syncMode || "").trim(),
       department: String(user.departments?.[0]?.name || "").trim(),
       departments: Array.isArray(user.departments)
         ? user.departments.map((department) => ({
@@ -10196,6 +10200,87 @@ function formatJsonPreview(payload) {
   return text.length > 3000 ? `${text.slice(0, 3000)}\n...` : text;
 }
 
+function renderEcpOrgFilter(name, value, options) {
+  const selected = options.find((option) => option.value === value) || options[0];
+  const prefix = name === "status" ? '<span class="ecp-org-filter-prefix">账号状态</span>' : "";
+  return `<div class="ecp-org-filter ${escapeHtml(name)}" data-ecp-org-filter>
+    <button class="ecp-org-filter-trigger" type="button" data-ecp-org-filter-trigger="${escapeHtml(name)}" aria-haspopup="listbox" aria-expanded="false" aria-controls="ecp-org-${escapeHtml(name)}-menu">
+      <span class="ecp-org-filter-label">${prefix}${escapeHtml(selected.triggerLabel || selected.label)}</span>
+      <span class="ecp-org-filter-caret" aria-hidden="true"></span>
+    </button>
+    <div class="ecp-org-filter-menu" id="ecp-org-${escapeHtml(name)}-menu" role="listbox" aria-label="${name === "status" ? "账号状态" : "成员范围"}" hidden>
+      ${options.map((option) => `<button class="ecp-org-filter-option ${option.value === selected.value ? "selected" : ""}" type="button" role="option" aria-selected="${option.value === selected.value ? "true" : "false"}" data-ecp-org-filter-option="${escapeHtml(name)}" data-ecp-org-filter-value="${escapeHtml(option.value)}">
+        <span class="ecp-org-filter-check" aria-hidden="true">${option.value === selected.value ? "✓" : ""}</span>
+        <span>${escapeHtml(option.label)}</span>
+      </button>`).join("")}
+    </div>
+  </div>`;
+}
+
+function closeEcpOrgFilterMenus(except = null) {
+  document.querySelectorAll("[data-ecp-org-filter]").forEach((filter) => {
+    if (filter === except) return;
+    filter.classList.remove("open");
+    filter.querySelector("[data-ecp-org-filter-trigger]")?.setAttribute("aria-expanded", "false");
+    const menu = filter.querySelector(".ecp-org-filter-menu");
+    if (menu) menu.hidden = true;
+  });
+}
+
+function ecpMemberStatusLabel(status = "") {
+  const normalized = directoryUserStatusLabel(status).toLowerCase();
+  if (normalized === "enabled" || normalized === "active" || normalized === "在用") return "正常";
+  if (["disabled", "inactive", "停用", "禁用"].includes(normalized)) return "停用";
+  return String(status || "").trim() || "--";
+}
+
+function ecpMemberSourceLabel(user) {
+  const source = String(user.accountSetSourceType || "").toUpperCase();
+  const sourceLabel = source === "FEISHU" || source === "LARK"
+    ? "飞书"
+    : source === "DINGTALK"
+      ? "钉钉"
+      : source === "WECHAT_WORK"
+        ? "企微"
+        : user.accountSetSourceType || "";
+  const syncMode = String(user.accountSetSyncMode || "").toLowerCase();
+  const modeLabel = syncMode.includes("auto") ? "自动同步" : syncMode.includes("manual") ? "手动维护" : "";
+  return `${sourceLabel}${modeLabel}` || "--";
+}
+
+function ecpMemberDetailField(label, value, wide = false) {
+  return `<div class="ecp-member-detail-field ${wide ? "wide" : ""}">
+    <div class="ecp-member-detail-label">${escapeHtml(label)}</div>
+    <div class="ecp-member-detail-value">${escapeHtml(String(value || "").trim() || "--")}</div>
+  </div>`;
+}
+
+function openEcpMemberDetail(user) {
+  const departments = user.departments?.map((department) => department.name).filter(Boolean).join("、") || user.department;
+  const departmentLeaders = [...new Set(user.departments?.map((department) => department.leaderName).filter(Boolean) || [])].join("、");
+  drawer.classList.remove("advanced-search-drawer", "asset-detail-drawer");
+  drawer.classList.add("ecp-member-detail-drawer");
+  drawerEyebrow.textContent = "成员详情";
+  drawerTitle.textContent = user.name || "未命名成员";
+  drawerBody.innerHTML = `<div class="ecp-member-detail-page">
+    <div class="ecp-member-detail-employee-no">${escapeHtml(user.employeeNo || "--")}</div>
+    <div class="ecp-member-detail-grid">
+      ${ecpMemberDetailField("external_id", user.externalId || user.subject, true)}
+      ${ecpMemberDetailField("union_id", user.unionId || user.subject, true)}
+      ${ecpMemberDetailField("岗位", user.jobTitle)}
+      ${ecpMemberDetailField("账号状态", ecpMemberStatusLabel(user.status))}
+      ${ecpMemberDetailField("部门", departments, true)}
+      ${ecpMemberDetailField("负责部门", departmentLeaders)}
+      ${ecpMemberDetailField("所属公司", user.company)}
+      ${ecpMemberDetailField("邮箱", user.email, true)}
+      ${ecpMemberDetailField("手机", user.phone)}
+      ${ecpMemberDetailField("来源类型", ecpMemberSourceLabel(user))}
+      ${ecpMemberDetailField("账号集", user.accountSetName, true)}
+    </div>
+  </div>`;
+  openDrawer();
+}
+
 async function handleEcpOrgAction(action) {
   try {
     if (action === "init") {
@@ -10256,15 +10341,15 @@ function renderDepartmentDirectory() {
               <div class="panel-subtitle">总人数 ${selectedTotal}</div>
             </div>
             <div class="ecp-org-filters">
-              <select data-ecp-org-member-scope aria-label="成员范围">
-                <option value="all" ${state.ecpOrgMemberScope === "all" ? "selected" : ""}>展示全部成员</option>
-                <option value="direct" ${state.ecpOrgMemberScope === "direct" ? "selected" : ""}>仅直属成员</option>
-              </select>
-              <select data-ecp-org-status aria-label="账号状态">
-                <option value="all" ${state.ecpOrgAccountStatus === "all" ? "selected" : ""}>账号状态 全部</option>
-                <option value="enabled" ${state.ecpOrgAccountStatus === "enabled" ? "selected" : ""}>只看启用</option>
-                <option value="disabled" ${state.ecpOrgAccountStatus === "disabled" ? "selected" : ""}>只看停用</option>
-              </select>
+              ${renderEcpOrgFilter("scope", state.ecpOrgMemberScope, [
+                { value: "all", label: "展示全部成员" },
+                { value: "direct", label: "仅直属成员" },
+              ])}
+              ${renderEcpOrgFilter("status", state.ecpOrgAccountStatus, [
+                { value: "all", label: "全部账号", triggerLabel: "全部" },
+                { value: "enabled", label: "只看启用", triggerLabel: "启用" },
+                { value: "disabled", label: "只看停用", triggerLabel: "停用" },
+              ])}
             </div>
           </div>
           <div class="table-wrap ecp-org-table-wrap"><table class="ecp-org-table">
@@ -11298,16 +11383,28 @@ function bindPageEvents() {
       render();
     })
   );
-  document.querySelector("[data-ecp-org-member-scope]")?.addEventListener("change", (event) => {
-    state.ecpOrgMemberScope = event.target.value === "direct" ? "direct" : "all";
-    state.ecpOrgPage = 1;
-    render();
-  });
-  document.querySelector("[data-ecp-org-status]")?.addEventListener("change", (event) => {
-    state.ecpOrgAccountStatus = ["enabled", "disabled"].includes(event.target.value) ? event.target.value : "all";
-    state.ecpOrgPage = 1;
-    render();
-  });
+  document.querySelectorAll("[data-ecp-org-filter-trigger]").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const filter = el.closest("[data-ecp-org-filter]");
+      const shouldOpen = !filter?.classList.contains("open");
+      closeEcpOrgFilterMenus(filter);
+      filter?.classList.toggle("open", shouldOpen);
+      el.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+      const menu = filter?.querySelector(".ecp-org-filter-menu");
+      if (menu) menu.hidden = !shouldOpen;
+    })
+  );
+  document.querySelectorAll("[data-ecp-org-filter-option]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const filterName = el.dataset.ecpOrgFilterOption;
+      const value = el.dataset.ecpOrgFilterValue || "all";
+      if (filterName === "scope") state.ecpOrgMemberScope = value === "direct" ? "direct" : "all";
+      if (filterName === "status") state.ecpOrgAccountStatus = ["enabled", "disabled"].includes(value) ? value : "all";
+      state.ecpOrgPage = 1;
+      render();
+    })
+  );
   document.querySelectorAll("[data-ecp-org-action]").forEach((el) =>
     el.addEventListener("click", () => void handleEcpOrgAction(el.dataset.ecpOrgAction || ""))
   );
@@ -11315,18 +11412,7 @@ function bindPageEvents() {
     el.addEventListener("click", () => {
       const user = ecpOrganizationUsersBySubject().get(el.dataset.ecpOrgUserDetail || "");
       if (!user) return showToast("当前成员详情已刷新，请重新选择");
-      const departments = user.departments?.map((department) => department.path || department.name).filter(Boolean).join("\n") || "-";
-      window.alert([
-        `姓名：${user.name || "-"}`,
-        `工号：${user.employeeNo || "-"}`,
-        `岗位：${user.jobTitle || "-"}`,
-        `邮箱：${user.email || "-"}`,
-        `手机：${user.phone || "-"}`,
-        `公司：${user.company || "-"}`,
-        `状态：${user.status || "-"}`,
-        `ECP Subject：${user.subject || "-"}`,
-        `部门：\n${departments}`,
-      ].join("\n"));
+      openEcpMemberDetail(user);
     })
   );
   document.querySelector("[data-system-integration-create]")?.addEventListener("click", () => openSystemIntegrationModal());
@@ -12093,7 +12179,7 @@ function renderAssetDetailFooterActions(item) {
 function openAssetDetail(id) {
   const item = state.assets.find((asset) => asset.id === id);
   if (!item) return;
-  drawer.classList.remove("advanced-search-drawer");
+  drawer.classList.remove("advanced-search-drawer", "ecp-member-detail-drawer");
   drawer.classList.add("asset-detail-drawer");
   drawerEyebrow.textContent = "";
   drawerTitle.textContent = "";
@@ -12149,7 +12235,7 @@ function openAssetDetail(id) {
 function openRequestDetail(id) {
   const item = state.requests.find((request) => request.id === id) || employeeRequestRows().find((request) => request.id === id);
   if (!item) return;
-  drawer.classList.remove("asset-detail-drawer");
+  drawer.classList.remove("asset-detail-drawer", "ecp-member-detail-drawer");
   drawerEyebrow.textContent = "审批轨迹";
   drawerTitle.textContent = item.id;
   drawerBody.innerHTML = `
@@ -12179,7 +12265,7 @@ function openRequestDetail(id) {
 function openStocktakeDetail(id) {
   const item = state.stocktakes.find((task) => task.id === id);
   if (!item) return;
-  drawer.classList.remove("asset-detail-drawer");
+  drawer.classList.remove("asset-detail-drawer", "ecp-member-detail-drawer");
   drawerEyebrow.textContent = "盘点明细";
   drawerTitle.textContent = item.name;
   drawerBody.innerHTML = `
@@ -12217,6 +12303,7 @@ function closeDrawer() {
   drawer.classList.remove("open");
   drawer.classList.remove("advanced-search-drawer");
   drawer.classList.remove("asset-detail-drawer");
+  drawer.classList.remove("ecp-member-detail-drawer");
   drawerBackdrop.classList.remove("open");
   drawer.setAttribute("aria-hidden", "true");
 }
@@ -14280,6 +14367,9 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest("[data-inline-select]")) {
     closeAllInlineSelects();
   }
+  if (!event.target.closest("[data-ecp-org-filter]")) {
+    closeEcpOrgFilterMenus();
+  }
 });
 
 document.addEventListener("keydown", (event) => {
@@ -14290,6 +14380,7 @@ document.addEventListener("keydown", (event) => {
     }
     closeAccountMenus();
     closeAllInlineSelects();
+    closeEcpOrgFilterMenus();
     closeDrawer();
     closeModal();
   }
