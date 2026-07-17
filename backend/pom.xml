@@ -3,24 +3,17 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.5.3</version>
-    <relativePath/>
+    <groupId>team.acg.access</groupId>
+    <artifactId>asset-platform-build</artifactId>
+    <version>1.0.0</version>
+    <relativePath>../pom.xml</relativePath>
   </parent>
-  <groupId>team.acg.access</groupId>
   <artifactId>access-assets-server</artifactId>
-  <version>1.0.0</version>
   <name>access-assets-server</name>
-  <properties>
-    <java.version>17</java.version>
-    <ecp-sdk-java.version>1.0.3-release</ecp-sdk-java.version>
-  </properties>
   <dependencies>
     <dependency>
       <groupId>com.idanchuang.ecp</groupId>
       <artifactId>ecp-sdk-spring-boot-starter</artifactId>
-      <version>${ecp-sdk-java.version}</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>

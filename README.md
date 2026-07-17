@@ -4,10 +4,10 @@
 
 ## 环境要求
 
-- Node.js 22（本地与 Dockerfile.build 前端构建）
+- Node.js 22.14.0、npm 10.9.2（本地、Maven 与 Docker 前端构建统一版本）
 - Java 17
 - Maven 3.9
-- MySQL 8（生产环境）
+- MySQL 8.4（生产环境）
 
 公司 ECP 前端与 Java SDK 制品保存在 `vendor/`，构建时不依赖浏览器登录态或外部 Nexus 凭据。
 
@@ -25,6 +25,7 @@ ARTIFACT_PATH=backend/target/access-assets-server-1.0.0.jar
 ## 本地运行
 
 ```bash
+nvm use
 npm ci
 npm run build:all
 npm run start:dev

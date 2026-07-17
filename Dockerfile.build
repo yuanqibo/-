@@ -1,4 +1,4 @@
-FROM node:22-alpine AS frontend-build
+FROM node:22.14.0-alpine AS frontend-build
 WORKDIR /build
 ARG VITE_ECP_APP_CODE=WLY5YG
 ARG VITE_ECP_API_BASE_URL=/api/v1
@@ -6,13 +6,14 @@ ARG VITE_ECP_AUTH_CONFIG_SOURCE_MODE=remote-first
 ENV VITE_ECP_APP_CODE=$VITE_ECP_APP_CODE \
     VITE_ECP_API_BASE_URL=$VITE_ECP_API_BASE_URL \
     VITE_ECP_AUTH_CONFIG_SOURCE_MODE=$VITE_ECP_AUTH_CONFIG_SOURCE_MODE
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY vendor/ecp-sdk ./vendor/ecp-sdk
 RUN npm ci
 COPY index.html tsconfig.json vite.config.ts ./
 COPY authz ./authz
 COPY public ./public
 COPY src ./src
+COPY backend/src/main/java ./backend/src/main/java
 COPY scripts/validate-authz.mjs ./scripts/validate-authz.mjs
 RUN npm run validate:authz && npm run build
 
@@ -21,6 +22,7 @@ WORKDIR /build
 COPY vendor/ecp-sdk-java ./vendor/ecp-sdk-java
 COPY scripts/install-ecp-java-sdk.sh ./scripts/install-ecp-java-sdk.sh
 RUN bash scripts/install-ecp-java-sdk.sh
+COPY pom.xml ./pom.xml
 COPY backend/pom.xml ./backend/pom.xml
 COPY backend/src ./backend/src
 COPY --from=frontend-build /build/dist ./dist

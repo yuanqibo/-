@@ -2,12 +2,16 @@
 
 ## 标准技术栈
 
-- 前端：Vue 3、TypeScript、Vite、Vue Router、Element Plus
+- 前端：Node.js 22.14.0、npm 10.9.2、Vue 3、TypeScript、Vite、Vue Router、Element Plus
 - 后端：Java 17、Spring Boot 3、Spring Web、Spring JDBC
-- 数据库：MySQL 8
+- 数据库：MySQL 8.4
 - 身份与权限：ECP 前端 SDK 与 Java SDK
 
 Vite 只负责前端开发和构建。业务规则、权限校验和持久化必须由 Java 服务负责，浏览器不能直接访问数据库，也不能把本地存储作为业务数据源。
+
+Node.js 与 npm 版本由 `.nvmrc`、`.node-version`、`package.json`、根目录 `pom.xml` 和 `Dockerfile.build` 共同约束。修改版本时必须一次性同步这些文件，禁止不同构建入口使用不同运行时。
+
+根目录 `pom.xml` 同时是 Maven 父工程和聚合工程。标准发布构建必须按“Vite 生成 `dist` → Spring Boot 复制静态资源 → JAR 打包”的顺序执行，禁止让后端打包依赖工作区里上一次残留的 `dist`。
 
 ## 前端分层
 
