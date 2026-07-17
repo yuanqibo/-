@@ -11338,12 +11338,19 @@ function refreshSystemContentOnly() {
   scheduleAuthzWorkspaceFrameLoad();
 }
 
-function setAuthzWorkspaceDrawerOverlay(frame, active) {
+function setAuthzWorkspaceDrawerOverlay(frame, active, hideWorkspaceApp = active) {
   const shell = authzWorkspaceDockedShell || frame?.closest(".account-management-frame-shell");
-  shell?.classList.toggle("is-workspace-drawer-open", active);
-  document.body.classList.toggle("authz-workspace-overlay-active", active);
+  if (shell?.classList.contains("is-workspace-drawer-open") !== active) {
+    shell?.classList.toggle("is-workspace-drawer-open", active);
+  }
+  if (document.body.classList.contains("authz-workspace-overlay-active") !== active) {
+    document.body.classList.toggle("authz-workspace-overlay-active", active);
+  }
   try {
-    frame?.contentDocument?.body?.classList.toggle("authz-workspace-portal-overlay-active", active);
+    const frameBody = frame?.contentDocument?.body;
+    if (frameBody?.classList.contains("authz-workspace-portal-overlay-active") !== hideWorkspaceApp) {
+      frameBody?.classList.toggle("authz-workspace-portal-overlay-active", hideWorkspaceApp);
+    }
   } catch {
     // The workspace is expected to be same-origin; fail closed if deployment changes that contract.
   }
@@ -11407,6 +11414,8 @@ function observeAuthzWorkspaceDrawers(frame) {
     const frameDocument = frame.contentDocument;
     const frameWindow = frame.contentWindow;
     if (!frameDocument?.body || !frameWindow) return;
+    let overlayActive = false;
+    let workspaceAppHidden = false;
     const sync = () => {
       const overlays = [...frameDocument.querySelectorAll(".el-overlay")];
       overlays.forEach((overlay) => {
@@ -11424,14 +11433,32 @@ function observeAuthzWorkspaceDrawers(frame) {
         const displayName = formatPermissionDisplayName(currentName);
         if (displayName && displayName !== currentName) node.textContent = displayName;
       });
-      const active = overlays.filter((overlay) => overlay.classList.contains("is-drawer")).some((overlay) => {
-        if (!overlay.querySelector(".el-drawer")) return false;
+      const activeOverlays = overlays.filter((overlay) => {
+        const workspaceSurface = overlay.querySelector([
+          ".el-drawer",
+          ".target-workspace-assignment-dialog",
+          ".authz-code-selector-dialog",
+        ].join(","));
+        if (!workspaceSurface) return false;
         const style = frameWindow.getComputedStyle(overlay);
-        return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+        return style.display !== "none" && style.visibility !== "hidden";
       });
-      setAuthzWorkspaceDrawerOverlay(frame, active);
+      const active = activeOverlays.length > 0;
+      const hideWorkspaceApp = activeOverlays.some((overlay) => !overlay.closest("#app"));
+      if (active !== overlayActive || hideWorkspaceApp !== workspaceAppHidden) {
+        overlayActive = active;
+        workspaceAppHidden = hideWorkspaceApp;
+        setAuthzWorkspaceDrawerOverlay(frame, active, hideWorkspaceApp);
+      }
     };
-    authzWorkspaceDrawerObserver = new frameWindow.MutationObserver(sync);
+    authzWorkspaceDrawerObserver = new frameWindow.MutationObserver((mutations) => {
+      const workspaceOverlayChanged = mutations.some((mutation) => {
+        if (mutation.type === "childList") return true;
+        const target = mutation.target;
+        return target instanceof frameWindow.Element && target.classList.contains("el-overlay");
+      });
+      if (workspaceOverlayChanged) sync();
+    });
     authzWorkspaceDrawerObserver.observe(frameDocument.body, {
       attributes: true,
       attributeFilter: ["class", "style"],

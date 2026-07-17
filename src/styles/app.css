@@ -716,6 +716,35 @@ body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
   height: min(560px, calc(100vh - 210px)) !important;
 }
 
+.authz-workspace-host .target-workspace-assignment-dialog.el-dialog {
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: calc(100vh - 32px) !important;
+  margin: 16px auto !important;
+  overflow: hidden !important;
+}
+
+.authz-workspace-host .target-workspace-assignment-dialog .el-dialog__header,
+.authz-workspace-host .target-workspace-assignment-dialog .el-dialog__footer {
+  flex: 0 0 auto !important;
+}
+
+.authz-workspace-host .target-workspace-assignment-dialog .el-dialog__body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.authz-workspace-host .target-workspace-assignment-dialog__form,
+.authz-workspace-host .target-workspace-assignment-dialog__form .el-form-item,
+.authz-workspace-host .target-workspace-assignment-dialog__form .el-form-item__content {
+  min-height: 0 !important;
+}
+
+.authz-workspace-host .target-workspace-assignment-dialog__selector.ecp-entity-selector__body {
+  height: min(560px, calc(100vh - 210px)) !important;
+}
+
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-drawer__footer {
   min-height: 52px !important;
   padding: 8px 20px !important;
