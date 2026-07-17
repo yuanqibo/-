@@ -601,7 +601,17 @@ body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
 }
 
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-form-item {
+  width: 100% !important;
+  min-width: 0 !important;
   margin-bottom: 18px !important;
+}
+
+:is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-row,
+:is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-col,
+:is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-form-item__content,
+:is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer :is(.el-input, .el-select, .el-textarea, .authz-code-select-field) {
+  width: 100% !important;
+  min-width: 0 !important;
 }
 
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-form-item__label {
@@ -681,6 +691,29 @@ body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
 
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-switch {
   --el-switch-on-color: #5b84ee;
+}
+
+.authz-workspace-host .authz-code-selector-dialog.el-dialog {
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: calc(100vh - 32px) !important;
+  margin: 16px auto !important;
+  overflow: hidden !important;
+}
+
+.authz-workspace-host .authz-code-selector-dialog .el-dialog__header,
+.authz-workspace-host .authz-code-selector-dialog .el-dialog__footer {
+  flex: 0 0 auto !important;
+}
+
+.authz-workspace-host .authz-code-selector-dialog .el-dialog__body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.authz-workspace-host .authz-code-selector-dialog .authz-code-select-field__selector-shell {
+  height: min(560px, calc(100vh - 210px)) !important;
 }
 
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-drawer__footer {

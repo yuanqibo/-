@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { match as pinyinMatch, pinyin } from "pinyin-pro";
+import { formatPermissionDisplayName } from "../authz/permission-display";
 
 const selfServiceSettingsStorageKey = "assetPortalSelfServiceSettingsV9";
 const assetCodeRuleStorageKey = "assetPortalAssetCodeRuleSettingsV1";
@@ -11407,7 +11408,23 @@ function observeAuthzWorkspaceDrawers(frame) {
     const frameWindow = frame.contentWindow;
     if (!frameDocument?.body || !frameWindow) return;
     const sync = () => {
-      const active = [...frameDocument.querySelectorAll(".el-overlay.is-drawer")].some((overlay) => {
+      const overlays = [...frameDocument.querySelectorAll(".el-overlay")];
+      overlays.forEach((overlay) => {
+        if (!overlay.classList.contains("authz-workspace-host")) {
+          overlay.classList.add("authz-workspace-host");
+        }
+      });
+      frameDocument.querySelectorAll([
+        ".authz-code-select-field__picker-segment--permission .authz-code-select-field__picker-segment-name",
+        ".authz-code-select-field__selected-name",
+        ".ecp-entity-selector__node-name",
+        ".ecp-entity-selector__selected-name",
+      ].join(",")).forEach((node) => {
+        const currentName = String(node.textContent || "").trim();
+        const displayName = formatPermissionDisplayName(currentName);
+        if (displayName && displayName !== currentName) node.textContent = displayName;
+      });
+      const active = overlays.filter((overlay) => overlay.classList.contains("is-drawer")).some((overlay) => {
         if (!overlay.querySelector(".el-drawer")) return false;
         const style = frameWindow.getComputedStyle(overlay);
         return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";

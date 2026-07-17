@@ -3,6 +3,7 @@ import { createBundleFromGlob } from '@acg/ecp-auth-vue'
 import type { App as VueApp } from 'vue'
 import type { Router } from 'vue-router'
 import type { DoctorReport, EcpAuthConfigSourceMode } from '@acg/ecp-sdk'
+import { formatPermissionDisplayName } from './authz/permission-display'
 
 export type { AuthzSessionContext } from '@acg/ecp-sdk'
 
@@ -13,6 +14,13 @@ const authzBundle = createBundleFromGlob({
     query: '?raw'
   }),
   ...import.meta.glob('/src/views/**/*.vue')
+})
+
+authzBundle.catalog?.resources?.forEach((resource) => {
+  resource.permissions?.forEach((catalogPermission) => {
+    const permission = catalogPermission as typeof catalogPermission & { name?: string }
+    permission.name = formatPermissionDisplayName(permission.code, resource.name)
+  })
 })
 
 const readEnv = (key: string, fallback: string): string => {
