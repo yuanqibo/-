@@ -168,7 +168,7 @@ menus:
     title: 组织架构
     path: /system/departments
     pageKey: asset.portal.system.departments
-    file: /src/views/PortalView.vue
+    file: /src/views/OrganizationDirectoryPage.vue
     order: 52
     permissionCodes:
       - asset:department:view

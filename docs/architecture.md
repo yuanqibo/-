@@ -30,9 +30,9 @@ src/
 
 当前迁移状态：
 
-- `员工信息` 已完成首个业务域迁移，目录位于 `src/features/employees/`。
-- 路由 `/system/employees` 由 Vue Router 直接加载 `src/views/EmployeeDirectoryPage.vue`。
-- 员工目录请求集中在 feature API 层，并统一经过 `src/shared/api/http.ts`。
+- `员工信息` 与 `组织架构` 已完成业务域迁移，目录分别位于 `src/features/employees/` 和 `src/features/organization/`。
+- 路由 `/system/employees` 与 `/system/departments` 由 Vue Router 直接加载对应 Vue SFC。
+- 员工目录与组织架构请求集中在各自 feature API 层，并统一经过 `src/shared/api/http.ts`。
 - 其余业务域仍由历史入口承载；全部迁移完成后删除 `src/portal/app.ts`。
 
 ## 后端分层

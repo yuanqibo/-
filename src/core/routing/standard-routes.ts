@@ -1,6 +1,7 @@
 const STANDARD_VUE_ROUTE_PATHS = new Set([
   '/system',
-  '/system/employees'
+  '/system/employees',
+  '/system/departments'
 ])
 
 export const MEMBER_AUTHORIZATION_PORTAL_PATH = '/system/member-authorization'

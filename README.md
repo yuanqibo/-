@@ -101,7 +101,7 @@ scripts/                 SDK 安装、部署和更新脚本
 
 前端新业务按 `core/shared/features/views` 分层，禁止继续向历史文件 `src/portal/app.ts` 添加字符串模板或业务请求。详细边界、API 约定和迁移完成标准见 [项目架构规范](docs/architecture.md)。
 
-当前 Vue 标准化按业务域逐步执行。`员工信息` 已完成首个业务域迁移：`/system/employees` 由 Vue Router 直接加载 Vue SFC，业务代码位于 `src/features/employees/`，旧 DOM 页面和临时挂载桥已删除。其余业务域仍由 `src/portal/app.ts` 承载；只有全部业务域迁移并逐域验证完成后，才删除该历史入口。
+当前 Vue 标准化按业务域逐步执行。`员工信息` 与 `组织架构` 已完成迁移：`/system/employees`、`/system/departments` 由 Vue Router 直接加载 Vue SFC，业务代码分别位于 `src/features/employees/`、`src/features/organization/`，对应旧 DOM 实现已删除。其余业务域仍由 `src/portal/app.ts` 承载；只有全部业务域迁移并逐域验证完成后，才删除该历史入口。
 
 ## 权限边界
 
