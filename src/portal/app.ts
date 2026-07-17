@@ -206,6 +206,20 @@ function directoryPersonSelect(name, selectedSubject = "", required = true) {
   </select>`;
 }
 
+function directoryPersonSearch(name, selectedSubject = "", required = false) {
+  const selectedUser = directoryUserBySubject(selectedSubject);
+  const selectedLabel = selectedUser
+    ? [selectedUser.name, selectedUser.employeeNo].filter(Boolean).join(" · ")
+    : "";
+  const resultsId = `ecp-person-results-${name}`;
+  return `<div class="ecp-person-search ${selectedUser ? "is-selected" : ""}" data-ecp-person-search data-required="${required ? "true" : "false"}">
+    <input type="search" class="ecp-person-query" data-ecp-person-query data-selected-label="${escapeHtml(selectedLabel)}" value="${escapeHtml(selectedLabel)}" placeholder="搜索姓名、工号、邮箱或手机号" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${escapeHtml(resultsId)}">
+    <input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(selectedUser?.subject || "")}" data-ecp-person-subject>
+    <button type="button" class="ecp-person-clear" data-ecp-person-clear aria-label="清除已选人员" title="清除已选人员" ${selectedLabel ? "" : "hidden"}>×</button>
+    <div class="ecp-person-results" id="${escapeHtml(resultsId)}" data-ecp-person-results role="listbox" hidden></div>
+  </div>`;
+}
+
 function isSharedStoreKey(key) {
   return sharedStoreKeys.includes(key);
 }
@@ -2491,6 +2505,8 @@ function scoreDirectoryUser(user, rawQuery) {
     scoreTextField(user.name, query, 4000),
     scorePinyinField(user.name, compactQuery, 3900),
     scoreTextField(user.employeeNo, query, 3600),
+    scoreTextField(user.email, query, 3400),
+    scoreTextField(user.phone, query, 3200),
     scoreTextField(user.jobTitle, query, 2400),
     allowAuxiliaryPinyin ? scorePinyinField(user.jobTitle, compactQuery, 2300) : Number.NEGATIVE_INFINITY,
     scoreTextField(user.department, query, 2200),
@@ -3169,6 +3185,184 @@ function bindPlaceholderSelects(root = document) {
     el.classList.toggle("placeholder-select", !el.value);
     el.addEventListener("change", () => {
       el.classList.toggle("placeholder-select", !el.value);
+    });
+  });
+}
+
+function closeDirectoryPersonSearch(control) {
+  const results = control?.querySelector("[data-ecp-person-results]");
+  const query = control?.querySelector("[data-ecp-person-query]");
+  if (results) results.hidden = true;
+  query?.setAttribute("aria-expanded", "false");
+}
+
+function closeAllDirectoryPersonSearches(except = null) {
+  document.querySelectorAll("[data-ecp-person-search]").forEach((control) => {
+    if (control !== except) closeDirectoryPersonSearch(control);
+  });
+}
+
+function settleDirectoryPersonSearch(control) {
+  const query = control?.querySelector("[data-ecp-person-query]");
+  const subject = control?.querySelector("[data-ecp-person-subject]");
+  const clear = control?.querySelector("[data-ecp-person-clear]");
+  closeDirectoryPersonSearch(control);
+  if (subject?.value || !query?.value) return;
+  query.value = "";
+  query.dataset.selectedLabel = "";
+  if (clear) clear.hidden = true;
+  control.classList.remove("is-selected");
+}
+
+function syncInlineSelectValue(form, name, value) {
+  if (!form || !value) return;
+  const input = form.querySelector(`[data-inline-select-input][name="${CSS.escape(name)}"]`);
+  const control = input?.closest("[data-inline-select]");
+  if (!input || !control) return;
+  input.value = value;
+  control.classList.remove("is-placeholder", "is-invalid");
+  const label = control.querySelector("[data-inline-select-label]");
+  if (label) label.textContent = value;
+  control.querySelectorAll("[data-inline-select-option]").forEach((option) => {
+    option.classList.toggle("selected", option.dataset.value === value);
+  });
+}
+
+function selectDirectoryPerson(control, user) {
+  if (!control || !user) return;
+  const query = control.querySelector("[data-ecp-person-query]");
+  const subject = control.querySelector("[data-ecp-person-subject]");
+  const clear = control.querySelector("[data-ecp-person-clear]");
+  const label = [user.name, user.employeeNo].filter(Boolean).join(" · ");
+  if (query) {
+    query.value = label;
+    query.dataset.selectedLabel = label;
+  }
+  if (subject) {
+    subject.value = user.subject;
+    subject.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  if (clear) clear.hidden = false;
+  control.classList.add("is-selected");
+  control.classList.remove("is-invalid");
+  closeDirectoryPersonSearch(control);
+
+  const form = control.closest("form[data-mode='asset-create']");
+  if (form) {
+    syncInlineSelectValue(form, "company", user.company);
+    syncInlineSelectValue(form, "department", user.department);
+  }
+}
+
+function renderDirectoryPersonResults(control) {
+  const query = control.querySelector("[data-ecp-person-query]");
+  const results = control.querySelector("[data-ecp-person-results]");
+  const keyword = query?.value.trim() || "";
+  if (!query || !results || !keyword || query.dataset.selectedLabel === keyword) {
+    closeDirectoryPersonSearch(control);
+    return;
+  }
+  const matches = searchDirectoryUsers(ecpDirectoryUsers, keyword).slice(0, 8);
+  results.innerHTML = matches.length
+    ? matches.map((user) => {
+        const secondary = [user.department, user.company].filter(Boolean).join(" / ");
+        const contact = user.email || user.phone || "";
+        const status = ecpMemberStatusLabel(user.status);
+        return `<button type="button" class="ecp-person-result" data-ecp-person-option="${escapeHtml(user.subject)}" role="option">
+          <span class="ecp-person-avatar" aria-hidden="true">${escapeHtml(accountInitial(user.name).toUpperCase())}</span>
+          <span class="ecp-person-result-copy">
+            <span class="ecp-person-result-primary"><strong>${escapeHtml(user.name || "未命名人员")}</strong>${user.employeeNo ? `<span>${escapeHtml(user.employeeNo)}</span>` : ""}${status === "停用" ? '<em>停用</em>' : ""}</span>
+            <span class="ecp-person-result-secondary">${escapeHtml(secondary || contact || "ECP 目录人员")}</span>
+            ${secondary && contact ? `<span class="ecp-person-result-contact">${escapeHtml(contact)}</span>` : ""}
+          </span>
+        </button>`;
+      }).join("")
+    : '<div class="ecp-person-empty">未找到匹配的 ECP 人员</div>';
+  closeAllDirectoryPersonSearches(control);
+  results.hidden = false;
+  query.setAttribute("aria-expanded", "true");
+}
+
+function clearDirectoryPerson(control, { focus = true } = {}) {
+  const query = control?.querySelector("[data-ecp-person-query]");
+  const subject = control?.querySelector("[data-ecp-person-subject]");
+  const clear = control?.querySelector("[data-ecp-person-clear]");
+  if (query) {
+    query.value = "";
+    query.dataset.selectedLabel = "";
+  }
+  if (subject) {
+    subject.value = "";
+    subject.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  if (clear) clear.hidden = true;
+  control?.classList.remove("is-selected", "is-invalid");
+  closeDirectoryPersonSearch(control);
+  if (focus) query?.focus();
+}
+
+function bindDirectoryPersonSearches(root = document) {
+  root.querySelectorAll("[data-ecp-person-search]").forEach((control) => {
+    if (control.dataset.ecpPersonSearchBound === "true") return;
+    control.dataset.ecpPersonSearchBound = "true";
+    const query = control.querySelector("[data-ecp-person-query]");
+    const subject = control.querySelector("[data-ecp-person-subject]");
+    const results = control.querySelector("[data-ecp-person-results]");
+    const clear = control.querySelector("[data-ecp-person-clear]");
+
+    query?.addEventListener("input", () => {
+      if (subject?.value && query.value !== query.dataset.selectedLabel) {
+        subject.value = "";
+        control.classList.remove("is-selected");
+      }
+      if (clear) clear.hidden = !query.value;
+      renderDirectoryPersonResults(control);
+    });
+    query?.addEventListener("focus", () => renderDirectoryPersonResults(control));
+    query?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeDirectoryPersonSearch(control);
+        return;
+      }
+      if (event.key === "Enter" && !results?.hidden) {
+        const first = results.querySelector("[data-ecp-person-option]");
+        event.preventDefault();
+        if (first) {
+          first.click();
+        }
+        return;
+      }
+      if (event.key !== "ArrowDown" || results?.hidden) return;
+      event.preventDefault();
+      results.querySelector("[data-ecp-person-option]")?.focus();
+    });
+    results?.addEventListener("click", (event) => {
+      const option = event.target.closest("[data-ecp-person-option]");
+      if (!option) return;
+      const user = directoryUserBySubject(option.dataset.ecpPersonOption);
+      if (user) selectDirectoryPerson(control, user);
+    });
+    results?.addEventListener("keydown", (event) => {
+      const options = Array.from(results.querySelectorAll("[data-ecp-person-option]"));
+      const index = options.indexOf(document.activeElement);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeDirectoryPersonSearch(control);
+        query?.focus();
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const next = event.key === "ArrowDown" ? Math.min(index + 1, options.length - 1) : Math.max(index - 1, 0);
+        options[next]?.focus();
+      }
+    });
+    clear?.addEventListener("click", () => clearDirectoryPerson(control));
+    control.addEventListener("focusout", () => {
+      requestAnimationFrame(() => {
+        if (!control.contains(document.activeElement)) settleDirectoryPersonSearch(control);
+      });
     });
   });
 }
@@ -10357,12 +10551,16 @@ function renderEcpOrgTreeNode(node, selectedKey) {
   const defaultOpen = Number(node.level) <= 0;
   const expanded = hasChildren && (state.ecpOrgTreeOpen[node.key] ?? defaultOpen);
   return `<div class="ecp-org-tree-group" style="--org-level:${Number(node.level) || 0}">
-    <button class="ecp-org-tree-node ${node.key === selectedKey ? "active" : ""}" type="button" data-ecp-org-node="${escapeHtml(node.key)}" aria-current="${node.key === selectedKey ? "true" : "false"}">
-      <span class="ecp-org-tree-caret ${hasChildren ? "" : "empty"} ${expanded ? "expanded" : ""}" data-ecp-org-toggle="${escapeHtml(node.key)}" aria-hidden="true">${hasChildren ? "›" : ""}</span>
-      <span class="ecp-org-tree-name">${escapeHtml(node.name || "未命名组织")}</span>
-      <span class="ecp-org-tree-count">${count}</span>
-    </button>
-    ${hasChildren ? `<div class="ecp-org-tree-children ${expanded ? "" : "collapsed"}">${node.children.map((child) => renderEcpOrgTreeNode(child, selectedKey)).join("")}</div>` : ""}
+    <div class="ecp-org-tree-row ${node.key === selectedKey ? "active" : ""}">
+      ${hasChildren
+        ? `<button class="ecp-org-tree-toggle" type="button" data-ecp-org-toggle="${escapeHtml(node.key)}" aria-expanded="${expanded ? "true" : "false"}" aria-label="${expanded ? "收起" : "展开"}${escapeHtml(node.name || "组织节点")}"><span class="ecp-org-tree-caret ${expanded ? "expanded" : ""}" aria-hidden="true">›</span></button>`
+        : '<span class="ecp-org-tree-toggle-placeholder" aria-hidden="true"></span>'}
+      <button class="ecp-org-tree-node ${node.key === selectedKey ? "active" : ""}" type="button" data-ecp-org-node="${escapeHtml(node.key)}" aria-current="${node.key === selectedKey ? "true" : "false"}">
+        <span class="ecp-org-tree-name">${escapeHtml(node.name || "未命名组织")}</span>
+        <span class="ecp-org-tree-count">${count}</span>
+      </button>
+    </div>
+    ${hasChildren ? `<div class="ecp-org-tree-children ${expanded ? "" : "collapsed"}" aria-hidden="${expanded ? "false" : "true"}" ${expanded ? "" : "inert"}><div class="ecp-org-tree-children-inner">${node.children.map((child) => renderEcpOrgTreeNode(child, selectedKey)).join("")}</div></div>` : ""}
   </div>`;
 }
 
@@ -11533,9 +11731,14 @@ function bindPageEvents() {
       event.stopPropagation();
       const key = el.dataset.ecpOrgToggle || "";
       if (!key) return;
-      state.ecpOrgTreeOpen[key] = !(state.ecpOrgTreeOpen[key] ?? true);
-      el.classList.toggle("expanded", state.ecpOrgTreeOpen[key]);
-      el.closest(".ecp-org-tree-group")?.querySelector(":scope > .ecp-org-tree-children")?.classList.toggle("collapsed", !state.ecpOrgTreeOpen[key]);
+      state.ecpOrgTreeOpen[key] = el.getAttribute("aria-expanded") !== "true";
+      el.setAttribute("aria-expanded", state.ecpOrgTreeOpen[key] ? "true" : "false");
+      el.setAttribute("aria-label", `${state.ecpOrgTreeOpen[key] ? "收起" : "展开"}${el.closest(".ecp-org-tree-row")?.querySelector(".ecp-org-tree-name")?.textContent || "组织节点"}`);
+      el.querySelector(".ecp-org-tree-caret")?.classList.toggle("expanded", state.ecpOrgTreeOpen[key]);
+      const children = el.closest(".ecp-org-tree-group")?.querySelector(":scope > .ecp-org-tree-children");
+      children?.classList.toggle("collapsed", !state.ecpOrgTreeOpen[key]);
+      children?.setAttribute("aria-hidden", state.ecpOrgTreeOpen[key] ? "false" : "true");
+      if (children) children.inert = !state.ecpOrgTreeOpen[key];
     })
   );
   document.querySelectorAll("[data-ecp-org-account-set]").forEach((el) =>
@@ -14138,7 +14341,7 @@ function assetCreateFormMarkup() {
         <h3>使用信息</h3>
       </div>
       <div class="asset-form-grid">
-        ${assetField("人员姓名", directoryPersonSelect("ownerSubject", "", false))}
+        ${assetField("人员姓名", directoryPersonSearch("ownerSubject"))}
         ${assetField("使用公司", inlineSelect("company", "使用公司", defaultCompanyOptions, { required: true }), { required: true })}
         ${assetField("使用部门", inlineSelect("department", "使用部门", defaultDepartmentOptions))}
         ${assetField("领用/借用日期", `<input name="receiveDate" type="date" value="${todayValue()}" />`)}
@@ -14232,6 +14435,7 @@ function openModal() {
   bindPlaceholderSelects(modal);
   bindPortalSelects(modal);
   bindInlineSelects(modal);
+  bindDirectoryPersonSearches(modal);
   bindAssetCodeInputs(modal);
   bindAssetFlowSelection(modal);
   bindAssetFlowActions(modal);
@@ -14540,6 +14744,9 @@ document.addEventListener("click", (event) => {
   }
   if (!event.target.closest("[data-portal-select], [data-portal-select-menu]")) {
     closePortalSelect();
+  }
+  if (!event.target.closest("[data-ecp-person-search]")) {
+    document.querySelectorAll("[data-ecp-person-search]").forEach(settleDirectoryPersonSearch);
   }
 });
 
