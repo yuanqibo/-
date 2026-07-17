@@ -3458,8 +3458,44 @@ button {
   margin-bottom: 12px;
 }
 
-.vue-feature-host {
-  display: contents;
+.standard-route-state {
+  min-height: 100vh;
+  padding: 40px;
+  display: grid;
+  place-items: center;
+  background: #f8fafc;
+}
+
+.standard-route-state > * {
+  width: min(880px, 100%);
+}
+
+.standard-account-entry {
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: transparent;
+}
+
+.standard-account-entry:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.2);
+  outline-offset: 2px;
+}
+
+.standard-portal-shell .sidebar-tools {
+  margin-top: auto;
+}
+
+.standard-system-content > .panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .employee-directory-feature {
@@ -3472,16 +3508,10 @@ button {
 }
 
 .employee-directory-feature > .panel-header,
-.employee-directory-feature > .toolbar,
+.employee-directory-feature > .employee-directory-toolbar,
 .employee-directory-feature > .employee-directory-message,
 .employee-directory-feature > .employee-directory-pagination {
   flex: 0 0 auto;
-}
-
-.employee-directory-feature > .table-wrap {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
 }
 
 .employee-directory-panel .panel-title {
@@ -3495,53 +3525,50 @@ button {
 
 .employee-directory-toolbar {
   margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.employee-directory-toolbar input,
-.employee-directory-toolbar .btn {
-  min-height: 32px;
-  height: 32px;
-  font-size: 13px;
+.employee-directory-toolbar .el-form-item {
+  margin: 0;
 }
 
-.employee-directory-toolbar .btn {
-  padding: 0 12px;
-}
-
-.employee-directory-toolbar input {
+.employee-directory-toolbar .el-form-item:first-child {
   width: min(360px, 100%);
+}
+
+.employee-directory-toolbar .el-input {
+  width: 100%;
 }
 
 .employee-directory-table-wrap {
   position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff;
 }
 
-.employee-directory-table-wrap table {
-  min-width: 980px;
-}
-
-.employee-directory-loading {
-  position: absolute;
-  inset: 42px 0 0;
-  display: grid;
-  place-items: center;
-  background: rgba(255, 255, 255, 0.82);
-  color: var(--muted);
+.employee-directory-table-wrap .el-table {
+  --el-table-border-color: var(--line);
+  --el-table-header-bg-color: #f8fafc;
+  --el-table-header-text-color: #475569;
+  --el-table-text-color: #111827;
   font-size: 13px;
 }
 
 .employee-directory-message {
-  min-height: 42px;
   margin-bottom: 12px;
-  padding: 8px 12px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  border: 1px solid #f4c7c3;
-  background: #fff5f4;
-  color: #b42318;
-  font-size: 13px;
+}
+
+.employee-directory-message .el-alert {
+  flex: 1 1 auto;
 }
 
 .employee-directory-pagination {
@@ -3550,49 +3577,26 @@ button {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.employee-directory-pagination .btn {
-  min-height: 30px;
-  height: 30px;
-  padding: 0 10px;
-}
-
-.employee-status {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-.employee-status.is-enabled {
-  background: #ecfdf3;
-  color: #067647;
-}
-
-.employee-status.is-disabled {
-  background: #f2f4f7;
-  color: #667085;
 }
 
 @media (max-width: 720px) {
   .employee-directory-toolbar {
     align-items: stretch;
+    flex-direction: column;
   }
 
-  .employee-directory-toolbar input {
-    flex-basis: 100%;
+  .employee-directory-toolbar .el-form-item,
+  .employee-directory-toolbar .el-form-item:first-child {
     width: 100%;
   }
 
+  .employee-directory-toolbar .el-form-item__content {
+    flex-wrap: nowrap;
+  }
+
   .employee-directory-pagination {
-    justify-content: space-between;
-    flex-wrap: wrap;
+    justify-content: flex-start;
+    overflow-x: auto;
   }
 }
 

@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { match as pinyinMatch, pinyin } from "pinyin-pro";
 import { formatPermissionDisplayName } from "../authz/permission-display";
-import { syncEmployeeDirectoryFeature } from "../features/employees/mount";
 
 const selfServiceSettingsStorageKey = "assetPortalSelfServiceSettingsV9";
 const assetCodeRuleStorageKey = "assetPortalAssetCodeRuleSettingsV1";
@@ -2111,7 +2110,7 @@ const state = {
   ecpOrgPageSize: 20,
   assetReceiveReturnTab: "receive",
   assetBorrowReturnTab: "borrow",
-  systemMenu: "员工信息",
+  systemMenu: "",
   ecpOrgSelectedKey: "",
   ecpOrgAccountSetUnionId: "",
   ecpOrgTreeOpen: {},
@@ -10409,12 +10408,6 @@ function renderSystemPlaceholder(title, description) {
   </div>`;
 }
 
-function renderEmployeeDirectory() {
-  return `<div class="system-content">
-    <div class="vue-feature-host" data-vue-feature="employee-directory"></div>
-  </div>`;
-}
-
 function directoryUserStatusLabel(status = "") {
   const normalized = String(status || "").trim();
   if (!normalized) return "在用";
@@ -11214,7 +11207,6 @@ function bindSelfServiceSettingsEvents() {
 }
 
 function renderSystemMainContent() {
-  if (state.systemMenu === "员工信息") return renderEmployeeDirectory();
   if (state.systemMenu === "组织架构") return renderDepartmentDirectory();
   if (isMemberAuthorizationMenuLabel(state.systemMenu)) return renderAccountManagement();
   if (state.systemMenu === "员工自助") {
@@ -11225,7 +11217,6 @@ function renderSystemMainContent() {
   if (state.systemMenu === "系统对接") return renderSystemIntegrations();
   if (state.systemMenu === "表单管理") return renderSystemForms();
   const descriptions = {
-    员工信息: "查看员工档案、账号归属和员工端登录基础信息。",
     组织架构: "按 ECP 管理台结构查看飞书账号集、组织树和成员状态。",
     成员授权: "在资产系统内嵌入 ECP SDK 成员授权工作台，配置应用角色和成员权限。",
     员工自助: "配置员工领用、退库、借用、报修和签字确认能力。",
@@ -11475,6 +11466,13 @@ function scheduleAuthzWorkspaceFrameLoad() {
 
 function setSystemMenu(menu, menuId = "") {
   if (!menu) return;
+  const target = portalMenuById(menuId)
+    || portalMenuItems().find((item) => item.parentId === "settings" && systemMenuMatchesItem(item, menu));
+  const context = readEcpContext();
+  if (target && context?.getCurrentMenu?.()?.id !== target.id) {
+    void context.navigate(target.id).catch((error) => showToast(error?.message || "页面跳转失败"));
+    return;
+  }
   captureCurrentSystemScrollMemory();
   state.systemMenu = menu;
   state.route = "settings";
@@ -11816,7 +11814,6 @@ function bindDashboardBarTooltips(root = document) {
 }
 
 function bindPageEvents() {
-  syncEmployeeDirectoryFeature();
   bindPlaceholderSelects();
   bindPortalSelects();
   bindInlineSelects();

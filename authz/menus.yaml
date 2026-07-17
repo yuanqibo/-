@@ -140,7 +140,7 @@ menus:
     icon: Setting
     path: /system
     pageKey: asset.portal.system
-    file: /src/views/PortalView.vue
+    file: /src/views/SystemIndexView.vue
     order: 50
     permissionMode: ANY
     permissionCodes:
@@ -157,7 +157,7 @@ menus:
     title: 员工信息
     path: /system/employees
     pageKey: asset.portal.system.employees
-    file: /src/views/PortalView.vue
+    file: /src/views/EmployeeDirectoryPage.vue
     order: 51
     permissionCodes:
       - asset:employee:view

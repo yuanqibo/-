@@ -21,12 +21,19 @@ src/
   shared/               与业务无关的通用能力，例如 HTTP 客户端和基础组件
   features/<domain>/    按业务域组织的 API、composables、components 和页面
   views/                路由页面入口
-  portal/               迁移期旧页面及 Vue 挂载适配器
+  portal/               尚未迁移的历史业务页面
 ```
 
 新增业务界面必须使用 Vue 单文件组件和 Composition API。业务组件通过 `features/<domain>/api` 访问 Java API，通过 composable 管理页面状态；不得在 `app.ts` 中新增 HTML 字符串、全局事件绑定或业务请求。
 
-`src/portal/app.ts` 是历史实现，只允许为迁移删除代码或增加最小挂载适配。每完成一个业务域迁移，应删除该业务域在旧文件里的渲染、事件和状态代码。员工信息是第一个完成迁移的业务域，目录位于 `src/features/employees/`。
+`src/portal/app.ts` 是历史实现，只允许为迁移删除代码，不再新增挂载适配器。每完成一个业务域迁移，应同时删除该业务域在旧文件里的渲染、事件、状态和临时桥接代码。
+
+当前迁移状态：
+
+- `员工信息` 已完成首个业务域迁移，目录位于 `src/features/employees/`。
+- 路由 `/system/employees` 由 Vue Router 直接加载 `src/views/EmployeeDirectoryPage.vue`。
+- 员工目录请求集中在 feature API 层，并统一经过 `src/shared/api/http.ts`。
+- 其余业务域仍由历史入口承载；全部迁移完成后删除 `src/portal/app.ts`。
 
 ## 后端分层
 
@@ -55,4 +62,4 @@ Controller 不直接实现持久化逻辑；Repository 不处理页面展示状�
 2. 请求集中在 feature API 层，页面没有散落的 `fetch`。
 3. 查询、加载、错误、空数据和分页状态完整。
 4. Java API 负责权限、校验和持久化，生产存储为 MySQL。
-5. `npm run build`、`npm run validate:authz` 和 `npm run test:backend` 通过。
+5. `npm run typecheck`、`npm run validate:authz`、`npm run build` 和 `npm run test:backend` 通过。

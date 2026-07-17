@@ -1,9 +1,6 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
-import {
-  getDirectoryEmployees,
-  type DirectoryEmployee,
-  type DirectoryEmployeePage
-} from '../api/employee-directory.api'
+import { getDirectoryEmployees } from '../api/employee-directory.api'
+import type { DirectoryEmployee, DirectoryEmployeePage } from '../types/employee-directory'
 
 const EMPTY_PAGE: DirectoryEmployeePage = {
   items: [],

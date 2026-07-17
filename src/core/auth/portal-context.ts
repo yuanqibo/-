@@ -44,6 +44,7 @@ export type PortalEcpContext = {
 declare global {
   interface Window {
     __ASSET_PORTAL_ECP_CONTEXT__?: PortalEcpContext
+    assetPortalApplyEcpSession?: () => boolean
   }
 }
 

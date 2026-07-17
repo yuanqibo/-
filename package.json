@@ -23,6 +23,7 @@
     "test:backend": "npm run install:ecp-java-sdk && mvn -f backend/pom.xml test"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "@acg/ecp-auth": "file:vendor/ecp-sdk/acg-ecp-auth-0.1.36.tgz",
     "@acg/ecp-auth-vue": "file:vendor/ecp-sdk/acg-ecp-auth-vue-0.1.36.tgz",
     "@acg/ecp-core": "file:vendor/ecp-sdk/acg-ecp-core-0.1.35.tgz",
