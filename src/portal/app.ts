@@ -26,6 +26,13 @@ let systemIntegrations = [];
 let systemForms = [];
 let assetOperationRecords = [];
 let authzWorkspaceLoadTimer = 0;
+let authzWorkspaceDrawerObserver = null;
+let authzWorkspaceObservedFrame = null;
+let authzWorkspaceFrameLoadHandler = null;
+let authzWorkspaceDockedShell = null;
+let authzWorkspaceDockAnchor = null;
+let authzWorkspaceAnchorResizeObserver = null;
+let authzWorkspacePositionHandler = null;
 
 async function systemConfigApiRequest(path, options = {}) {
   const method = options.method || "GET";
@@ -10766,9 +10773,11 @@ function renderAccountManagement() {
           <div class="panel-subtitle">使用 ECP SDK 工作台管理应用角色、账号授权和权限模型，保持在资产系统内操作。</div>
         </div>
       </div>
-      ${canAuthorize ? `<div class="account-management-frame-shell">
-        <div class="account-management-frame-loading">正在加载 ECP 成员授权工作台...</div>
-        <iframe class="account-management-frame" src="about:blank" data-authz-workspace-src="/workspace" title="ECP 成员授权工作台" loading="lazy"></iframe>
+      ${canAuthorize ? `<div class="account-management-frame-anchor">
+        <div class="account-management-frame-shell">
+          <div class="account-management-frame-loading">正在加载 ECP 成员授权工作台...</div>
+          <iframe class="account-management-frame" src="about:blank" data-authz-workspace-src="/workspace" title="ECP 成员授权工作台" loading="lazy"></iframe>
+        </div>
       </div>` : '<p class="empty-note">当前账号没有 ECP 成员授权权限，请先让应用管理员授予 authz:app_role:view / assign 等权限。</p>'}
     </section>
   </div>`;
@@ -11311,6 +11320,7 @@ function refreshSystemContentOnly() {
   renderChrome();
   systemPage.classList.toggle("self-service-system-page", state.systemMenu === "员工自助");
   updateSystemMenuActiveDom();
+  if (authzWorkspaceObservedFrame) disconnectAuthzWorkspaceFrameBridge();
   currentContent.outerHTML = renderSystemMainContent();
   const nextContent = systemPage.querySelector(".system-content");
   if (nextContent) {
@@ -11327,12 +11337,114 @@ function refreshSystemContentOnly() {
   scheduleAuthzWorkspaceFrameLoad();
 }
 
+function setAuthzWorkspaceDrawerOverlay(frame, active) {
+  const shell = authzWorkspaceDockedShell || frame?.closest(".account-management-frame-shell");
+  shell?.classList.toggle("is-workspace-drawer-open", active);
+  document.body.classList.toggle("authz-workspace-overlay-active", active);
+  try {
+    frame?.contentDocument?.body?.classList.toggle("authz-workspace-portal-overlay-active", active);
+  } catch {
+    // The workspace is expected to be same-origin; fail closed if deployment changes that contract.
+  }
+  if (!active) positionAuthzWorkspaceDock();
+}
+
+function positionAuthzWorkspaceDock() {
+  if (!authzWorkspaceDockedShell || !authzWorkspaceDockAnchor?.isConnected) return;
+  if (authzWorkspaceDockedShell.classList.contains("is-workspace-drawer-open")) return;
+  const rect = authzWorkspaceDockAnchor.getBoundingClientRect();
+  authzWorkspaceDockedShell.style.setProperty("--authz-workspace-dock-left", `${Math.round(rect.left)}px`);
+  authzWorkspaceDockedShell.style.setProperty("--authz-workspace-dock-top", `${Math.round(rect.top)}px`);
+  authzWorkspaceDockedShell.style.setProperty("--authz-workspace-dock-width", `${Math.round(rect.width)}px`);
+  authzWorkspaceDockedShell.style.setProperty("--authz-workspace-dock-height", `${Math.round(rect.height)}px`);
+}
+
+function dockAuthzWorkspaceFrame(frame) {
+  const shell = frame?.closest(".account-management-frame-shell");
+  const anchor = shell?.closest(".account-management-frame-anchor");
+  if (!shell || !anchor) return;
+  authzWorkspaceDockedShell = shell;
+  authzWorkspaceDockAnchor = anchor;
+  shell.classList.add("is-workspace-docked");
+  document.body.append(shell);
+  authzWorkspacePositionHandler = () => positionAuthzWorkspaceDock();
+  window.addEventListener("resize", authzWorkspacePositionHandler);
+  window.addEventListener("scroll", authzWorkspacePositionHandler, true);
+  if (window.ResizeObserver) {
+    authzWorkspaceAnchorResizeObserver = new ResizeObserver(authzWorkspacePositionHandler);
+    authzWorkspaceAnchorResizeObserver.observe(anchor);
+  }
+  positionAuthzWorkspaceDock();
+}
+
+function disconnectAuthzWorkspaceFrameBridge() {
+  authzWorkspaceDrawerObserver?.disconnect();
+  authzWorkspaceDrawerObserver = null;
+  if (authzWorkspaceObservedFrame && authzWorkspaceFrameLoadHandler) {
+    authzWorkspaceObservedFrame.removeEventListener("load", authzWorkspaceFrameLoadHandler);
+  }
+  setAuthzWorkspaceDrawerOverlay(authzWorkspaceObservedFrame, false);
+  authzWorkspaceAnchorResizeObserver?.disconnect();
+  authzWorkspaceAnchorResizeObserver = null;
+  if (authzWorkspacePositionHandler) {
+    window.removeEventListener("resize", authzWorkspacePositionHandler);
+    window.removeEventListener("scroll", authzWorkspacePositionHandler, true);
+  }
+  authzWorkspaceDockedShell?.remove();
+  authzWorkspaceDockedShell = null;
+  authzWorkspaceDockAnchor = null;
+  authzWorkspacePositionHandler = null;
+  authzWorkspaceObservedFrame = null;
+  authzWorkspaceFrameLoadHandler = null;
+}
+
+function observeAuthzWorkspaceDrawers(frame) {
+  authzWorkspaceDrawerObserver?.disconnect();
+  authzWorkspaceDrawerObserver = null;
+  setAuthzWorkspaceDrawerOverlay(frame, false);
+  try {
+    const frameDocument = frame.contentDocument;
+    const frameWindow = frame.contentWindow;
+    if (!frameDocument?.body || !frameWindow) return;
+    const sync = () => {
+      const active = [...frameDocument.querySelectorAll(".el-overlay.is-drawer")].some((overlay) => {
+        if (!overlay.querySelector(".el-drawer")) return false;
+        const style = frameWindow.getComputedStyle(overlay);
+        return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+      });
+      setAuthzWorkspaceDrawerOverlay(frame, active);
+    };
+    authzWorkspaceDrawerObserver = new frameWindow.MutationObserver(sync);
+    authzWorkspaceDrawerObserver.observe(frameDocument.body, {
+      attributes: true,
+      attributeFilter: ["class", "style"],
+      childList: true,
+      subtree: true,
+    });
+    sync();
+  } catch (error) {
+    console.warn("[asset-portal] ECP workspace drawer bridge unavailable", error);
+  }
+}
+
+function connectAuthzWorkspaceFrameBridge(frame) {
+  if (authzWorkspaceObservedFrame === frame && authzWorkspaceFrameLoadHandler) return;
+  disconnectAuthzWorkspaceFrameBridge();
+  authzWorkspaceObservedFrame = frame;
+  dockAuthzWorkspaceFrame(frame);
+  authzWorkspaceFrameLoadHandler = () => observeAuthzWorkspaceDrawers(frame);
+  frame.addEventListener("load", authzWorkspaceFrameLoadHandler);
+  observeAuthzWorkspaceDrawers(frame);
+}
+
 function scheduleAuthzWorkspaceFrameLoad() {
   window.clearTimeout(authzWorkspaceLoadTimer);
   authzWorkspaceLoadTimer = window.setTimeout(() => {
     if (!isMemberAuthorizationMenuLabel(state.systemMenu)) return;
     const frame = document.querySelector(".account-management-frame");
-    if (!frame || frame.dataset.loaded === "true") return;
+    if (!frame) return;
+    connectAuthzWorkspaceFrameBridge(frame);
+    if (frame.dataset.loaded === "true") return;
     frame.dataset.loaded = "true";
     frame.setAttribute("src", frame.dataset.authzWorkspaceSrc || "/workspace");
   }, 900);
@@ -11378,6 +11490,7 @@ function toolbar(placeholders) {
 
 
 function render() {
+  disconnectAuthzWorkspaceFrameBridge();
   if (!isAuthenticated() && isEcpAuthEnabled() && applyEcpSession()) {
     render();
     return;

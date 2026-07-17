@@ -21,6 +21,19 @@ body:has(.authz-workspace-host) #app {
   overflow: hidden !important;
 }
 
+body.authz-workspace-portal-overlay-active {
+  background: transparent !important;
+}
+
+body.authz-workspace-portal-overlay-active #app {
+  visibility: hidden !important;
+  background: transparent !important;
+}
+
+body.authz-workspace-portal-overlay-active .el-overlay.is-drawer {
+  visibility: visible !important;
+}
+
 .authz-workspace-host,
 .authz-workspace-host * {
   box-sizing: border-box !important;
@@ -422,12 +435,12 @@ body:has(.authz-workspace-host) #app {
 /* Role editor drawer: keep the embedded workspace dense, but give editing a clear visual hierarchy. */
 html:has(.authz-workspace-host),
 body:has(.authz-workspace-host) {
-  --authz-role-editor-drawer-width: clamp(700px, 52vw, 840px);
-  --authz-editor-drawer-width: clamp(700px, 52vw, 840px);
+  --authz-role-editor-drawer-width: min(100vw, 600px);
+  --authz-editor-drawer-width: min(100vw, 600px);
 }
 
 body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
-  background: rgba(15, 23, 42, 0.5) !important;
+  background: rgba(0, 0, 0, 0.5) !important;
   backdrop-filter: none !important;
 }
 
@@ -445,7 +458,7 @@ body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
 }
 
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-drawer__header {
-  min-height: 68px !important;
+  min-height: 64px !important;
   margin: 0 !important;
   padding: 0 28px !important;
   border-bottom: 1px solid #edf1f6 !important;
@@ -477,7 +490,7 @@ body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
 }
 
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-drawer__body {
-  padding: 24px 28px 32px !important;
+  padding: 24px 20px 28px !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
   scrollbar-gutter: stable !important;
@@ -490,17 +503,17 @@ body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
 
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .workspace-step-strip {
   display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  gap: 16px !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 12px !important;
 }
 
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .workspace-step-strip__item {
   display: grid !important;
-  min-height: 80px !important;
-  grid-template-columns: 34px minmax(0, 1fr) !important;
+  min-height: 58px !important;
+  grid-template-columns: 28px minmax(0, 1fr) !important;
   align-items: center !important;
   gap: 12px !important;
-  padding: 14px 18px !important;
+  padding: 14px !important;
   border: 1px solid #dce3ed !important;
   border-radius: 8px !important;
   background: #fafbfc !important;
@@ -520,12 +533,12 @@ body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
 }
 
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .workspace-step-strip__index {
-  width: 34px !important;
-  height: 34px !important;
+  width: 28px !important;
+  height: 28px !important;
   border-radius: 50% !important;
   color: #667085 !important;
   background: #eef2f7 !important;
-  font-size: 13px !important;
+  font-size: 12px !important;
   font-weight: 700 !important;
 }
 
@@ -536,7 +549,7 @@ body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
 
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .workspace-step-strip__body strong {
   color: #1f2937 !important;
-  font-size: 15px !important;
+  font-size: 14px !important;
   font-weight: 600 !important;
   line-height: 1.4 !important;
 }
@@ -671,17 +684,17 @@ body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
 }
 
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-drawer__footer {
-  min-height: 72px !important;
-  padding: 14px 28px !important;
+  min-height: 52px !important;
+  padding: 8px 20px !important;
   border-top: 1px solid #edf1f6 !important;
   background: #ffffff !important;
   box-shadow: 0 -8px 18px rgba(15, 23, 42, 0.03) !important;
 }
 
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-drawer__footer .el-button {
-  min-width: 92px !important;
-  height: 40px !important;
-  padding: 0 20px !important;
+  min-width: 68px !important;
+  height: 32px !important;
+  padding: 0 16px !important;
   border-radius: 6px !important;
   font-size: 14px !important;
   font-weight: 500 !important;
@@ -709,6 +722,12 @@ body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
   :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-drawer__body {
     padding-left: 20px !important;
     padding-right: 20px !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .workspace-step-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
 
