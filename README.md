@@ -98,6 +98,8 @@ vendor/ecp-sdk-java/     ECP Java Maven 制品
 scripts/                 SDK 安装、部署和更新脚本
 ```
 
+前端新业务按 `core/shared/features/views` 分层，禁止继续向历史文件 `src/portal/app.ts` 添加字符串模板或业务请求。详细边界、API 约定和迁移完成标准见 [项目架构规范](docs/architecture.md)。
+
 ## 权限边界
 
 - 生产身份与管理角色由 Java 根据 ECP 会话解析。

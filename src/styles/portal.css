@@ -3458,6 +3458,32 @@ button {
   margin-bottom: 12px;
 }
 
+.vue-feature-host {
+  display: contents;
+}
+
+.employee-directory-feature {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.employee-directory-feature > .panel-header,
+.employee-directory-feature > .toolbar,
+.employee-directory-feature > .employee-directory-message,
+.employee-directory-feature > .employee-directory-pagination {
+  flex: 0 0 auto;
+}
+
+.employee-directory-feature > .table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
 .employee-directory-panel .panel-title {
   font-size: 16px;
 }
@@ -3480,6 +3506,94 @@ button {
 
 .employee-directory-toolbar .btn {
   padding: 0 12px;
+}
+
+.employee-directory-toolbar input {
+  width: min(360px, 100%);
+}
+
+.employee-directory-table-wrap {
+  position: relative;
+}
+
+.employee-directory-table-wrap table {
+  min-width: 980px;
+}
+
+.employee-directory-loading {
+  position: absolute;
+  inset: 42px 0 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.employee-directory-message {
+  min-height: 42px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #f4c7c3;
+  background: #fff5f4;
+  color: #b42318;
+  font-size: 13px;
+}
+
+.employee-directory-pagination {
+  flex: 0 0 auto;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.employee-directory-pagination .btn {
+  min-height: 30px;
+  height: 30px;
+  padding: 0 10px;
+}
+
+.employee-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.employee-status.is-enabled {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.employee-status.is-disabled {
+  background: #f2f4f7;
+  color: #667085;
+}
+
+@media (max-width: 720px) {
+  .employee-directory-toolbar {
+    align-items: stretch;
+  }
+
+  .employee-directory-toolbar input {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .employee-directory-pagination {
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
 }
 
 .system-content-enter {

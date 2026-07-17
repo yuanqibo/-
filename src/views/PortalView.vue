@@ -5,50 +5,11 @@ import JSZip from 'jszip'
 import { ecp, waitForEcpReady, type AuthzSessionContext } from '../ecp'
 import type { MenuTreeNode } from '@acg/ecp-sdk'
 import PortalShell from '../components/PortalShell.vue'
+import type { PortalMenuItem, PortalUser } from '../core/auth/portal-context'
 import '../styles/portal.css'
-
-type PortalUser = {
-  name: string
-  account: string
-  email: string
-  phone: string
-  department: string
-  company: string
-  roleCode: string
-  roleName: string
-  managerRoleCode: string
-  managerRoleName: string
-  scope: string
-  loginType: string
-  identitySource: string
-  externalSubject: string
-  bindStatus: string
-  avatar?: string
-  permissionCodes: string[]
-}
-
-type PortalMenuItem = {
-  id: string
-  parentId: string
-  title: string
-  path: string
-  pageKey: string
-  order: number
-}
 
 declare global {
   interface Window {
-    __ASSET_PORTAL_ECP_CONTEXT__?: {
-      enabled: boolean
-      session: AuthzSessionContext | null
-      user: PortalUser
-      getUser: () => PortalUser
-      menuItems: PortalMenuItem[]
-      getMenuItems: () => PortalMenuItem[]
-      getCurrentMenu: () => PortalMenuItem | null
-      navigate: (menuId: string) => Promise<void>
-      logout: () => Promise<void>
-    }
     assetPortalApplyEcpSession?: () => boolean
     JSZip: typeof JSZip
   }

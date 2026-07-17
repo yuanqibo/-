@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { match as pinyinMatch, pinyin } from "pinyin-pro";
 import { formatPermissionDisplayName } from "../authz/permission-display";
+import { syncEmployeeDirectoryFeature } from "../features/employees/mount";
 
 const selfServiceSettingsStorageKey = "assetPortalSelfServiceSettingsV9";
 const assetCodeRuleStorageKey = "assetPortalAssetCodeRuleSettingsV1";
@@ -10409,30 +10410,8 @@ function renderSystemPlaceholder(title, description) {
 }
 
 function renderEmployeeDirectory() {
-  const query = normalizeDirectoryQuery(state.query);
-  const rows = searchDirectoryUsers(ecpDirectoryUsers, query);
   return `<div class="system-content">
-    <section class="panel employee-directory-panel">
-      <div class="panel-header">
-        <div>
-          <h2 class="panel-title">员工信息</h2>
-          <div class="panel-subtitle">${rows.length} 个 ECP 目录账号</div>
-        </div>
-      </div>
-      <div class="toolbar employee-directory-toolbar">
-        <input class="local-search" type="search" placeholder="搜索名称或编码" value="${escapeHtml(state.query)}" autocomplete="off" spellcheck="false">
-        <button class="btn primary" data-search>查询</button>
-        <button class="btn" data-reset>重置</button>
-      </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>姓名</th><th>工号</th><th>岗位</th><th>所属公司</th><th>部门</th><th>ECP Subject</th><th>状态</th></tr></thead>
-        <tbody>${rows.length ? rows.map((user) => `<tr>
-          <td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.employeeNo || "-")}</td><td>${escapeHtml(user.jobTitle || "-")}</td>
-          <td>${escapeHtml(user.company || "-")}</td><td>${escapeHtml(user.department || "-")}</td><td><code>${escapeHtml(user.subject)}</code></td>
-          <td>${statusTag(user.status || "在用")}</td>
-        </tr>`).join("") : '<tr class="empty-row"><td colspan="7">当前范围内没有员工目录数据。</td></tr>'}</tbody>
-      </table></div>
-    </section>
+    <div class="vue-feature-host" data-vue-feature="employee-directory"></div>
   </div>`;
 }
 
@@ -11837,6 +11816,7 @@ function bindDashboardBarTooltips(root = document) {
 }
 
 function bindPageEvents() {
+  syncEmployeeDirectoryFeature();
   bindPlaceholderSelects();
   bindPortalSelects();
   bindInlineSelects();
