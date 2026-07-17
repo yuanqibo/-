@@ -1,6 +1,10 @@
 // @ts-nocheck
 import { match as pinyinMatch, pinyin } from "pinyin-pro";
 import { formatPermissionDisplayName } from "../authz/permission-display";
+import {
+  isStandardVueRoute,
+  MEMBER_AUTHORIZATION_EMBED_PATH,
+} from "../core/routing/standard-routes";
 
 const selfServiceSettingsStorageKey = "assetPortalSelfServiceSettingsV9";
 const assetCodeRuleStorageKey = "assetPortalAssetCodeRuleSettingsV1";
@@ -10749,7 +10753,7 @@ function renderAccountManagement() {
       ${canAuthorize ? `<div class="account-management-frame-anchor">
         <div class="account-management-frame-shell">
           <div class="account-management-frame-loading">正在加载 ECP 成员授权工作台...</div>
-          <iframe class="account-management-frame" src="about:blank" data-authz-workspace-src="/workspace" title="ECP 成员授权工作台" loading="lazy"></iframe>
+          <iframe class="account-management-frame" src="about:blank" data-authz-workspace-src="${MEMBER_AUTHORIZATION_EMBED_PATH}" title="ECP 成员授权工作台" loading="lazy"></iframe>
         </div>
       </div>` : '<p class="empty-note">当前账号没有 ECP 成员授权权限，请先让应用管理员授予 authz:app_role:view / assign 等权限。</p>'}
     </section>
@@ -11460,7 +11464,7 @@ function scheduleAuthzWorkspaceFrameLoad() {
     connectAuthzWorkspaceFrameBridge(frame);
     if (frame.dataset.loaded === "true") return;
     frame.dataset.loaded = "true";
-    frame.setAttribute("src", frame.dataset.authzWorkspaceSrc || "/workspace");
+    frame.setAttribute("src", frame.dataset.authzWorkspaceSrc || MEMBER_AUTHORIZATION_EMBED_PATH);
   }, 900);
 }
 
@@ -11469,7 +11473,7 @@ function setSystemMenu(menu, menuId = "") {
   const target = portalMenuById(menuId)
     || portalMenuItems().find((item) => item.parentId === "settings" && systemMenuMatchesItem(item, menu));
   const context = readEcpContext();
-  if (target && context?.getCurrentMenu?.()?.id !== target.id) {
+  if (target && isStandardVueRoute(target.path) && context?.getCurrentMenu?.()?.id !== target.id) {
     void context.navigate(target.id).catch((error) => showToast(error?.message || "页面跳转失败"));
     return;
   }

@@ -25,7 +25,11 @@ window.JSZip = JSZip
 
 const notifyLegacyRoute = (): void => {
   if (!active || !legacyStarted || isStandardVueRoute(route.path)) return
-  const item = getPortalContext()?.getCurrentMenu()
+  const context = getPortalContext()
+  const portalMenuId = String(route.meta.portalMenuId || '')
+  const item = portalMenuId
+    ? context?.getMenuItems().find((menuItem) => menuItem.id === portalMenuId)
+    : context?.getCurrentMenu()
   if (item) window.dispatchEvent(new CustomEvent('asset-portal-route', { detail: item }))
 }
 
@@ -39,7 +43,7 @@ const startLegacyPortal = async (): Promise<void> => {
 }
 
 const stopReadyWatch = watch(ready, () => void startLegacyPortal(), { immediate: true })
-const stopRouteWatch = watch(() => route.path, notifyLegacyRoute)
+const stopRouteWatch = watch(() => [route.path, route.meta.portalMenuId], notifyLegacyRoute)
 
 onActivated(() => {
   active = true

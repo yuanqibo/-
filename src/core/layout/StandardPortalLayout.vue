@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Box, HomeFilled, QuestionFilled, Setting, Tickets } from '@element-plus/icons-vue'
 import { usePortalSession } from '../auth/portal-session'
 import type { PortalMenuItem } from '../auth/portal-context'
+import { MEMBER_AUTHORIZATION_PORTAL_PATH } from '../routing/standard-routes'
 
 const props = withDefaults(defineProps<{ pageTitle?: string }>(), {
   pageTitle: '系统'
@@ -30,12 +31,15 @@ const iconByMenuId = {
 
 const primaryActive = (item: PortalMenuItem): boolean => {
   if (item.id === 'assets') return route.path.startsWith('/assets')
-  if (item.id === 'settings') return route.path.startsWith('/system') || route.path.startsWith('/workspace')
+  if (item.id === 'settings') return route.path.startsWith('/system')
   return route.path === item.path
 }
 
+const routePathForMenu = (item: PortalMenuItem): string =>
+  item.id === 'authz.workspace' ? MEMBER_AUTHORIZATION_PORTAL_PATH : item.path
+
 const navigate = (item: PortalMenuItem): void => {
-  void router.push(item.path)
+  void router.push(routePathForMenu(item))
 }
 
 const menuIcon = (id: string) => iconByMenuId[id as keyof typeof iconByMenuId] || Setting
@@ -136,9 +140,9 @@ onUnmounted(() => {
                   v-for="item in systemMenus"
                   :key="item.id"
                   class="asset-subnav-item"
-                  :class="{ active: route.path === item.path }"
+                  :class="{ active: route.path === routePathForMenu(item) }"
                   type="button"
-                  :aria-current="route.path === item.path ? 'page' : undefined"
+                  :aria-current="route.path === routePathForMenu(item) ? 'page' : undefined"
                   @click="navigate(item)"
                 >
                   <span class="asset-subnav-dot" aria-hidden="true"></span>
