@@ -3,6 +3,28 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   plugins: [vue()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          // The ECP workspace web component is a prebundled, lazy-only artifact.
+          // Keep it outside the eager SDK chunk so normal portal routes never download it.
+          if (id.includes('/@acg/ecp-auth-vue/dist/workspace/element.js')) return undefined
+          if (id.includes('/@acg/ecp-auth-vue/')) return 'ecp-auth-vue'
+          if (id.includes('/@acg/ecp-auth/')) return 'ecp-auth'
+          if (id.includes('/@acg/ecp-core/')) return 'ecp-core'
+          if (id.includes('/@acg/ecp-ui/')) return 'ecp-ui'
+          if (id.includes('/@acg/ecp-sdk/')) return 'ecp-sdk'
+          if (id.includes('/element-plus/') || id.includes('/@element-plus/')) return 'element-plus'
+          if (id.includes('/vue/') || id.includes('/vue-router/')) return 'vue-runtime'
+          if (id.includes('/pinyin-pro/')) return 'pinyin'
+          return 'vendor'
+        }
+      }
+    },
+    chunkSizeWarningLimit: 2000
+  },
   optimizeDeps: {
     exclude: [
       '@acg/ecp-core',

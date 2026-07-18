@@ -21,19 +21,18 @@ src/
   shared/               与业务无关的通用能力，例如 HTTP 客户端和基础组件
   features/<domain>/    按业务域组织的 API、composables、components 和页面
   views/                路由页面入口
-  portal/               尚未迁移的历史业务页面
 ```
 
-新增业务界面必须使用 Vue 单文件组件和 Composition API。业务组件通过 `features/<domain>/api` 访问 Java API，通过 composable 管理页面状态；不得在 `app.ts` 中新增 HTML 字符串、全局事件绑定或业务请求。
+业务界面使用 Vue 单文件组件和 Composition API。业务组件通过 `features/<domain>/api` 访问 Java API，通过 composable 管理页面状态；组件内不得散落 `fetch`，不得使用 HTML 字符串、`innerHTML`、`querySelector` 或全局 DOM 事件驱动业务交互。
 
-`src/portal/app.ts` 是历史实现，只允许为迁移删除代码，不再新增挂载适配器。每完成一个业务域迁移，应同时删除该业务域在旧文件里的渲染、事件、状态和临时桥接代码。
+当前实现状态：
 
-当前迁移状态：
-
-- `员工信息` 与 `组织架构` 已完成业务域迁移，目录分别位于 `src/features/employees/` 和 `src/features/organization/`。
-- 路由 `/system/employees` 与 `/system/departments` 由 Vue Router 直接加载对应 Vue SFC。
-- 员工目录与组织架构请求集中在各自 feature API 层，并统一经过 `src/shared/api/http.ts`。
-- 其余业务域仍由历史入口承载；全部迁移完成后删除 `src/portal/app.ts`。
+- 所有 19 个菜单项均由 Vue SFC 或 ECP SDK 原生工作台承载，业务菜单不再指向通用旧入口。
+- 业务域位于 `src/features/assets`、`approvals`、`dashboard`、`employees`、`organization`、`member-authorization` 和 `system-settings`。
+- `src/portal/app.ts`、`PortalView`、`PortalShell` 及临时挂载桥已经删除。
+- API 请求统一经过 `src/shared/api/http.ts`，ECP Bearer 会话在该层注入。
+- ECP 成员授权工作台保留 SDK 的 `/workspace` 路由；资产系统的 `/system/member-authorization` Vue 页面负责嵌入和抽屉视口联动。
+- `vue-tsc --noEmit` 同时校验 TypeScript 与 Vue 模板类型。
 
 ## 后端分层
 

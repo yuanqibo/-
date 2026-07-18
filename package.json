@@ -10,11 +10,11 @@
   },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit && vite build",
+    "build": "vue-tsc --noEmit && vite build",
     "install:ecp-java-sdk": "bash scripts/install-ecp-java-sdk.sh",
     "build:backend": "npm run install:ecp-java-sdk && mvn -f backend/pom.xml clean package",
     "build:all": "npm run build && npm run build:backend",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "vue-tsc --noEmit",
     "validate:authz": "node scripts/validate-authz.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "start": "java -jar backend/target/access-assets-server-1.0.0.jar",
@@ -23,14 +23,13 @@
     "test:backend": "npm run install:ecp-java-sdk && mvn -f backend/pom.xml test"
   },
   "dependencies": {
-    "@element-plus/icons-vue": "^2.3.2",
     "@acg/ecp-auth": "file:vendor/ecp-sdk/acg-ecp-auth-0.1.36.tgz",
     "@acg/ecp-auth-vue": "file:vendor/ecp-sdk/acg-ecp-auth-vue-0.1.36.tgz",
     "@acg/ecp-core": "file:vendor/ecp-sdk/acg-ecp-core-0.1.35.tgz",
     "@acg/ecp-sdk": "file:vendor/ecp-sdk/acg-ecp-sdk-0.1.36.tgz",
     "@acg/ecp-ui": "file:vendor/ecp-sdk/acg-ecp-ui-0.1.35.tgz",
+    "@element-plus/icons-vue": "^2.3.2",
     "element-plus": "^2.13.2",
-    "jszip": "^3.10.1",
     "pinyin-pro": "^3.28.1"
   },
   "devDependencies": {

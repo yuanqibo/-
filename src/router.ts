@@ -14,7 +14,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: MEMBER_AUTHORIZATION_PORTAL_PATH,
         name: 'member-authorization-portal',
-        component: () => import('./views/PortalView.vue'),
+        component: () => import('./views/MemberAuthorizationPage.vue'),
         meta: { portalMenuId: 'authz.workspace' }
       }
     ]

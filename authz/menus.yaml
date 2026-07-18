@@ -4,7 +4,7 @@ menus:
     icon: Home
     path: /
     pageKey: asset.portal.home
-    file: /src/views/PortalView.vue
+    file: /src/views/HomePage.vue
     order: 10
     permissionCodes:
       - asset:item:view
@@ -16,7 +16,7 @@ menus:
     icon: Box
     path: /assets
     pageKey: asset.portal.assets
-    file: /src/views/PortalView.vue
+    file: /src/views/AssetListPage.vue
     order: 20
     permissionCodes:
       - asset:item:view
@@ -27,7 +27,7 @@ menus:
     title: 资产入库
     path: /assets/inbound
     pageKey: asset.portal.inbound
-    file: /src/views/PortalView.vue
+    file: /src/views/AssetInboundPage.vue
     order: 21
     permissionCodes:
       - asset:inbound:view
@@ -38,7 +38,7 @@ menus:
     title: 领用退库
     path: /assets/receive-return
     pageKey: asset.portal.receive-return
-    file: /src/views/PortalView.vue
+    file: /src/views/AssetReceiveReturnPage.vue
     order: 22
     permissionCodes:
       - asset:receive_return:view
@@ -49,7 +49,7 @@ menus:
     title: 借用归还
     path: /assets/borrow-return
     pageKey: asset.portal.borrow-return
-    file: /src/views/PortalView.vue
+    file: /src/views/AssetBorrowReturnPage.vue
     order: 23
     permissionCodes:
       - asset:borrow_return:view
@@ -60,7 +60,7 @@ menus:
     title: 资产盘点
     path: /assets/stocktake
     pageKey: asset.portal.stocktake
-    file: /src/views/PortalView.vue
+    file: /src/views/StocktakePage.vue
     order: 24
     permissionCodes:
       - asset:stocktake:view
@@ -71,7 +71,7 @@ menus:
     title: 资产设置
     path: /assets/settings
     pageKey: asset.portal.settings
-    file: /src/views/PortalView.vue
+    file: /src/views/AssetSettingsPage.vue
     order: 30
     permissionCodes:
       - asset:location_settings:view
@@ -85,7 +85,7 @@ menus:
     title: 位置管理
     path: /assets/settings/locations
     pageKey: asset.portal.settings.locations
-    file: /src/views/PortalView.vue
+    file: /src/views/AssetLocationSettingsPage.vue
     order: 31
     permissionCodes:
       - asset:location_settings:view
@@ -96,7 +96,7 @@ menus:
     title: 资产分类
     path: /assets/settings/categories
     pageKey: asset.portal.settings.categories
-    file: /src/views/PortalView.vue
+    file: /src/views/AssetCategorySettingsPage.vue
     order: 32
     permissionCodes:
       - asset:category_settings:view
@@ -107,7 +107,7 @@ menus:
     title: 资产编码规则
     path: /assets/settings/code-rules
     pageKey: asset.portal.settings.code-rules
-    file: /src/views/PortalView.vue
+    file: /src/views/AssetCodeRulesPage.vue
     order: 33
     permissionCodes:
       - asset:code_rules:view
@@ -118,7 +118,7 @@ menus:
     title: 标签模板设置
     path: /assets/settings/label-templates
     pageKey: asset.portal.settings.label-templates
-    file: /src/views/PortalView.vue
+    file: /src/views/AssetLabelTemplatesPage.vue
     order: 34
     permissionCodes:
       - asset:label_template_settings:view
@@ -129,7 +129,7 @@ menus:
     icon: Tickets
     path: /requests
     pageKey: asset.portal.requests
-    file: /src/views/PortalView.vue
+    file: /src/views/ApprovalsPage.vue
     order: 40
     permissionCodes:
       - asset:request:view
@@ -193,7 +193,7 @@ menus:
     title: 员工自助
     path: /system/self-service
     pageKey: asset.portal.system.self-service
-    file: /src/views/PortalView.vue
+    file: /src/views/SelfServiceSettingsPage.vue
     order: 54
     permissionCodes:
       - asset:self_service:view
@@ -204,7 +204,7 @@ menus:
     title: 系统对接
     path: /system/integrations
     pageKey: asset.portal.system.integrations
-    file: /src/views/PortalView.vue
+    file: /src/views/SystemIntegrationsPage.vue
     order: 55
     permissionCodes:
       - asset:integration:view
@@ -215,7 +215,7 @@ menus:
     title: 表单管理
     path: /system/forms
     pageKey: asset.portal.system.forms
-    file: /src/views/PortalView.vue
+    file: /src/views/SystemFormsPage.vue
     order: 56
     permissionCodes:
       - asset:form:view

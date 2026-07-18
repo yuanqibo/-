@@ -1,18 +1,29 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Box, HomeFilled, QuestionFilled, Setting, Tickets } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowRight, Box, HomeFilled, QuestionFilled, Setting, Tickets } from '@element-plus/icons-vue'
 import { usePortalSession } from '../auth/portal-session'
 import type { PortalMenuItem } from '../auth/portal-context'
 import { MEMBER_AUTHORIZATION_PORTAL_PATH } from '../routing/standard-routes'
 
-const props = withDefaults(defineProps<{ pageTitle?: string }>(), {
-  pageTitle: '系统'
+type LayoutSection = 'auto' | 'assets' | 'system' | 'none'
+
+const props = withDefaults(defineProps<{ pageTitle?: string; section?: LayoutSection }>(), {
+  pageTitle: '',
+  section: 'auto'
 })
 
 const route = useRoute()
 const router = useRouter()
 const { ready, loading, errorMessage, user, menuItems } = usePortalSession()
+const openAssetGroups = ref(new Set<string>(['assetSettings']))
+
+const resolvedSection = computed<Exclude<LayoutSection, 'auto'>>(() => {
+  if (props.section !== 'auto') return props.section
+  if (route.path.startsWith('/assets')) return 'assets'
+  if (route.path.startsWith('/system')) return 'system'
+  return 'none'
+})
 
 const primaryMenuIds = ['home', 'assets', 'requests', 'settings']
 const primaryMenus = computed(() => primaryMenuIds
@@ -21,13 +32,16 @@ const primaryMenus = computed(() => primaryMenuIds
 const systemMenus = computed(() => menuItems.value
   .filter((item) => item.parentId === 'settings')
   .sort((left, right) => left.order - right.order))
+const assetMenus = computed(() => menuItems.value
+  .filter((item) => item.parentId === 'assets')
+  .sort((left, right) => left.order - right.order))
+const assetRootMenu = computed(() => menuItems.value.find((item) => item.id === 'assets') || null)
 
-const iconByMenuId = {
-  home: HomeFilled,
-  assets: Box,
-  requests: Tickets,
-  settings: Setting
-} as const
+const assetChildren = (parentId: string): PortalMenuItem[] => menuItems.value
+  .filter((item) => item.parentId === parentId)
+  .sort((left, right) => left.order - right.order)
+
+const iconByMenuId = { home: HomeFilled, assets: Box, requests: Tickets, settings: Setting } as const
 
 const primaryActive = (item: PortalMenuItem): boolean => {
   if (item.id === 'assets') return route.path.startsWith('/assets')
@@ -43,24 +57,36 @@ const navigate = (item: PortalMenuItem): void => {
 }
 
 const menuIcon = (id: string) => iconByMenuId[id as keyof typeof iconByMenuId] || Setting
-
-const logout = (): void => {
-  void window.__ASSET_PORTAL_ECP_CONTEXT__?.logout()
-}
-
+const logout = (): void => { void window.__ASSET_PORTAL_ECP_CONTEXT__?.logout() }
 const handleAccountCommand = (command: string | number | object): void => {
   if (command === 'logout') logout()
 }
-
 const reload = (): void => window.location.reload()
-
 const avatarText = computed(() => String(user.value?.name || user.value?.account || '用').trim().slice(0, 1))
+const documentTitle = computed(() => props.pageTitle || route.meta.title as string || '资产云管家')
+
+const hasActiveAssetChild = (item: PortalMenuItem): boolean =>
+  assetChildren(item.id).some((child) => route.path === child.path)
+
+const toggleAssetGroup = (id: string): void => {
+  const next = new Set(openAssetGroups.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  openAssetGroups.value = next
+}
+
+watch(() => route.path, () => {
+  const parent = assetMenus.value.find((item) => hasActiveAssetChild(item))
+  if (parent) openAssetGroups.value = new Set([...openAssetGroups.value, parent.id])
+})
 
 onMounted(() => {
   document.body.classList.remove('auth-view', 'has-secondary-nav', 'self-service-view')
   document.body.classList.add('standard-vue-route')
-  document.title = `资产云管家 - ${props.pageTitle}`
+  document.title = `资产云管家 - ${documentTitle.value}`
 })
+
+watch(documentTitle, (title) => { document.title = `资产云管家 - ${title}` })
 
 onUnmounted(() => {
   document.body.classList.remove('standard-vue-route')
@@ -70,15 +96,13 @@ onUnmounted(() => {
 <template>
   <div v-if="errorMessage" class="standard-route-state">
     <el-result icon="error" title="页面加载失败" :sub-title="errorMessage">
-      <template #extra>
-        <el-button type="primary" @click="reload">重新加载</el-button>
-      </template>
+      <template #extra><el-button type="primary" @click="reload">重新加载</el-button></template>
     </el-result>
   </div>
   <div v-else-if="loading || !ready" class="standard-route-state" aria-busy="true">
     <el-skeleton :rows="8" animated />
   </div>
-  <div v-else class="app-shell standard-portal-shell">
+  <div v-else class="app-shell standard-portal-shell" :class="`standard-section-${resolvedSection}`">
     <aside class="sidebar">
       <div class="sidebar-account-host">
         <el-dropdown trigger="click" @command="handleAccountCommand">
@@ -95,25 +119,16 @@ onUnmounted(() => {
       </div>
 
       <nav class="nav" aria-label="主导航">
-        <div class="nav-content">
-          <div class="nav-section">
-            <div v-for="item in primaryMenus" :key="item.id" class="nav-group" :class="{ 'has-children': item.id === 'assets' }">
-              <button
-                class="nav-item"
-                :class="{ active: primaryActive(item) }"
-                type="button"
-                :title="item.id === 'requests' ? '审批' : item.title"
-                :aria-current="primaryActive(item) ? 'page' : undefined"
-                @click="navigate(item)"
-              >
-                <span class="nav-icon">
-                  <el-icon :size="32"><component :is="menuIcon(item.id)" /></el-icon>
-                </span>
-                <span class="nav-label">{{ item.id === 'requests' ? '审批' : item.title }}</span>
-              </button>
-            </div>
+        <div class="nav-content"><div class="nav-section">
+          <div v-for="item in primaryMenus" :key="item.id" class="nav-group">
+            <button class="nav-item" :class="{ active: primaryActive(item) }" type="button"
+              :title="item.id === 'requests' ? '审批' : item.title"
+              :aria-current="primaryActive(item) ? 'page' : undefined" @click="navigate(item)">
+              <span class="nav-icon"><el-icon :size="32"><component :is="menuIcon(item.id)" /></el-icon></span>
+              <span class="nav-label">{{ item.id === 'requests' ? '审批' : item.title }}</span>
+            </button>
           </div>
-        </div>
+        </div></div>
       </nav>
 
       <div class="sidebar-tools">
@@ -127,34 +142,56 @@ onUnmounted(() => {
 
     <main class="workspace">
       <section class="page">
-        <section class="system-page">
+        <section v-if="resolvedSection === 'system'" class="system-page">
           <aside class="system-menu-shell">
             <div class="asset-subnav system-menu">
-              <div class="asset-subnav-heading">
-                <span class="asset-subnav-accent" aria-hidden="true"></span>
-                <h2>系统</h2>
-              </div>
+              <div class="asset-subnav-heading"><span class="asset-subnav-accent" aria-hidden="true"></span><h2>系统</h2></div>
               <div class="asset-subnav-rule" aria-hidden="true"></div>
               <div class="asset-subnav-list">
-                <button
-                  v-for="item in systemMenus"
-                  :key="item.id"
-                  class="asset-subnav-item"
-                  :class="{ active: route.path === routePathForMenu(item) }"
-                  type="button"
-                  :aria-current="route.path === routePathForMenu(item) ? 'page' : undefined"
-                  @click="navigate(item)"
-                >
+                <button v-for="item in systemMenus" :key="item.id" class="asset-subnav-item"
+                  :class="{ active: route.path === routePathForMenu(item) }" type="button"
+                  :aria-current="route.path === routePathForMenu(item) ? 'page' : undefined" @click="navigate(item)">
                   <span class="asset-subnav-dot" aria-hidden="true"></span>
                   <span class="asset-subnav-label">{{ item.id === 'authz.workspace' ? '成员授权' : item.title }}</span>
                 </button>
               </div>
             </div>
           </aside>
-          <div class="system-content standard-system-content">
-            <slot />
-          </div>
+          <div class="system-content standard-system-content"><slot /></div>
         </section>
+
+        <section v-else-if="resolvedSection === 'assets'" class="system-page standard-assets-page">
+          <aside class="system-menu-shell">
+            <div class="asset-subnav">
+              <div class="asset-subnav-heading"><span class="asset-subnav-accent" aria-hidden="true"></span><h2>资产</h2></div>
+              <div class="asset-subnav-rule" aria-hidden="true"></div>
+              <div class="asset-subnav-list">
+                <button v-if="assetRootMenu" class="asset-subnav-item" :class="{ active: route.path === assetRootMenu.path }" type="button" @click="navigate(assetRootMenu)">
+                  <span class="asset-subnav-dot" aria-hidden="true"></span><span class="asset-subnav-label">资产列表</span>
+                </button>
+                <template v-for="item in assetMenus" :key="item.id">
+                  <div v-if="assetChildren(item.id).length" class="asset-subnav-group" :class="{ open: openAssetGroups.has(item.id) }">
+                    <button class="asset-subnav-item" :class="{ active: route.path === item.path || hasActiveAssetChild(item) }"
+                      type="button" @click="toggleAssetGroup(item.id)">
+                      <span class="asset-subnav-dot" aria-hidden="true"></span><span class="asset-subnav-label">{{ item.title }}</span>
+                      <el-icon class="standard-subnav-caret"><ArrowDown v-if="openAssetGroups.has(item.id)" /><ArrowRight v-else /></el-icon>
+                    </button>
+                    <div v-show="openAssetGroups.has(item.id)" class="asset-subnav-children">
+                      <button v-for="child in assetChildren(item.id)" :key="child.id" class="asset-subnav-child"
+                        :class="{ active: route.path === child.path }" type="button" @click="navigate(child)">{{ child.title }}</button>
+                    </div>
+                  </div>
+                  <button v-else class="asset-subnav-item" :class="{ active: route.path === item.path }" type="button" @click="navigate(item)">
+                    <span class="asset-subnav-dot" aria-hidden="true"></span><span class="asset-subnav-label">{{ item.title }}</span>
+                  </button>
+                </template>
+              </div>
+            </div>
+          </aside>
+          <div class="system-content standard-system-content"><slot /></div>
+        </section>
+
+        <div v-else class="standard-main-content"><slot /></div>
       </section>
     </main>
   </div>

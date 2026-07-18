@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import StandardPortalLayout from '../core/layout/StandardPortalLayout.vue'
 import EmployeeDirectoryView from '../features/employees/components/EmployeeDirectoryView.vue'
-import '../styles/portal.css'
 </script>
 
 <template>

@@ -174,8 +174,6 @@ export const ensurePortalSession = async (router: Router): Promise<void> => {
             return
           }
           await applySession(nextSession, activeRouter || router)
-          window.assetPortalApplyEcpSession?.()
-          window.dispatchEvent(new CustomEvent('asset-portal-ecp-session'))
         }, false) ?? null
       }
       state.ready = true
