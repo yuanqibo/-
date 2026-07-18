@@ -1,10 +1,10 @@
 import { onBeforeUnmount, reactive, ref } from 'vue'
 import { memberAuthorizationWorkspaceUrl } from '../api/member-authorization.api'
-import type { WorkspaceBridgeState } from '../types/member-authorization'
+import type { MemberAuthorizationWorkspaceState } from '../types/member-authorization'
 
-export const useMemberAuthorizationBridge = () => {
+export const useMemberAuthorizationWorkspace = () => {
   const frame = ref<HTMLIFrameElement>()
-  const state = reactive<WorkspaceBridgeState>({ loaded: false, overlayOpen: false, errorMessage: '' })
+  const state = reactive<MemberAuthorizationWorkspaceState>({ loaded: false, overlayOpen: false, errorMessage: '' })
   let drawerObserver: MutationObserver | null = null
 
   const setOverlay = (active: boolean): void => {
@@ -34,9 +34,8 @@ export const useMemberAuthorizationBridge = () => {
           return style.display !== 'none' && style.visibility !== 'hidden'
         }))
       }
-      const observer = new MutationObserver(sync)
-      drawerObserver = observer
-      observer.observe(frameDocument.body, { attributes: true, attributeFilter: ['class', 'style'], childList: true, subtree: true })
+      drawerObserver = new MutationObserver(sync)
+      drawerObserver.observe(frameDocument.body, { attributes: true, attributeFilter: ['class', 'style'], childList: true, subtree: true })
       sync()
     } catch (error) {
       state.errorMessage = error instanceof Error ? error.message : 'ECP 工作台抽屉联动不可用'

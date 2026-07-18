@@ -1,1 +1,1 @@
-export type WorkspaceBridgeState = { loaded: boolean; overlayOpen: boolean; errorMessage: string }
+export type MemberAuthorizationWorkspaceState = { loaded: boolean; overlayOpen: boolean; errorMessage: string }

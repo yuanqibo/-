@@ -15,6 +15,12 @@ export const fetchAssets = async (): Promise<AssetRecord[]> =>
 export const createAsset = async (item: AssetDraft): Promise<AssetRecord> =>
   (await apiRequest<{ item: AssetRecord }>('/api/assets', { method: 'POST', body: { item } })).item
 
+export const copyAsset = async (sourceAssetId: string, item: AssetDraft): Promise<AssetRecord> =>
+  (await apiRequest<{ item: AssetRecord }>('/api/assets', { method: 'POST', body: { sourceAssetId, item } })).item
+
+export const importAssets = async (items: AssetDraft[]): Promise<AssetRecord[]> =>
+  (await apiRequest<{ items: AssetRecord[] }>('/api/assets/import', { method: 'POST', body: { items } })).items || []
+
 export const runAssetCommand = async (action: AssetCommand, assetIds: string[], fields: Record<string, unknown>): Promise<AssetRecord[]> =>
   (await apiRequest<AssetListResponse>(`/api/assets/commands/${encodeURIComponent(action)}`, {
     method: 'POST',
@@ -23,6 +29,12 @@ export const runAssetCommand = async (action: AssetCommand, assetIds: string[], 
 
 export const fetchBusinessData = (): Promise<BusinessDataResponse> =>
   apiRequest<BusinessDataResponse>('/api/business-data')
+
+export const createStocktake = async (item: Pick<BusinessRecord, 'name' | 'scope' | 'owner' | 'total' | 'date'>): Promise<BusinessRecord> =>
+  (await apiRequest<{ item: BusinessRecord }>('/api/business-data/stocktakes', { method: 'POST', body: item })).item
+
+export const updateStocktake = async (id: string, value: Pick<BusinessRecord, 'checked' | 'diff'>): Promise<BusinessRecord[]> =>
+  (await apiRequest<{ items: BusinessRecord[] }>(`/api/business-data/stocktakes/${encodeURIComponent(id)}`, { method: 'PATCH', body: value })).items || []
 
 export const fetchPortalStore = async (): Promise<PortalStoreValues> =>
   (await apiRequest<StoreResponse>('/api/store')).values || {}

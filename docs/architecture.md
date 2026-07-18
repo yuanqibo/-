@@ -49,7 +49,7 @@ Controller 不直接实现持久化逻辑；Repository 不处理页面展示状�
 
 - 前端统一使用 `src/shared/api/http.ts`，自动携带 ECP Bearer 会话。
 - API 使用 `/api/<domain>` 路径，JSON 字段保持稳定的 TypeScript/Java 类型契约。
-- 列表接口必须支持服务端查询和分页，不把全部数据下载到浏览器后筛选。
+- 列表遵循现有 Java API 契约：目录类接口使用服务端查询和分页；资产与业务快照接口返回当前可见范围后，由 Vue composable 完成页面筛选和分页。迁移阶段不得为追求形式统一擅自改变这些契约。
 - 非 2xx 响应由统一客户端转换为 `ApiError`，页面必须提供错误和重试状态。
 - 权限以 Java 服务端判断为准，前端权限控制只用于交互展示。
 

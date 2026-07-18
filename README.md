@@ -101,7 +101,7 @@ scripts/                 SDK 安装、部署和更新脚本
 
 前端按 `core/shared/features/views` 分层，所有业务路由由 Vue Router / ECP 菜单直接加载 Vue SFC。业务域请求集中在各自 `features/<domain>/api`，并统一经过 `src/shared/api/http.ts`；页面状态由 Composition API composable 管理。详细边界与 API 约定见 [项目架构规范](docs/architecture.md)。
 
-Vue 标准化迁移已完成。首页、资产、入库、领用退库、借用归还、盘点、资产设置、审批、员工信息、组织架构、成员授权、员工自助、系统对接和表单管理均已迁移到 Vue SFC。历史 `src/portal/app.ts`、`PortalView`、`PortalShell` 和临时挂载桥已删除，不再保留原生 DOM 业务实现。
+Vue 标准化迁移已完成。首页、资产、入库、领用退库、借用归还、盘点、资产设置、审批、员工信息、组织架构、成员授权、员工自助、系统对接和表单管理均已迁移到 Vue SFC。资产导入、目录工作簿、批量操作、打印、盘点更新和员工自助签字配置也由 Vue/Element Plus 承载。历史 `src/portal/app.ts`、`PortalView`、`PortalShell` 和临时挂载桥已删除，不再保留原生 DOM 业务实现。
 
 生产构建按 Vue、Element Plus、ECP SDK 和业务路由拆分。ECP 成员授权工作台自带的预构建 Web Component 仅在 `/workspace` 被访问时延迟加载，不进入普通业务页面的首屏包。
 

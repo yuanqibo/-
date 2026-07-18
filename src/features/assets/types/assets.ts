@@ -79,6 +79,21 @@ export type DirectoryPerson = {
   company: string
 }
 
-export type AssetCommand = 'receive' | 'return' | 'borrow' | 'borrow-return' | 'handover'
+export type AssetCommand =
+  | 'receive'
+  | 'return'
+  | 'borrow'
+  | 'borrow-return'
+  | 'handover'
+  | 'delete'
+  | 'edit'
+  | 'batch-edit'
+  | 'cancel-inbound'
+  | 'repair-start'
+  | 'repair-complete'
+  | 'update-import'
+  | 'receive-import'
 
 export type AssetDraft = Partial<AssetRecord> & { name: string; category: string; location: string }
+
+export type AssetImportRow = { rowNumber: number; draft: AssetDraft | null; errors: string[] }

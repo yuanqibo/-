@@ -27,7 +27,6 @@ const {
   organization,
   accountSets,
   selectedAccountSet,
-  selectedAccountSetUnionId,
   roots,
   selectedNode,
   selectedNodeKey,

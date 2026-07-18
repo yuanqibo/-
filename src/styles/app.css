@@ -41,7 +41,7 @@ body.authz-workspace-portal-overlay-active .el-overlay.is-drawer {
 
 /*
  * ECP 账号管理工作台在 iframe /workspace 独立路由中渲染，不一定会加载
- * PortalView 的业务样式；这里用 SDK 暴露的严格作用域做窄范围覆盖。
+ * 门户业务样式；这里用 SDK 暴露的严格作用域做窄范围覆盖。
  * 目标是保持「左侧账号/部门树 + 右侧账号表」的横向布局，避免 1200px
  * 以下被 SDK 默认媒体查询折叠成上下结构。
  */

@@ -30,6 +30,7 @@
     "@acg/ecp-ui": "file:vendor/ecp-sdk/acg-ecp-ui-0.1.35.tgz",
     "@element-plus/icons-vue": "^2.3.2",
     "element-plus": "^2.13.2",
+    "jszip": "^3.10.1",
     "pinyin-pro": "^3.28.1"
   },
   "devDependencies": {

@@ -30,6 +30,15 @@ export type SelfServiceItem = {
   allowEmployeeAddDevice?: boolean
 }
 
+export type SelfServiceSignItem = {
+  employeeSign: boolean
+  noticeEnabled: boolean
+  noticeContent: string
+  timings: Record<string, boolean>
+}
+
+export type SelfServiceSignSettings = Record<string, SelfServiceSignItem>
+
 export type SelfServiceSettings = Record<string, unknown> & {
   receiveAsset?: SelfServiceItem
   returnAsset?: SelfServiceItem
@@ -37,4 +46,5 @@ export type SelfServiceSettings = Record<string, unknown> & {
   giveBackAsset?: SelfServiceItem
   handoverAsset?: SelfServiceItem
   deviceRequest?: SelfServiceItem
+  signSettings?: SelfServiceSignSettings
 }

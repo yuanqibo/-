@@ -21,6 +21,7 @@ import {
   ElIcon,
   ElInput,
   ElInputNumber,
+  ElLoading,
   ElOption,
   ElPagination,
   ElPopover,
@@ -58,6 +59,7 @@ const elementComponents = [
 
 const bootstrap = async (): Promise<void> => {
   elementComponents.forEach((component) => app.use(component))
+  app.use(ElLoading)
   await configureEcp(app, router)
   app.use(router)
   await router.isReady()

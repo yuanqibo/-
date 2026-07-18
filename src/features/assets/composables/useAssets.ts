@@ -1,13 +1,17 @@
 import { computed, reactive, readonly } from 'vue'
 import {
   createAsset as createAssetRequest,
+  copyAsset as copyAssetRequest,
+  createStocktake as createStocktakeRequest,
   fetchAssets,
   fetchBusinessData,
   fetchPortalStore,
+  importAssets as importAssetsRequest,
   runAssetCommand as runAssetCommandRequest,
   saveAssetCodeSettings,
   saveCatalog,
-  saveLabelSettings
+  saveLabelSettings,
+  updateStocktake as updateStocktakeRequest
 } from '../api/assets.api'
 import type { AssetCommand, AssetDraft, AssetRecord, BusinessRecord, PortalStoreValues } from '../types/assets'
 
@@ -66,8 +70,26 @@ const create = async (draft: AssetDraft): Promise<AssetRecord> => {
   return item
 }
 
+const importMany = async (drafts: AssetDraft[]): Promise<number> => {
+  const items = await importAssetsRequest(drafts)
+  state.assets = [...items, ...state.assets]
+  return items.length
+}
+
+const copy = async (sourceAssetId: string, draft: AssetDraft): Promise<AssetRecord> => {
+  const item = await copyAssetRequest(sourceAssetId, draft)
+  state.assets = [item, ...state.assets]
+  return item
+}
+
 const command = async (action: AssetCommand, assetIds: string[], fields: Record<string, unknown>): Promise<void> => {
-  replaceAssets(await runAssetCommandRequest(action, assetIds, fields))
+  const items = await runAssetCommandRequest(action, assetIds, fields)
+  if (action === 'delete' || action === 'cancel-inbound') {
+    const removed = new Set(assetIds)
+    state.assets = state.assets.filter((item) => !removed.has(item.id))
+    return
+  }
+  replaceAssets(items)
 }
 
 const saveCatalogValue = async (domain: 'categories' | 'locations', value: unknown): Promise<void> => {
@@ -86,6 +108,15 @@ const saveLabels = async (key: string, value: unknown, operation: 'save' | 'rese
   state.store[key] = value
 }
 
+const createStocktake = async (value: Pick<BusinessRecord, 'name' | 'scope' | 'owner' | 'total' | 'date'>): Promise<void> => {
+  const item = await createStocktakeRequest(value)
+  state.business.stocktakes = [item, ...(state.business.stocktakes || [])]
+}
+
+const updateStocktake = async (id: string, value: Pick<BusinessRecord, 'checked' | 'diff'>): Promise<void> => {
+  state.business.stocktakes = await updateStocktakeRequest(id, value)
+}
+
 export const useAssets = () => ({
   state: readonly(state),
   assets: computed(() => state.assets),
@@ -93,8 +124,12 @@ export const useAssets = () => ({
   store: computed(() => state.store),
   load,
   create,
+  copy,
+  importMany,
   command,
   saveCatalogValue,
   saveCodeRules,
-  saveLabels
+  saveLabels,
+  createStocktake,
+  updateStocktake
 })
