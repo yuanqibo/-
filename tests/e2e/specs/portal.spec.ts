@@ -1,0 +1,145 @@
+import { expect, test, type Page } from '@playwright/test'
+import { installApiMocks, type ApiMockOptions, type ApiMockState } from '../fixtures/api'
+
+const openApp = async (page: Page, path: string, options?: ApiMockOptions): Promise<ApiMockState> => {
+  const state = await installApiMocks(page, options)
+  await page.goto(path)
+  await expect(page.locator('.standard-portal-shell')).toBeVisible()
+  return state
+}
+
+const expectNoPageOverflow = async (page: Page): Promise<void> => {
+  const metrics = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    bodyScrollWidth: document.body.scrollWidth
+  }))
+  expect(metrics.scrollWidth, JSON.stringify(metrics)).toBeLessThanOrEqual(metrics.viewport + 1)
+  expect(metrics.bodyScrollWidth, JSON.stringify(metrics)).toBeLessThanOrEqual(metrics.viewport + 1)
+}
+
+test.describe('登录后门户质量回归', () => {
+  let runtimeErrors: string[]
+
+  test.beforeEach(async ({ page }) => {
+    runtimeErrors = []
+    page.on('pageerror', (error) => runtimeErrors.push(`[pageerror] ${error.message}`))
+    page.on('console', (message) => { if (message.type() === 'error') runtimeErrors.push(`[console] ${message.text()}`) })
+  })
+
+  test.afterEach(async ({}, testInfo) => {
+    const unexpected = runtimeErrors.filter((message) => !(
+      testInfo.title.includes('接口失败') && message.includes('status of 503')
+    ))
+    expect(unexpected, '浏览器控制台和页面运行时不应出现未处理错误').toEqual([])
+  })
+  test('主要路由直接加载真实 Vue 页面', async ({ page }) => {
+    await installApiMocks(page)
+    const routes = [
+      ['/', '你好，测试管理员'], ['/assets', '资产列表'], ['/assets/inbound', '资产入库'],
+      ['/assets/receive-return', '领用退库'], ['/assets/borrow-return', '借用归还'], ['/assets/stocktake', '资产盘点'],
+      ['/assets/settings', '资产设置'], ['/assets/settings/locations', '位置管理'], ['/assets/settings/categories', '资产分类'],
+      ['/assets/settings/code-rules', '资产编码规则'], ['/assets/settings/label-templates', '标签模板设置'], ['/requests', '审批'],
+      ['/system/employees', '员工信息'], ['/system/departments', '组织架构'], ['/system/self-service', '员工自助'],
+      ['/system/member-authorization', '成员授权'], ['/system/integrations', '系统对接'], ['/system/forms', '表单管理']
+    ] as const
+    for (const [path, text] of routes) {
+      await page.goto(path)
+      await expect(page.getByText(text, { exact: true }).first()).toBeVisible()
+      await expectNoPageOverflow(page)
+    }
+  })
+
+  test('资产搜索、分页、详情和高级筛选可用', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '密集表格业务流在桌面项目执行，移动项目负责布局回归')
+    await openApp(page, '/assets')
+    const search = page.getByPlaceholder('搜索资产编码、名称、人员或位置')
+    await search.fill('测试笔记本')
+    await expect(page.getByText('测试笔记本', { exact: true })).toBeVisible()
+    await expect(page.getByText('测试显示器 2', { exact: true })).toHaveCount(0)
+    await search.clear()
+    await page.locator('.el-pagination .btn-next').click()
+    await expect(page.getByText('AST-0021', { exact: true })).toBeVisible()
+
+    await search.fill('测试笔记本')
+    const row = page.locator('.el-table__body-wrapper tbody tr').filter({ hasText: '测试笔记本' })
+    await row.getByRole('button', { name: '详情', exact: true }).click()
+    const drawer = page.getByRole('dialog', { name: '资产详情' })
+    await expect(drawer).toBeVisible()
+    await expect(drawer.getByText('SN-1', { exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(drawer).toBeHidden()
+
+    await page.getByRole('button', { name: '高级筛选', exact: true }).click()
+    await expect(page.getByRole('heading', { name: '高级筛选', exact: true })).toBeVisible()
+  })
+
+  test('新增资产表单提交到既有 API', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '表单业务流在桌面项目执行')
+    const state = await openApp(page, '/assets/inbound')
+    await page.getByRole('button', { name: '新增资产', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '新增资产' })
+    await dialog.locator('.el-form-item').filter({ hasText: '资产名称' }).locator('input').fill('新测试设备')
+    await dialog.locator('.el-form-item').filter({ hasText: '资产分类' }).locator('input').fill('IT设备')
+    await dialog.locator('.el-form-item').filter({ hasText: '所在位置' }).locator('input').fill('杭州仓库')
+    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    await expect(dialog).toBeHidden()
+    expect(state.requests.some((item) => item.method === 'POST' && item.path === '/api/assets')).toBe(true)
+  })
+
+  test('审批搜索与处理弹窗保持可操作', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '审批业务流在桌面项目执行')
+    const state = await openApp(page, '/requests')
+    await page.getByPlaceholder('搜索申请编号、类型、申请人或资产').fill('REQ-001')
+    const row = page.locator('.el-table__body-wrapper tbody tr').filter({ hasText: 'REQ-001' })
+    await row.getByRole('button', { name: '通过', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '通过审批' })
+    await dialog.locator('textarea').fill('信息无误')
+    await dialog.getByRole('button', { name: '确认', exact: true }).click()
+    await expect(dialog).toBeHidden()
+    expect(state.requests.some((item) => item.path.endsWith('/requests/REQ-001/decision') && item.method === 'POST')).toBe(true)
+  })
+
+  test('员工搜索、组织筛选、分页与详情抽屉可用', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '目录业务流在桌面项目执行')
+    const state = await openApp(page, '/system/employees')
+    await page.getByLabel('搜索名称或编码').fill('张三')
+    await page.getByRole('button', { name: '查询', exact: true }).click()
+    await expect(page.getByText('张三', { exact: true })).toBeVisible()
+    expect(state.requests.some((item) => item.path.includes('query=%E5%BC%A0%E4%B8%89'))).toBe(true)
+
+    await page.goto('/system/departments')
+    await expect(page.getByText('示例公司', { exact: true }).first()).toBeVisible()
+    await page.getByRole('button', { name: '成员范围', exact: true }).click()
+    await page.getByRole('option', { name: '仅直属成员', exact: true }).click()
+    await page.getByPlaceholder('搜索名称或编码').fill('zs')
+    const row = page.locator('.ecp-org-table tbody tr').filter({ hasText: '张三' })
+    await expect(row).toBeVisible()
+    await row.getByRole('button', { name: '详情', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: '成员详情' })).toBeVisible()
+  })
+
+  test('接口失败与只读权限边界可见', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '错误和权限行为在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('e2e:permissions', JSON.stringify(['asset:item:view'])))
+    await openApp(page, '/assets', { failAssets: true })
+    await expect(page.getByText('资产服务暂不可用', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '高级筛选', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '导出', exact: true })).toHaveCount(0)
+  })
+
+  test('桌面与移动端关键页面无全局溢出或标题遮挡', async ({ page }) => {
+    await installApiMocks(page)
+    for (const path of ['/assets', '/system/departments', '/system/self-service']) {
+      await page.goto(path)
+      await expect(page.locator('.standard-portal-shell')).toBeVisible()
+      await expectNoPageOverflow(page)
+      const layout = await page.evaluate(() => {
+        const header = document.querySelector('.standard-page-header, .ecp-org-policy-bar')?.getBoundingClientRect()
+        const content = document.querySelector('.standard-toolbar, .ecp-org-layout, .standard-settings-tabs')?.getBoundingClientRect()
+        return header && content ? { headerBottom: header.bottom, contentTop: content.top } : null
+      })
+      if (layout) expect(layout.contentTop).toBeGreaterThanOrEqual(layout.headerBottom - 1)
+    }
+  })
+})

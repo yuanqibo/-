@@ -66,6 +66,7 @@ const fields = computed<DetailField[]>(() => {
   <el-drawer
     :model-value="modelValue"
     class="ecp-member-detail-drawer"
+    aria-label="成员详情"
     direction="rtl"
     size="min(620px, 94vw)"
     append-to-body

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, toRaw, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Download, Edit, Plus, Refresh, Upload } from '@element-plus/icons-vue'
@@ -35,9 +35,16 @@ const subtitle = computed(() => ({ locations: '维护公司、仓库、楼层等
 const permissions = computed(() => new Set(user.value?.permissionCodes || []))
 const can = (code: string): boolean => permissions.value.has(code)
 
-const clone = <T,>(value: T): T => structuredClone(value)
+const clone = <T,>(value: T): T => structuredClone(toRaw(value))
+const defaultCodeRules = {
+  selectedFields: ['categoryCode'],
+  serialLength: 5,
+  fieldOptions: { categoryCode: 'none' },
+  customTexts: { customText: '' },
+  dateFormats: { purchaseDate: 'yyyymmdd' }
+}
 const catalog = ref<CatalogNode[]>([])
-const codeRules = reactive<Record<string, unknown>>({})
+const codeRules = reactive<Record<string, unknown>>(clone(defaultCodeRules))
 const labelSettings = reactive<Record<string, unknown>>({})
 const customTemplates = ref<Array<Record<string, unknown>>>([])
 const builtInTemplates = [{ key: 'standard', name: '标准标签' }, { key: 'compact', name: '紧凑标签' }, { key: 'full', name: '完整标签' }]
@@ -46,7 +53,12 @@ const templateOptions = computed(() => [...builtInTemplates, ...customTemplates.
 const syncFromStore = (): void => {
   catalog.value = clone(kind.value === 'locations' ? store.value.assetLocationTree || [] : store.value.assetCategoryTree || [])
   Object.keys(codeRules).forEach((key) => delete codeRules[key])
-  Object.assign(codeRules, clone(store.value.assetPortalAssetCodeRuleSettingsV1 || { selectedFields: ['categoryCode'], serialLength: 5, fieldOptions: { categoryCode: 'none' }, customTexts: { customText: '' }, dateFormats: { purchaseDate: 'yyyymmdd' } }))
+  const storedRules = clone(store.value.assetPortalAssetCodeRuleSettingsV1 || {})
+  Object.assign(codeRules, clone(defaultCodeRules), storedRules, {
+    fieldOptions: { ...defaultCodeRules.fieldOptions, ...(storedRules.fieldOptions as object || {}) },
+    customTexts: { ...defaultCodeRules.customTexts, ...(storedRules.customTexts as object || {}) },
+    dateFormats: { ...defaultCodeRules.dateFormats, ...(storedRules.dateFormats as object || {}) }
+  })
   Object.keys(labelSettings).forEach((key) => delete labelSettings[key])
   Object.assign(labelSettings, { templateKey: 'standard', labelWidth: 40, labelHeight: 30, logoWidth: 18, logoHeight: 8, logoText: '资产云管家', qrSize: 18, contentScale: 100, offsetX: 0, offsetY: 0, fields: ['name', 'id', 'category'], scanFields: ['name', 'id', 'category', 'owner', 'location'], customFields: '', columns: 1, rows: 1, columnGap: 2, rowGap: 2, fontSize: 12, showLogo: false }, clone(store.value.assetLabelPrintSettingsV2 || {}))
   customTemplates.value = clone(store.value.assetLabelCustomTemplatesV1 || [])

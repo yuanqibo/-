@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, toRaw } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { useSystemSettings } from '../composables/useSystemSettings'
@@ -75,13 +75,13 @@ const setTiming = (itemKey: string, timingKey: string, checked: boolean): void =
 }
 const sync = (): void => {
   Object.keys(form).forEach((key) => delete form[key])
-  Object.assign(form, structuredClone(selfService.value))
+  Object.assign(form, structuredClone(toRaw(selfService.value)))
   definitions.forEach((item) => ensureItem(item.key))
   signDefinitions.value.forEach((item) => ensureSignItem(item.key))
 }
 const submit = async (): Promise<void> => {
   saving.value = true
-  try { await saveSelfService(structuredClone(form)); ElMessage.success(activeSection.value === 'main' ? '员工自助配置已保存' : '签字设置已保存') }
+  try { await saveSelfService(structuredClone(toRaw(form))); ElMessage.success(activeSection.value === 'main' ? '员工自助配置已保存' : '签字设置已保存') }
   catch (error) { ElMessage.error(error instanceof Error ? error.message : '保存失败') }
   finally { saving.value = false }
 }

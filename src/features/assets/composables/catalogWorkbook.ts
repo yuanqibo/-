@@ -1,4 +1,4 @@
-import JSZip from 'jszip'
+import type JSZipType from 'jszip'
 import type { CatalogNode } from '../types/assets'
 
 export type CatalogKind = 'categories' | 'locations'
@@ -14,6 +14,7 @@ const columnIndex = (reference: string): number => (reference.match(/^[A-Z]+/)?.
 const textNodes = (element: Element, tag: string): string => Array.from(element.getElementsByTagName(tag)).map((node) => node.textContent || '').join('')
 
 const readRows = async (file: File): Promise<Array<{ rowNumber: number; values: string[] }>> => {
+  const { default: JSZip } = await import('jszip')
   const zip = await JSZip.loadAsync(await file.arrayBuffer())
   const sharedEntry = zip.file('xl/sharedStrings.xml')
   const sharedDoc = new DOMParser().parseFromString(sharedEntry ? await sharedEntry.async('string') : '<sst/>', 'application/xml')
@@ -65,6 +66,7 @@ export const parseCatalogWorkbook = async (file: File, kind: CatalogKind): Promi
 }
 
 const flatten = (nodes: CatalogNode[], parent = ''): Array<CatalogNode & { parent: string }> => nodes.flatMap((node) => [{ ...node, parent }, ...flatten(node.children || [], node.name)])
+const cloneNodes = (nodes: CatalogNode[]): CatalogNode[] => nodes.map((node) => ({ ...node, children: cloneNodes(node.children || []) }))
 const removeNamed = (nodes: CatalogNode[], names: Set<string>): CatalogNode[] => nodes.filter((node) => !names.has(node.name)).map((node) => ({ ...node, children: removeNamed(node.children || [], names) }))
 const includesName = (nodes: CatalogNode[], name: string): boolean => flatten(nodes).some((node) => node.name === name)
 const insert = (nodes: CatalogNode[], node: CatalogNode, parent: string): boolean => {
@@ -103,7 +105,7 @@ export const mergeCatalogRows = (source: CatalogNode[], rows: CatalogImportRow[]
   })
   if (errors.length) throw new Error(errors.slice(0, 5).join('；'))
   const existingByName = new Map(existing.map((node) => [node.name, node]))
-  const next = removeNamed(structuredClone(source), importedNames)
+  const next = removeNamed(cloneNodes(source), importedNames)
   const nodes = new Map(rows.map((row) => {
     const previous = existingByName.get(row.name)
     const node: CatalogNode = {
@@ -113,7 +115,7 @@ export const mergeCatalogRows = (source: CatalogNode[], rows: CatalogImportRow[]
       usefulLife: kind === 'categories' ? row.usefulLife || previous?.usefulLife || '0' : undefined,
       unit: kind === 'categories' ? row.unit || previous?.unit || '台' : undefined,
       enabled: row.enabled === null ? previous?.enabled !== false : row.enabled,
-      children: removeNamed(structuredClone(previous?.children || []), importedNames)
+      children: removeNamed(cloneNodes(previous?.children || []), importedNames)
     }
     if (row.parent && includesName(node.children, row.parent)) throw new Error(`第 ${row.rowNumber} 行不能把节点移动到自己的下级`)
     return [row.name, node]
@@ -132,6 +134,7 @@ export const mergeCatalogRows = (source: CatalogNode[], rows: CatalogImportRow[]
 }
 
 export const buildCatalogWorkbook = async (nodes: CatalogNode[], kind: CatalogKind): Promise<Blob> => {
+  const { default: JSZip } = await import('jszip')
   const headers = kind === 'categories' ? ['分类编码*', '分类名称*', '上级分类名称', '使用期限(月)', '计量单位', '资产编码开关'] : ['验证结果', '位置编码', '位置名称*', '上级位置名称']
   const notes = kind === 'categories' ? ['必填，不可重复', '必填，不可重复', '一级分类留空', '非必填，默认0', '非必填，默认台', '开/关，默认开'] : ['请勿填写', '非必填，不可重复', '必填，不可重复', '一级位置留空']
   const data = [headers, notes, ...flatten(nodes).map((node) => kind === 'categories' ? [node.code || '', node.name, node.parent, node.usefulLife || '0', node.unit || '台', node.enabled === false ? '关' : '开'] : ['', node.code || '', node.name, node.parent])]
@@ -142,7 +145,7 @@ export const buildCatalogWorkbook = async (nodes: CatalogNode[], kind: CatalogKi
   const zip = new JSZip()
   zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>')
   zip.folder('_rels')?.file('.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')
-  const xl = zip.folder('xl') as JSZip
+  const xl = zip.folder('xl') as JSZipType
   xl.file('workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>')
   xl.folder('_rels')?.file('workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>')
   xl.folder('worksheets')?.file('sheet1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rowXml}</sheetData></worksheet>`)

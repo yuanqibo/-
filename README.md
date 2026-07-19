@@ -41,12 +41,24 @@ npm run dev
 
 ## 验证
 
+首次运行 Playwright 前安装项目锁定版本对应的 Chromium：
+
+```bash
+npx playwright install chromium
+```
+
+完整质量验收命令：
+
 ```bash
 npm run typecheck
 npm run validate:authz
 npm run build
+npm run test:unit
+npm run test:e2e
 npm run test:backend
 ```
+
+`npm run test:frontend` 会依次执行 Vitest 单元测试和 Playwright 桌面端、移动端回归测试。
 
 ## 生产配置
 

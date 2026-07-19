@@ -1,4 +1,3 @@
-import JSZip from 'jszip'
 import type { AssetDraft, AssetImportRow } from '../types/assets'
 
 const aliases: Record<keyof AssetDraft | string, string[]> = {
@@ -66,6 +65,7 @@ const rowDraft = (headers: string[], values: string[], rowNumber: number): Asset
 }
 
 export const parseAssetWorkbook = async (file: File): Promise<AssetImportRow[]> => {
+  const { default: JSZip } = await import('jszip')
   const zip = await JSZip.loadAsync(await file.arrayBuffer())
   const sharedEntry = zip.file('xl/sharedStrings.xml')
   const sharedXml = sharedEntry ? await sharedEntry.async('string') : ''

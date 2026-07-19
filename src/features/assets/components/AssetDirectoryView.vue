@@ -332,7 +332,7 @@ onMounted(() => void load())
       <template #footer><el-button @click="clearAdvanced">重置</el-button><el-button type="primary" @click="advancedOpen = false; page = 1">查询</el-button></template>
     </el-drawer>
 
-    <el-drawer :model-value="Boolean(detail)" class="standard-detail-drawer asset-vue-detail-drawer" size="min(760px, 92vw)" :with-header="false" append-to-body @close="detail = null">
+    <el-drawer :model-value="Boolean(detail)" class="standard-detail-drawer asset-vue-detail-drawer" aria-label="资产详情" size="min(760px, 92vw)" :with-header="false" append-to-body @close="detail = null">
       <template v-if="detail">
         <div class="standard-drawer-header"><div><span>资产详情</span><h2>{{ detail.name }}</h2><p>{{ detail.id }}</p></div><el-tag :type="statusType(detail.status)">{{ detail.status }}</el-tag></div>
         <el-descriptions :column="2" border class="standard-descriptions">
