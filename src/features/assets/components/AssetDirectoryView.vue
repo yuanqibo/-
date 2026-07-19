@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Download, Edit, Filter, Plus, Printer, Refresh, Search, Setting, Upload } from '@element-plus/icons-vue'
+import { Download, Filter, Plus, Printer, Refresh, Search, Setting, Upload } from '@element-plus/icons-vue'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { searchDirectoryPeople } from '../api/assets.api'
-import { parseAssetWorkbook } from '../composables/parseAssetWorkbook'
+import { parseAssetWorkbook, type AssetImportMode } from '../composables/parseAssetWorkbook'
 import { useAssets } from '../composables/useAssets'
 import type { AssetCommand, AssetDraft, AssetImportRow, AssetRecord, DirectoryPerson } from '../types/assets'
 
 type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
+type LegacyColumnKey = 'status' | 'code' | 'name' | 'category' | 'phone' | 'email' | 'date' | 'location' | 'price' | 'purchase' | 'rent' | 'supplier' | 'owner' | 'usage'
+type TableDensity = 'compact' | 'standard' | 'roomy'
 type ActionForm = { action: AssetCommand; assetIds: string[]; person: string; personSubject: string; location: string; date: string; expectedReturnDate: string; note: string }
 
 const props = withDefaults(defineProps<{ mode?: Mode }>(), { mode: 'list' })
@@ -37,6 +39,7 @@ const editAction = ref<'edit' | 'batch-edit'>('edit')
 const editIds = ref<string[]>([])
 const importRows = ref<AssetImportRow[]>([])
 const importFileName = ref('')
+const importMode = ref<AssetImportMode>('asset')
 const exportLink = ref<HTMLAnchorElement>()
 const exportUrl = ref('')
 
@@ -70,6 +73,46 @@ const visibleColumns = ref<ColumnKey[]>(parseStoredColumns())
 const hasColumn = (key: ColumnKey): boolean => visibleColumns.value.includes(key)
 watch(visibleColumns, (value) => localStorage.setItem(`asset-table-columns:${props.mode}`, JSON.stringify(value)), { deep: true })
 
+const legacyColumns: Array<{ key: LegacyColumnKey; label: string; width: number }> = [
+  { key: 'status', label: '资产状态', width: 86 }, { key: 'code', label: '资产编码', width: 112 },
+  { key: 'name', label: '资产名称', width: 118 }, { key: 'category', label: '资产分类', width: 92 },
+  { key: 'phone', label: '手机号', width: 92 }, { key: 'email', label: '电子邮箱', width: 118 },
+  { key: 'date', label: '领用日期', width: 90 }, { key: 'location', label: '所在位置', width: 92 },
+  { key: 'price', label: '金额', width: 64 }, { key: 'purchase', label: '购置方式', width: 82 },
+  { key: 'rent', label: '租金', width: 56 }, { key: 'supplier', label: '供应商', width: 104 },
+  { key: 'owner', label: '使用人', width: 78 }, { key: 'usage', label: '使用信息', width: 110 }
+]
+const legacyColumnKeys = legacyColumns.map((item) => item.key)
+const parseLegacySettings = (): { columns: LegacyColumnKey[]; density: TableDensity } => {
+  try {
+    const value = JSON.parse(localStorage.getItem('assetListSettings') || '{}') as { visibleColumns?: unknown; density?: unknown }
+    const columns = Array.isArray(value.visibleColumns)
+      ? value.visibleColumns.filter((item): item is LegacyColumnKey => legacyColumnKeys.includes(item as LegacyColumnKey))
+      : legacyColumnKeys
+    const density = ['compact', 'standard', 'roomy'].includes(String(value.density)) ? value.density as TableDensity : 'compact'
+    return { columns: columns.length ? columns : legacyColumnKeys, density }
+  } catch { return { columns: legacyColumnKeys, density: 'compact' } }
+}
+const legacySettings = parseLegacySettings()
+const legacyVisibleColumns = ref<LegacyColumnKey[]>(legacySettings.columns)
+const legacyDensity = ref<TableDensity>(legacySettings.density)
+const legacyDisplayedColumns = computed(() => legacyColumns.filter((item) => legacyVisibleColumns.value.includes(item.key)))
+const legacyTableMinWidth = computed(() => 36 + legacyDisplayedColumns.value.reduce((sum, item) => sum + item.width, 0))
+const saveLegacySettings = (): void => localStorage.setItem('assetListSettings', JSON.stringify({
+  visibleColumns: legacyVisibleColumns.value,
+  density: legacyDensity.value,
+  columnLayoutVersion: 'compact-v2',
+  columnWidths: {}
+}))
+watch([legacyVisibleColumns, legacyDensity], saveLegacySettings, { deep: true })
+const toggleLegacyColumn = (key: LegacyColumnKey, checked: boolean): void => {
+  const columns = new Set(legacyVisibleColumns.value)
+  if (checked) columns.add(key)
+  else if (columns.size > 1) columns.delete(key)
+  legacyVisibleColumns.value = legacyColumnKeys.filter((item) => columns.has(item))
+}
+const resetLegacySettings = (): void => { legacyVisibleColumns.value = [...legacyColumnKeys]; legacyDensity.value = 'compact' }
+
 const categories = computed(() => Array.from(new Set(assets.value.map((item) => item.category).filter(Boolean))).sort())
 const statuses = computed(() => Array.from(new Set(assets.value.map((item) => item.status).filter(Boolean))).sort())
 const advanced = reactive({ id: '', name: '', type: '', model: '', sn: '', owner: '', department: '', location: '', supplier: '', risk: '', tag: '' })
@@ -97,7 +140,51 @@ const filtered = computed(() => {
   })
 })
 const paged = computed(() => filtered.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+const pageCount = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize.value)))
+const paginationItems = computed<Array<number | 'ellipsis'>>(() => {
+  if (pageCount.value <= 7) return Array.from({ length: pageCount.value }, (_, index) => index + 1)
+  const pages = Array.from(new Set([1, pageCount.value, page.value - 1, page.value, page.value + 1]))
+    .filter((item) => item >= 1 && item <= pageCount.value).sort((left, right) => left - right)
+  return pages.flatMap((item, index) => index && item - pages[index - 1] > 1 ? ['ellipsis' as const, item] : [item])
+})
+const jumpPage = ref<number | undefined>()
 watch([query, status, category], () => { page.value = 1 })
+watch([filtered, pageSize], () => { page.value = Math.min(page.value, pageCount.value) })
+
+const selectedIds = computed(() => new Set(selected.value.map((item) => item.id)))
+const allPageSelected = computed(() => paged.value.length > 0 && paged.value.every((item) => selectedIds.value.has(item.id)))
+const toggleAssetSelection = (item: AssetRecord, checked: boolean): void => {
+  selected.value = checked
+    ? [...selected.value.filter((row) => row.id !== item.id), item]
+    : selected.value.filter((row) => row.id !== item.id)
+}
+const togglePageSelection = (checked: boolean): void => {
+  const pageIds = new Set(paged.value.map((item) => item.id))
+  selected.value = checked
+    ? [...selected.value.filter((item) => !pageIds.has(item.id)), ...paged.value]
+    : selected.value.filter((item) => !pageIds.has(item.id))
+}
+const goToJumpPage = (): void => {
+  if (jumpPage.value === undefined) return
+  page.value = Math.min(Math.max(Math.trunc(jumpPage.value), 1), pageCount.value)
+  jumpPage.value = undefined
+}
+
+const legacyCellValue = (item: AssetRecord, key: LegacyColumnKey): string | number => {
+  if (key === 'code') return item.id || '-'
+  if (key === 'date') return String(item.receiveDate || '-')
+  if (key === 'purchase') return String(item.purchaseMethod || '-')
+  if (key === 'usage') return `${item.status || '-'} / ${item.department || '-'}`
+  if (key === 'rent') return Number(item.rent || 0)
+  const value = item[key]
+  return value === undefined || value === null || value === '' ? '-' : String(value)
+}
+const legacyStatusClass = (value: string): string => {
+  if (value.includes('审批')) return 'green'
+  if (value === '空闲' || value === '闲置') return 'blue'
+  if (value === '交接待签字') return 'red'
+  return 'violet'
+}
 
 const clearAdvanced = (): void => { Object.assign(advanced, { id: '', name: '', type: '', model: '', sn: '', owner: '', department: '', location: '', supplier: '', risk: '', tag: '' }) }
 const reset = (): void => { query.value = ''; status.value = '全部'; category.value = '全部'; clearAdvanced(); page.value = 1 }
@@ -205,20 +292,67 @@ const removeAssets = async (items: AssetRecord[]): Promise<void> => {
 
 const validImportRows = computed(() => importRows.value.filter((row) => row.draft).map((row) => row.draft as AssetDraft))
 const invalidImportCount = computed(() => importRows.value.filter((row) => row.errors.length).length)
+const importTitle = computed(() => ({ asset: '资产导入', update: '更新导入', receive: '批量领用导入' })[importMode.value])
+const openImport = (mode: AssetImportMode): void => {
+  importMode.value = mode
+  importRows.value = []
+  importFileName.value = ''
+  importOpen.value = true
+}
 const readImportFile = async (event: Event): Promise<void> => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
   if (!file) return
   parsing.value = true; importFileName.value = file.name; importRows.value = []
-  try { importRows.value = await parseAssetWorkbook(file) }
+  try { importRows.value = await parseAssetWorkbook(file, importMode.value) }
   catch (error) { ElMessage.error(error instanceof Error ? error.message : '工作簿解析失败') }
   finally { parsing.value = false }
 }
 const submitImport = async (): Promise<void> => {
   if (!validImportRows.value.length) { ElMessage.warning('没有可导入的数据'); return }
   submitting.value = true
-  try { const count = await importMany(validImportRows.value); importOpen.value = false; ElMessage.success(`已导入 ${count} 条资产`) }
+  try {
+    if (importMode.value === 'asset') {
+      const count = await importMany(validImportRows.value)
+      importOpen.value = false
+      ElMessage.success(`已导入 ${count} 条资产`)
+      return
+    }
+    const ids = validImportRows.value.map((item) => String(item.id || '').trim())
+    if (new Set(ids).size !== ids.length) throw new Error('导入文件中存在重复的资产编码')
+    const operations: Record<string, Record<string, unknown>> = {}
+    if (importMode.value === 'update') {
+      validImportRows.value.forEach((item) => {
+        const id = String(item.id || '').trim()
+        operations[id] = Object.fromEntries(Object.entries(item).filter(([field, value]) => field !== 'id' && value !== '' && value !== undefined && value !== null))
+        operations[id].date = new Date().toISOString().slice(0, 10)
+      })
+      await command('update-import', ids, { operations })
+    } else {
+      await Promise.all(validImportRows.value.map(async (item) => {
+        const id = String(item.id || '').trim()
+        const owner = String(item.owner || '').trim()
+        let ownerSubject = String(item.ownerSubject || '').trim()
+        let matched: DirectoryPerson | undefined
+        if (!ownerSubject) {
+          const matches = (await searchDirectoryPeople(owner)).filter((person) => person.name === owner)
+          if (matches.length !== 1) throw new Error(`领用人“${owner}”无法唯一匹配 ECP 账号目录`)
+          matched = matches[0]
+          ownerSubject = matched.subject
+        }
+        operations[id] = {
+          receiver: matched?.name || owner || '待服务端解析', receiverSubject: ownerSubject,
+          company: matched?.company || item.company || '', department: matched?.department || item.department || '',
+          location: item.location, date: item.receiveDate, note: item.note || ''
+        }
+      }))
+      await command('receive-import', ids, { operations })
+    }
+    selected.value = []
+    importOpen.value = false
+    ElMessage.success(`${importTitle.value}完成，共处理 ${ids.length} 条资产`)
+  }
   catch (error) { ElMessage.error(error instanceof Error ? error.message : '资产导入失败') }
   finally { submitting.value = false }
 }
@@ -227,8 +361,8 @@ const csvCell = (value: unknown): string => `"${String(value ?? '').replace(/"/g
 const exportAssets = async (): Promise<void> => {
   const rows = selected.value.length ? selected.value : filtered.value
   if (!rows.length) { ElMessage.warning('没有可导出的资产'); return }
-  const columns = columnOptions.filter((item) => hasColumn(item.key))
-  const csv = `\uFEFF${columns.map((item) => csvCell(item.label)).join(',')}\n${rows.map((row) => columns.map((item) => csvCell(row[item.key])).join(',')).join('\n')}`
+  const columns = props.mode === 'list' ? legacyDisplayedColumns.value : columnOptions.filter((item) => hasColumn(item.key))
+  const csv = `\uFEFF${columns.map((item) => csvCell(item.label)).join(',')}\n${rows.map((row) => columns.map((item) => csvCell(props.mode === 'list' ? legacyCellValue(row, item.key as LegacyColumnKey) : row[item.key])).join(',')).join('\n')}`
   exportUrl.value = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
   await nextTick(); exportLink.value?.click(); window.setTimeout(() => { URL.revokeObjectURL(exportUrl.value); exportUrl.value = '' }, 0)
   ElMessage.success(`已导出 ${rows.length} 条资产`)
@@ -252,12 +386,96 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <section class="standard-business-view asset-directory-view">
+  <section :class="mode === 'list' ? 'asset-list-page asset-directory-view' : 'standard-business-view asset-directory-view'">
+    <template v-if="mode === 'list'">
+      <div class="asset-list-toolbar">
+        <div class="asset-list-actions">
+          <button v-if="can('asset:item:create')" class="table-action primary" type="button" @click="openCreate()">＋ 新增</button>
+          <el-dropdown placement="bottom-start" trigger="click">
+            <button class="table-action has-caret" type="button">操作<span class="action-caret" aria-hidden="true"></span></button>
+            <template #dropdown><el-dropdown-menu>
+              <el-dropdown-item v-if="can('asset:item:receive')" @click="openActionForIds(selected, 'receive')">领用</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:borrow')" @click="openActionForIds(selected, 'borrow')">借用</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:return')" @click="openActionForIds(selected, 'return')">领用退还</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:borrowReturn')" @click="openActionForIds(selected, 'borrow-return')">借用归还</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:handover')" @click="openActionForIds(selected, 'handover')">资产交接</el-dropdown-item>
+            </el-dropdown-menu></template>
+          </el-dropdown>
+          <el-dropdown placement="bottom-start" trigger="click">
+            <button class="table-action has-caret" type="button">编辑<span class="action-caret" aria-hidden="true"></span></button>
+            <template #dropdown><el-dropdown-menu>
+              <el-dropdown-item v-if="can('asset:item:update')" @click="openEdit(selected)">修改</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:delete')" @click="removeAssets(selected)">删除</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:copy')" @click="selected[0] ? openCreate(selected[0]) : ElMessage.warning('请先选择资产')">复制资产</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:batchUpdate')" @click="openEdit(selected, true)">批量修改</el-dropdown-item>
+            </el-dropdown-menu></template>
+          </el-dropdown>
+          <el-dropdown placement="bottom-start" trigger="click">
+            <button class="table-action has-caret" type="button">导入/导出<span class="action-caret" aria-hidden="true"></span></button>
+            <template #dropdown><el-dropdown-menu>
+              <el-dropdown-item v-if="can('asset:item:assetImport')" @click="openImport('asset')">资产导入</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:updateImport')" @click="openImport('update')">更新导入</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:receiveImport')" @click="openImport('receive')">批量领用导入</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:export')" @click="exportAssets">导出资产</el-dropdown-item>
+            </el-dropdown-menu></template>
+          </el-dropdown>
+          <button v-if="can('asset:item:printLabel')" class="table-action" type="button" @click="openPrint">打印标签</button>
+          <a v-if="exportUrl" ref="exportLink" :href="exportUrl" :download="`资产列表_${new Date().toISOString().slice(0, 10)}.csv`" hidden>下载</a>
+        </div>
+        <div class="asset-list-search">
+          <input v-model="query" class="local-search" type="search" placeholder="搜索" autocomplete="off" aria-label="搜索资产">
+          <button class="table-action primary" type="button" aria-label="查询资产" @click="page = 1">⌕</button>
+        </div>
+      </div>
+
+      <el-alert v-if="state.errorMessage" :title="state.errorMessage" type="error" show-icon :closable="false" />
+      <div v-loading="state.loading" class="asset-table-shell" :class="`density-${legacyDensity}`">
+        <div class="asset-table-actions">
+          <button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="advancedOpen = true">高级搜索</button>
+          <el-popover v-if="can('asset:item:columnSettings')" placement="bottom-end" :width="300" trigger="click">
+            <template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template>
+            <div class="standard-column-settings legacy-column-settings">
+              <div class="legacy-column-settings__head"><strong>显示字段</strong><button type="button" @click="resetLegacySettings">重置</button></div>
+              <div class="legacy-column-settings__grid"><el-checkbox v-for="item in legacyColumns" :key="item.key" :model-value="legacyVisibleColumns.includes(item.key)" @change="toggleLegacyColumn(item.key, $event === true)">{{ item.label }}</el-checkbox></div>
+              <strong>表格密度</strong>
+              <el-radio-group v-model="legacyDensity" size="small"><el-radio-button value="compact">紧凑</el-radio-button><el-radio-button value="standard">标准</el-radio-button><el-radio-button value="roomy">宽松</el-radio-button></el-radio-group>
+            </div>
+          </el-popover>
+        </div>
+        <div class="asset-table-scroll">
+          <table class="asset-list-table" :style="{ minWidth: `${legacyTableMinWidth}px` }">
+            <colgroup><col style="width: 36px"><col v-for="column in legacyDisplayedColumns" :key="column.key" :style="{ width: `${column.width}px` }"></colgroup>
+            <thead><tr><th class="asset-list-select-cell"><input type="checkbox" aria-label="全选" :checked="allPageSelected" :disabled="!paged.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th v-for="column in legacyDisplayedColumns" :key="column.key" :data-column-key="column.key">{{ column.label }}</th></tr></thead>
+            <tbody>
+              <tr v-for="item in paged" :key="item.id">
+                <td class="asset-list-select-cell"><input type="checkbox" :aria-label="`选择${item.id}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td>
+                <td v-for="column in legacyDisplayedColumns" :key="column.key">
+                  <span v-if="column.key === 'status'" class="asset-status-pill" :class="legacyStatusClass(item.status)">{{ item.status || '-' }}</span>
+                  <button v-else-if="column.key === 'code'" class="link" type="button" @click="detail = item">{{ item.id }}</button>
+                  <template v-else>{{ legacyCellValue(item, column.key) }}</template>
+                </td>
+              </tr>
+              <tr v-if="!paged.length" class="empty-row"><td :colspan="legacyDisplayedColumns.length + 1">{{ query ? '没有匹配的资产结果。' : '当前账号下暂无资产。' }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="asset-list-pagination">
+        <span>共 {{ filtered.length }} 条</span>
+        <button class="page-btn" type="button" aria-label="上一页" :disabled="page <= 1" @click="page--">‹</button>
+        <template v-for="(item, index) in paginationItems" :key="`${item}-${index}`"><span v-if="item === 'ellipsis'" class="page-ellipsis">…</span><button v-else class="page-btn" :class="{ active: item === page }" type="button" :aria-current="item === page ? 'page' : undefined" @click="page = item">{{ item }}</button></template>
+        <button class="page-btn" type="button" aria-label="下一页" :disabled="page >= pageCount" @click="page++">›</button>
+        <select v-model.number="pageSize" aria-label="每页条数"><option :value="20">20 条/页</option><option :value="50">50 条/页</option></select>
+        <span>跳至</span><input v-model.number="jumpPage" aria-label="跳转页码" inputmode="numeric" @keydown.enter="goToJumpPage"><span>页</span>
+      </div>
+    </template>
+
+    <template v-else>
     <header class="standard-page-header">
       <div><h1>{{ title }}</h1><p>{{ subtitleByMode[mode] }}</p></div>
       <div class="standard-header-actions">
         <el-button :icon="Refresh" @click="refresh">刷新</el-button>
-        <el-button v-if="mode === 'inbound' && can('asset:item:assetImport')" :icon="Upload" @click="importOpen = true">导入资产</el-button>
+        <el-button v-if="mode === 'inbound' && can('asset:item:assetImport')" :icon="Upload" @click="openImport('asset')">导入资产</el-button>
         <el-button v-if="mode === 'inbound' && can('asset:item:create')" type="primary" :icon="Plus" @click="openCreate()">新增资产</el-button>
       </div>
     </header>
@@ -270,11 +488,7 @@ onMounted(() => void load())
       <el-button v-if="can('asset:item:advancedSearch')" :icon="Filter" @click="advancedOpen = true">高级筛选</el-button>
       <span class="standard-toolbar-spacer"></span>
       <span v-if="selected.length" class="standard-selection-count">已选 {{ selected.length }} 项</span>
-      <el-button v-if="mode !== 'list' && mode !== 'inbound' && selected.length" type="primary" @click="openSelectedWorkflow">批量{{ actionFor(selected[0]) ? actionLabel(actionFor(selected[0])!) : '操作' }}</el-button>
-      <el-dropdown v-if="mode === 'list' && selected.length" trigger="click">
-        <el-button>批量操作<el-icon class="el-icon--right"><Edit /></el-icon></el-button>
-        <template #dropdown><el-dropdown-menu><el-dropdown-item v-if="can('asset:item:batchUpdate')" @click="openEdit(selected, true)">批量修改</el-dropdown-item><el-dropdown-item v-if="can('asset:item:delete')" divided @click="removeAssets(selected)">批量删除</el-dropdown-item></el-dropdown-menu></template>
-      </el-dropdown>
+      <el-button v-if="mode !== 'inbound' && selected.length" type="primary" @click="openSelectedWorkflow">批量{{ actionFor(selected[0]) ? actionLabel(actionFor(selected[0])!) : '操作' }}</el-button>
       <el-button v-if="can('asset:item:printLabel')" :icon="Printer" @click="openPrint">打印</el-button>
       <el-button v-if="can('asset:item:export')" :icon="Download" @click="exportAssets">导出</el-button>
       <el-popover v-if="can('asset:item:columnSettings')" placement="bottom-end" :width="260" trigger="click">
@@ -305,7 +519,7 @@ onMounted(() => void load())
           <template #default="scope">
             <el-button link type="primary" @click="detail = scope.row">详情</el-button>
             <el-button v-if="actionFor(scope.row)" link type="primary" @click="openAction(scope.row, actionFor(scope.row)!)">{{ actionLabel(actionFor(scope.row)!) }}</el-button>
-            <el-dropdown v-if="mode === 'list' || mode === 'inbound'" trigger="click">
+            <el-dropdown v-if="mode === 'inbound'" trigger="click">
               <el-button link type="primary">更多</el-button>
               <template #dropdown><el-dropdown-menu>
                 <el-dropdown-item v-if="can('asset:item:update')" @click="openEdit([scope.row])">修改</el-dropdown-item>
@@ -319,6 +533,7 @@ onMounted(() => void load())
       </el-table>
     </div>
     <div class="standard-pagination"><span>共 {{ filtered.length }} 条</span><el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="filtered.length" :page-sizes="[20, 50, 100]" layout="prev, pager, next, sizes" /></div>
+    </template>
 
     <el-drawer v-model="advancedOpen" title="高级筛选" size="min(620px, 92vw)" append-to-body>
       <el-form label-position="top" class="standard-form-grid">
@@ -389,14 +604,14 @@ onMounted(() => void load())
       <template #footer><el-button @click="actionOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitAction">确认{{ actionLabel(actionForm.action) }}</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="importOpen" title="资产导入" width="min(900px, 94vw)" append-to-body>
+    <el-dialog v-model="importOpen" :title="importTitle" width="min(900px, 94vw)" append-to-body>
       <div class="standard-import-panel">
         <div class="standard-import-actions"><label class="el-button el-button--primary"><input type="file" accept=".xlsx" hidden @change="readImportFile">选择 Excel 文件</label><a class="el-button" href="/assets/asset-import-template.xlsx" download>下载导入模板</a><span>{{ importFileName || '仅支持 .xlsx 文件' }}</span></div>
-        <el-alert title="导入前会校验资产名称、分类、位置和金额；错误行不会提交。" type="info" :closable="false" />
-        <el-table v-loading="parsing" :data="importRows" height="360"><el-table-column prop="rowNumber" label="行号" width="70" /><el-table-column label="资产名称" min-width="150"><template #default="scope">{{ scope.row.draft?.name || '-' }}</template></el-table-column><el-table-column label="资产分类" min-width="130"><template #default="scope">{{ scope.row.draft?.category || '-' }}</template></el-table-column><el-table-column label="所在位置" min-width="140"><template #default="scope">{{ scope.row.draft?.location || '-' }}</template></el-table-column><el-table-column label="校验结果" min-width="220"><template #default="scope"><el-tag v-if="!scope.row.errors.length" type="success">可导入</el-tag><span v-else class="standard-import-error">{{ scope.row.errors.join('；') }}</span></template></el-table-column></el-table>
+        <el-alert :title="importMode === 'asset' ? '导入前会校验资产名称、分类、位置和金额；错误行不会提交。' : importMode === 'update' ? '按资产编码更新已填写字段，空白字段保持原值。' : '按资产编码、ECP 人员和领用日期批量领用资产。'" type="info" :closable="false" />
+        <el-table v-loading="parsing" :data="importRows" height="360"><el-table-column prop="rowNumber" label="行号" width="70" /><el-table-column v-if="importMode !== 'asset'" label="资产编码" min-width="130"><template #default="scope">{{ scope.row.draft?.id || '-' }}</template></el-table-column><el-table-column label="资产名称" min-width="150"><template #default="scope">{{ scope.row.draft?.name || '-' }}</template></el-table-column><el-table-column v-if="importMode === 'asset'" label="资产分类" min-width="130"><template #default="scope">{{ scope.row.draft?.category || '-' }}</template></el-table-column><el-table-column label="所在位置" min-width="140"><template #default="scope">{{ scope.row.draft?.location || '-' }}</template></el-table-column><el-table-column v-if="importMode === 'receive'" label="领用人" min-width="120"><template #default="scope">{{ scope.row.draft?.owner || scope.row.draft?.ownerSubject || '-' }}</template></el-table-column><el-table-column label="校验结果" min-width="220"><template #default="scope"><el-tag v-if="!scope.row.errors.length" type="success">可导入</el-tag><span v-else class="standard-import-error">{{ scope.row.errors.join('；') }}</span></template></el-table-column></el-table>
         <p v-if="importRows.length">可导入 {{ validImportRows.length }} 条，错误 {{ invalidImportCount }} 条</p>
       </div>
-      <template #footer><el-button @click="importOpen = false">取消</el-button><el-button type="primary" :disabled="!validImportRows.length" :loading="submitting" @click="submitImport">确认导入</el-button></template>
+      <template #footer><el-button @click="importOpen = false">取消</el-button><el-button type="primary" :disabled="!validImportRows.length" :loading="submitting" @click="submitImport">确认{{ importTitle }}</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="printOpen" title="资产标签打印预览" width="min(900px, 94vw)" append-to-body class="standard-print-dialog">

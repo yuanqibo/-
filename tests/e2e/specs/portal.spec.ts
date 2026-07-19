@@ -36,7 +36,7 @@ test.describe('登录后门户质量回归', () => {
   test('主要路由直接加载真实 Vue 页面', async ({ page }) => {
     await installApiMocks(page)
     const routes = [
-      ['/', '你好，测试管理员'], ['/assets', '资产列表'], ['/assets/inbound', '资产入库'],
+      ['/', '仪表盘'], ['/assets', '资产列表'], ['/assets/inbound', '资产入库'],
       ['/assets/receive-return', '领用退库'], ['/assets/borrow-return', '借用归还'], ['/assets/stocktake', '资产盘点'],
       ['/assets/settings', '资产设置'], ['/assets/settings/locations', '位置管理'], ['/assets/settings/categories', '资产分类'],
       ['/assets/settings/code-rules', '资产编码规则'], ['/assets/settings/label-templates', '标签模板设置'], ['/requests', '审批'],
@@ -75,27 +75,40 @@ test.describe('登录后门户质量回归', () => {
     await expect(page.locator('.asset-subnav-child.active')).toHaveText('资产分类')
   })
 
+  test('首页保留迁移前的统计与仪表盘板块', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '仪表盘完整板块在桌面项目执行')
+    await openApp(page, '/')
+    for (const text of ['资产总数', '在用资产', '待处理单据', '资产原值', '资产状态占比', '资产分布情况', '在用资产统计', '资产分类统计']) {
+      await expect(page.getByText(text, { exact: true }).first()).toBeVisible()
+    }
+    await expect(page.getByText('最近资产', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('最近审批', { exact: true })).toHaveCount(0)
+  })
+
   test('资产搜索、分页、详情和高级筛选可用', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '密集表格业务流在桌面项目执行，移动项目负责布局回归')
     await openApp(page, '/assets')
-    const search = page.getByPlaceholder('搜索资产编码、名称、人员或位置')
+    for (const text of ['＋ 新增', '操作', '编辑', '导入/导出', '打印标签', '资产状态', '手机号', '电子邮箱', '领用日期', '购置方式', '使用信息']) {
+      await expect(page.getByText(text, { exact: true }).first()).toBeVisible()
+    }
+    const search = page.getByPlaceholder('搜索', { exact: true })
     await search.fill('测试笔记本')
     await expect(page.getByText('测试笔记本', { exact: true })).toBeVisible()
     await expect(page.getByText('测试显示器 2', { exact: true })).toHaveCount(0)
     await search.clear()
-    await page.locator('.el-pagination .btn-next').click()
+    await page.locator('.asset-list-pagination .page-btn[aria-label="下一页"]').click()
     await expect(page.getByText('AST-0021', { exact: true })).toBeVisible()
 
     await search.fill('测试笔记本')
-    const row = page.locator('.el-table__body-wrapper tbody tr').filter({ hasText: '测试笔记本' })
-    await row.getByRole('button', { name: '详情', exact: true }).click()
+    const row = page.locator('.asset-list-table tbody tr').filter({ hasText: '测试笔记本' })
+    await row.getByRole('button', { name: 'AST-0001', exact: true }).click()
     const drawer = page.getByRole('dialog', { name: '资产详情' })
     await expect(drawer).toBeVisible()
     await expect(drawer.getByText('SN-1', { exact: true })).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(drawer).toBeHidden()
 
-    await page.getByRole('button', { name: '高级筛选', exact: true }).click()
+    await page.getByRole('button', { name: '高级搜索', exact: true }).click()
     await expect(page.getByRole('heading', { name: '高级筛选', exact: true })).toBeVisible()
   })
 
