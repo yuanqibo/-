@@ -50,6 +50,31 @@ test.describe('登录后门户质量回归', () => {
     }
   })
 
+  test('资产导航保留迁移前的选中样式与展开交互', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '导航视觉和点击状态在桌面项目执行')
+    await openApp(page, '/assets/settings/locations')
+
+    await expect(page.getByRole('button', { name: '资产', exact: true }).locator('.nav-asset-icon')).toBeVisible()
+    const parent = page.locator('.asset-subnav-parent')
+    const activeChild = page.locator('.asset-subnav-child.active')
+    await expect(parent).toHaveAttribute('aria-expanded', 'true')
+    await expect(parent).toHaveCSS('color', 'rgb(18, 150, 219)')
+    await expect(parent).toHaveCSS('background-color', 'rgb(238, 249, 255)')
+    await expect(activeChild).toHaveText('位置管理')
+    await expect(activeChild).toHaveCSS('color', 'rgb(255, 255, 255)')
+
+    await parent.click()
+    await expect(parent).toHaveAttribute('aria-expanded', 'false')
+    await expect(activeChild).toBeHidden()
+    await parent.click()
+    await expect(parent).toHaveAttribute('aria-expanded', 'true')
+    await expect(activeChild).toBeVisible()
+
+    await page.getByRole('button', { name: '资产分类', exact: true }).click()
+    await expect(page).toHaveURL('/assets/settings/categories')
+    await expect(page.locator('.asset-subnav-child.active')).toHaveText('资产分类')
+  })
+
   test('资产搜索、分页、详情和高级筛选可用', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '密集表格业务流在桌面项目执行，移动项目负责布局回归')
     await openApp(page, '/assets')

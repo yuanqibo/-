@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowDown, ArrowRight, Box, HomeFilled, QuestionFilled, Setting, Tickets } from '@element-plus/icons-vue'
+import { QuestionFilled } from '@element-plus/icons-vue'
 import { usePortalSession } from '../auth/portal-session'
 import type { PortalMenuItem } from '../auth/portal-context'
 import { MEMBER_AUTHORIZATION_PORTAL_PATH } from '../routing/standard-routes'
+import PortalNavIcon from './PortalNavIcon.vue'
 
 type LayoutSection = 'auto' | 'assets' | 'system' | 'none'
 
@@ -41,8 +42,6 @@ const assetChildren = (parentId: string): PortalMenuItem[] => menuItems.value
   .filter((item) => item.parentId === parentId)
   .sort((left, right) => left.order - right.order)
 
-const iconByMenuId = { home: HomeFilled, assets: Box, requests: Tickets, settings: Setting } as const
-
 const primaryActive = (item: PortalMenuItem): boolean => {
   if (item.id === 'assets') return route.path.startsWith('/assets')
   if (item.id === 'settings') return route.path.startsWith('/system')
@@ -56,7 +55,6 @@ const navigate = (item: PortalMenuItem): void => {
   void router.push(routePathForMenu(item))
 }
 
-const menuIcon = (id: string) => iconByMenuId[id as keyof typeof iconByMenuId] || Setting
 const logout = (): void => { void window.__ASSET_PORTAL_ECP_CONTEXT__?.logout() }
 const handleAccountCommand = (command: string | number | object): void => {
   if (command === 'logout') logout()
@@ -120,11 +118,11 @@ onUnmounted(() => {
 
       <nav class="nav" aria-label="主导航">
         <div class="nav-content"><div class="nav-section">
-          <div v-for="item in primaryMenus" :key="item.id" class="nav-group">
+          <div v-for="item in primaryMenus" :key="item.id" class="nav-group" :class="{ 'has-children': item.id === 'assets' }">
             <button class="nav-item" :class="{ active: primaryActive(item) }" type="button"
               :title="item.id === 'requests' ? '审批' : item.title"
               :aria-current="primaryActive(item) ? 'page' : undefined" @click="navigate(item)">
-              <span class="nav-icon"><el-icon :size="32"><component :is="menuIcon(item.id)" /></el-icon></span>
+              <span class="nav-icon"><PortalNavIcon :kind="item.id" /></span>
               <span class="nav-label">{{ item.id === 'requests' ? '审批' : item.title }}</span>
             </button>
           </div>
@@ -171,12 +169,12 @@ onUnmounted(() => {
                 </button>
                 <template v-for="item in assetMenus" :key="item.id">
                   <div v-if="assetChildren(item.id).length" class="asset-subnav-group" :class="{ open: openAssetGroups.has(item.id) }">
-                    <button class="asset-subnav-item" :class="{ active: route.path === item.path || hasActiveAssetChild(item) }"
-                      type="button" @click="toggleAssetGroup(item.id)">
+                    <button class="asset-subnav-item asset-subnav-parent" :class="{ active: route.path === item.path || hasActiveAssetChild(item) }"
+                      type="button" :aria-expanded="openAssetGroups.has(item.id)" @click="toggleAssetGroup(item.id)">
                       <span class="asset-subnav-dot" aria-hidden="true"></span><span class="asset-subnav-label">{{ item.title }}</span>
-                      <el-icon class="standard-subnav-caret"><ArrowDown v-if="openAssetGroups.has(item.id)" /><ArrowRight v-else /></el-icon>
+                      <span class="asset-subnav-caret" aria-hidden="true"></span>
                     </button>
-                    <div v-show="openAssetGroups.has(item.id)" class="asset-subnav-children">
+                    <div v-show="openAssetGroups.has(item.id)" class="asset-subnav-children" :aria-hidden="!openAssetGroups.has(item.id)">
                       <button v-for="child in assetChildren(item.id)" :key="child.id" class="asset-subnav-child"
                         :class="{ active: route.path === child.path }" type="button" @click="navigate(child)">{{ child.title }}</button>
                     </div>
