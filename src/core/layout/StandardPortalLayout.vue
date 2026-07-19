@@ -189,7 +189,7 @@ onUnmounted(() => {
           <div class="system-content standard-system-content"><slot /></div>
         </section>
 
-        <div v-else class="standard-main-content"><slot /></div>
+        <template v-else><slot /></template>
       </section>
     </main>
   </div>

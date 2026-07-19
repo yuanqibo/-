@@ -50,6 +50,32 @@ export type BusinessRecord = {
   [key: string]: unknown
 }
 
+export type AssetOperationRecord = {
+  id: string
+  type: 'INBOUND' | 'RECEIVE' | 'RETURN' | 'BORROW' | 'BORROW_RETURN' | 'HANDOVER'
+  assetId: string
+  assetName?: string
+  assetCategory?: string
+  assetBrand?: string
+  assetModel?: string
+  assetSn?: string
+  assetPrice?: number
+  status?: string
+  date?: string
+  operator?: string
+  party?: string
+  partySubject?: string
+  company?: string
+  department?: string
+  location?: string
+  note?: string
+  sourceType?: string
+  expectedReturnDate?: string
+  returnOrderId?: string
+  canSign?: boolean
+  [key: string]: unknown
+}
+
 export type CatalogNode = {
   id: string
   code?: string

@@ -6,7 +6,7 @@ const asset = (id: string, name: string, status = '闲置'): AssetRecord => ({
 })
 
 const api = vi.hoisted(() => ({
-  createAsset: vi.fn(), copyAsset: vi.fn(), createStocktake: vi.fn(), fetchAssets: vi.fn(), fetchBusinessData: vi.fn(), fetchPortalStore: vi.fn(), importAssets: vi.fn(), runAssetCommand: vi.fn(), saveAssetCodeSettings: vi.fn(), saveCatalog: vi.fn(), saveLabelSettings: vi.fn(), updateStocktake: vi.fn()
+  createAsset: vi.fn(), copyAsset: vi.fn(), createStocktake: vi.fn(), fetchAssetOperations: vi.fn(), fetchAssets: vi.fn(), fetchBusinessData: vi.fn(), fetchPortalStore: vi.fn(), importAssets: vi.fn(), runAssetCommand: vi.fn(), saveAssetCodeSettings: vi.fn(), saveCatalog: vi.fn(), saveLabelSettings: vi.fn(), updateStocktake: vi.fn()
 }))
 vi.mock('../../../src/features/assets/api/assets.api', () => api)
 
@@ -16,6 +16,7 @@ describe('useAssets', () => {
   beforeEach(() => {
     Object.values(api).forEach((mock) => mock.mockReset())
     api.fetchAssets.mockResolvedValue([asset('AST-1', '笔记本')])
+    api.fetchAssetOperations.mockResolvedValue([])
     api.fetchBusinessData.mockResolvedValue({ values: { stocktakes: [] } })
     api.fetchPortalStore.mockResolvedValue({})
   })

@@ -1492,6 +1492,13 @@ button {
   white-space: nowrap;
 }
 
+button.asset-code-rule-field-name {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
 .asset-code-rule-field-name i {
   width: 15px;
   height: 15px;
@@ -9568,6 +9575,26 @@ body.is-resizing-column * {
 
 .asset-detail-drawer {
   width: min(1120px, 96vw);
+}
+
+.el-drawer.asset-detail-drawer .el-drawer__header {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 22px 28px 14px;
+  border-bottom: 0;
+}
+
+.el-drawer.asset-detail-drawer .el-drawer__title {
+  height: 20px;
+  overflow: hidden;
+  color: transparent;
+  font-size: 0;
+}
+
+.el-drawer.asset-detail-drawer .el-drawer__body {
+  min-height: 0;
+  padding: 0;
+  overflow: auto;
 }
 
 .asset-detail-drawer .drawer-header {

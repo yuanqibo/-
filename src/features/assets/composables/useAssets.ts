@@ -3,6 +3,7 @@ import {
   createAsset as createAssetRequest,
   copyAsset as copyAssetRequest,
   createStocktake as createStocktakeRequest,
+  fetchAssetOperations,
   fetchAssets,
   fetchBusinessData,
   fetchPortalStore,
@@ -13,10 +14,11 @@ import {
   saveLabelSettings,
   updateStocktake as updateStocktakeRequest
 } from '../api/assets.api'
-import type { AssetCommand, AssetDraft, AssetRecord, BusinessRecord, PortalStoreValues } from '../types/assets'
+import type { AssetCommand, AssetDraft, AssetOperationRecord, AssetRecord, BusinessRecord, PortalStoreValues } from '../types/assets'
 
 type AssetState = {
   assets: AssetRecord[]
+  operations: AssetOperationRecord[]
   business: Record<string, BusinessRecord[]>
   store: PortalStoreValues
   loading: boolean
@@ -26,6 +28,7 @@ type AssetState = {
 
 const state = reactive<AssetState>({
   assets: [],
+  operations: [],
   business: {},
   store: {},
   loading: false,
@@ -40,10 +43,12 @@ const load = async (force = false): Promise<void> => {
   if (pending && !force) return pending
   state.loading = true
   state.errorMessage = ''
-  pending = Promise.allSettled([fetchAssets(), fetchBusinessData(), fetchPortalStore()])
-    .then(([assets, business, store]) => {
+  pending = Promise.allSettled([fetchAssets(), fetchAssetOperations(), fetchBusinessData(), fetchPortalStore()])
+    .then(([assets, operations, business, store]) => {
       if (assets.status === 'fulfilled') state.assets = assets.value
       else throw assets.reason
+      if (operations.status === 'fulfilled') state.operations = operations.value
+      else state.operations = []
       if (business.status === 'fulfilled') state.business = business.value.values || {}
       if (store.status === 'fulfilled') state.store = store.value
       state.initialized = true
@@ -64,26 +69,35 @@ const replaceAssets = (items: AssetRecord[]): void => {
   state.assets = Array.from(byId.values())
 }
 
+const reloadOperations = async (): Promise<void> => {
+  try { state.operations = await fetchAssetOperations() }
+  catch { state.operations = [] }
+}
+
 const create = async (draft: AssetDraft): Promise<AssetRecord> => {
   const item = await createAssetRequest(draft)
   state.assets = [item, ...state.assets]
+  await reloadOperations()
   return item
 }
 
 const importMany = async (drafts: AssetDraft[]): Promise<number> => {
   const items = await importAssetsRequest(drafts)
   state.assets = [...items, ...state.assets]
+  await reloadOperations()
   return items.length
 }
 
 const copy = async (sourceAssetId: string, draft: AssetDraft): Promise<AssetRecord> => {
   const item = await copyAssetRequest(sourceAssetId, draft)
   state.assets = [item, ...state.assets]
+  await reloadOperations()
   return item
 }
 
 const command = async (action: AssetCommand, assetIds: string[], fields: Record<string, unknown>): Promise<void> => {
   const items = await runAssetCommandRequest(action, assetIds, fields)
+  await reloadOperations()
   if (action === 'delete' || action === 'cancel-inbound') {
     const removed = new Set(assetIds)
     state.assets = state.assets.filter((item) => !removed.has(item.id))
@@ -120,6 +134,7 @@ const updateStocktake = async (id: string, value: Pick<BusinessRecord, 'checked'
 export const useAssets = () => ({
   state: readonly(state),
   assets: computed(() => state.assets),
+  operations: computed(() => state.operations),
   business: computed(() => state.business),
   store: computed(() => state.store),
   load,

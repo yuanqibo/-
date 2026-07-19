@@ -19,6 +19,15 @@ const requests = [
   { id: 'REQ-002', type: '资产借用', applicant: '李四', asset: '测试显示器', reason: '', status: '已完成', system: 'ECP审批', date: '2026-07-17', currentNode: '已归档' }
 ]
 
+const assetOperations = [
+  { id: 'RK-001', type: 'INBOUND', assetId: 'AST-0001', status: '已入库', date: '2026-07-01', operator: '管理员', company: '示例公司', location: '杭州仓库', sourceType: '新增资产' },
+  { id: 'LY-001', type: 'RECEIVE', assetId: 'AST-0001', status: '已完成', date: '2026-07-10', operator: '管理员', party: '张三', company: '示例公司', department: '研发部', location: '研发办公室' },
+  { id: 'TK-001', type: 'RETURN', assetId: 'AST-0006', status: '已完成', date: '2026-07-16', operator: '管理员', party: '员工6', company: '示例公司', department: '综合部', location: '杭州仓库' },
+  { id: 'JY-001', returnOrderId: 'GH-001', type: 'BORROW', assetId: 'AST-0008', status: '待归还', date: '2026-07-12', expectedReturnDate: '2026-07-22', operator: '管理员', party: '员工8', company: '示例公司', department: '综合部', location: '会议室' },
+  { id: 'GH-002', type: 'BORROW_RETURN', assetId: 'AST-0015', status: '已完成', date: '2026-07-18', operator: '管理员', party: '员工15', company: '示例公司', department: '综合部', location: '杭州仓库' },
+  { id: 'JJ-001', type: 'HANDOVER', assetId: 'AST-0001', status: '待签字', date: '2026-07-19', operator: '管理员', party: '李四', company: '示例公司', department: '研发部', location: '研发办公室', canSign: true }
+]
+
 const employees = Array.from({ length: 60 }, (_, index) => ({
   subject: `sub-${index + 1}`, unionId: `user-${index + 1}`, externalId: `ext-${index + 1}`, accountSetUnionId: 'set-1',
   name: index === 0 ? '张三' : `员工${index + 1}`, displayName: null, email: `user${index + 1}@example.com`, phone: '', employeeNo: `A${String(index + 1).padStart(4, '0')}`,
@@ -60,10 +69,12 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
     const fulfill = (value: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) })
 
     if (url.pathname === '/api/assets' && method === 'GET') return options.failAssets ? fulfill({ error: '资产服务暂不可用' }, 503) : fulfill({ items: assets })
+    if (url.pathname === '/api/asset-operations' && method === 'GET') return fulfill({ items: assetOperations, total: assetOperations.length, page: 1, size: 500 })
     if (url.pathname === '/api/assets' && method === 'POST') return fulfill({ item: { ...assets[0], ...(body as { item?: object })?.item, id: 'AST-NEW' } }, 201)
     if (url.pathname === '/api/assets/import') return fulfill({ items: [] }, 201)
     if (url.pathname.startsWith('/api/assets/commands/')) return fulfill({ items: assets.slice(0, 1) })
     if (url.pathname === '/api/business-data' && method === 'GET') return fulfill({ values: { requests, stocktakes: [{ id: 'STK-001', name: '季度盘点', scope: '全部资产', owner: '管理员', progress: '盘点中', total: 45, checked: 20, diff: 1, date: '2026-07-20' }], consumables: [], repairs: [], contracts: [] }, versions: {} })
+    if (url.pathname === '/api/business-data/requests' && method === 'POST') return fulfill({ item: { id: 'REQ-NEW', status: '审批中', system: 'ECP审批', currentNode: '直属主管', date: '2026-07-19', ...(body as object) } }, 201)
     if (url.pathname.includes('/api/business-data/requests/') && url.pathname.endsWith('/decision')) return fulfill({ items: requests.map((item) => item.id === 'REQ-001' ? { ...item, status: '已完成', currentNode: '已归档' } : item) })
     if (url.pathname === '/api/business-data/stocktakes' && method === 'POST') return fulfill({ item: { id: 'STK-NEW', ...(body as object) } }, 201)
     if (url.pathname.startsWith('/api/business-data/stocktakes/') && method === 'PATCH') return fulfill({ items: [] })

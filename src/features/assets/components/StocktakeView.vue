@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useAssets } from '../composables/useAssets'
 import type { BusinessRecord } from '../types/assets'
@@ -41,20 +40,13 @@ onMounted(() => void load())
 </script>
 
 <template>
-  <section class="standard-business-view">
-    <header class="standard-page-header"><div><h1>资产盘点</h1><p>查看盘点任务、完成进度与差异处理情况。</p></div><div class="standard-header-actions"><el-button :icon="Refresh" @click="load(true)">刷新</el-button><el-button v-if="can('asset:stocktake:create')" type="primary" :icon="Plus" @click="openCreate">新建盘点</el-button></div></header>
-    <div class="standard-toolbar"><el-input v-model="query" clearable :prefix-icon="Search" placeholder="搜索任务编号、名称或负责人" /></div>
-    <div class="standard-table-shell"><el-table v-loading="state.loading" :data="rows" height="100%" row-key="id">
-      <el-table-column prop="id" label="任务编号" min-width="140" /><el-table-column prop="name" label="盘点任务" min-width="180" />
-      <el-table-column prop="scope" label="盘点范围" min-width="180" /><el-table-column prop="owner" label="负责人" width="120" />
-      <el-table-column label="进度" min-width="180"><template #default="scope"><el-progress :percentage="scope.row.total ? Math.round((scope.row.checked || 0) * 100 / scope.row.total) : 0" /></template></el-table-column>
-      <el-table-column prop="diff" label="差异数量" width="100" /><el-table-column prop="date" label="计划日期" width="130" />
-      <el-table-column label="操作" width="150"><template #default="scope"><el-button link type="primary" @click="detail = scope.row">详情</el-button><el-button v-if="can('asset:stocktake:update')" link type="primary" @click="openUpdate(scope.row)">更新进度</el-button></template></el-table-column>
-    </el-table></div>
+  <section class="stocktake-view">
+    <section class="hero"><h1>资产盘点</h1><p>支持普通管理员扫码盘点、员工自助盘点、照片水印和盘盈盘亏处理。</p><div v-if="can('asset:stocktake:create')" class="quick-actions"><button class="btn primary" type="button" @click="openCreate">新建盘点</button></div></section>
+    <section class="panel"><div class="toolbar"><input v-model="query" class="local-search" type="search" placeholder="盘点任务名称"><select><option>状态</option></select><input type="search" placeholder="负责人"><button class="btn" type="button" @click="load(true)">查询</button></div><div v-loading="state.loading" class="table-wrap"><table><thead><tr><th>任务编号</th><th>盘点任务</th><th>范围</th><th>负责人</th><th>进度</th><th>差异</th><th>计划日期</th><th>操作</th></tr></thead><tbody><tr v-for="item in rows" :key="item.id"><td>{{ item.id }}</td><td>{{ item.name }}</td><td>{{ item.scope }}</td><td>{{ item.owner }}</td><td><span class="tag blue">{{ item.progress || '盘点中' }}</span><div class="panel-subtitle">{{ item.checked || 0 }}/{{ item.total || 0 }} · {{ item.total ? Math.round(Number(item.checked || 0) * 100 / Number(item.total)) : 0 }}%</div></td><td>{{ item.diff || 0 }}</td><td>{{ item.date || '-' }}</td><td><button class="btn" type="button" @click="detail = item">查看明细</button> <button v-if="can('asset:stocktake:update')" class="btn" type="button" @click="openUpdate(item)">登记进度</button></td></tr><tr v-if="!rows.length" class="empty-row"><td colspan="8">当前账号没有可查看的盘点任务。</td></tr></tbody></table></div></section>
     <el-empty v-if="!state.loading && !rows.length" description="暂无盘点任务" />
     <el-drawer :model-value="Boolean(detail)" size="min(620px, 92vw)" append-to-body @close="detail = null">
-      <template #header><div><span class="standard-drawer-eyebrow">盘点明细</span><h2>{{ detail?.name }}</h2></div></template>
-      <el-descriptions v-if="detail" :column="1" border><el-descriptions-item label="任务编号">{{ detail.id }}</el-descriptions-item><el-descriptions-item label="盘点范围">{{ detail.scope }}</el-descriptions-item><el-descriptions-item label="负责人">{{ detail.owner }}</el-descriptions-item><el-descriptions-item label="盘点状态">{{ detail.progress || '未开始' }}</el-descriptions-item><el-descriptions-item label="应盘数量">{{ detail.total || 0 }}</el-descriptions-item><el-descriptions-item label="已盘数量">{{ detail.checked || 0 }}</el-descriptions-item><el-descriptions-item label="差异数量">{{ detail.diff || 0 }}</el-descriptions-item></el-descriptions>
+      <template #header><div><span class="eyebrow">盘点明细</span><h2>{{ detail?.name }}</h2></div></template>
+      <template v-if="detail"><div class="detail-grid"><div v-for="field in [['任务编号', detail.id], ['盘点范围', detail.scope], ['负责人', detail.owner], ['应盘数量', detail.total || 0], ['已盘数量', detail.checked || 0], ['差异数量', detail.diff || 0], ['计划日期', detail.date || '-']]" :key="String(field[0])" class="detail-item"><span class="detail-label">{{ field[0] }}</span><strong class="detail-value">{{ field[1] }}</strong></div><div class="detail-item"><span class="detail-label">状态</span><strong class="detail-value"><span class="tag blue">{{ detail.progress || '未开始' }}</span></strong></div></div><h3>差异处理</h3><div class="timeline"><div class="timeline-item"><div class="timeline-date">盘亏</div><div><div class="timeline-title">{{ detail.diff || 0 }} 项差异待核查</div><div class="timeline-desc">建议发起资产核查或报废流程。</div></div></div><div class="timeline-item"><div class="timeline-date">照片</div><div><div class="timeline-title">盘点照片待审核</div><div class="timeline-desc">移动端上传照片带时间和位置水印。</div></div></div></div></template>
       <template #footer><el-button v-if="detail && can('asset:stocktake:update')" type="primary" @click="openUpdate(detail)">更新盘点进度</el-button></template>
     </el-drawer>
 

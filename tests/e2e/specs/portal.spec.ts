@@ -115,7 +115,8 @@ test.describe('登录后门户质量回归', () => {
   test('新增资产表单提交到既有 API', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '表单业务流在桌面项目执行')
     const state = await openApp(page, '/assets/inbound')
-    await page.getByRole('button', { name: '新增资产', exact: true }).click()
+    await page.getByRole('button', { name: /^新增/ }).click()
+    await page.getByRole('menuitem', { name: '新增资产', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '新增资产' })
     await dialog.locator('.el-form-item').filter({ hasText: '资产名称' }).locator('input').fill('新测试设备')
     await dialog.locator('.el-form-item').filter({ hasText: '资产分类' }).locator('input').fill('IT设备')
@@ -129,13 +130,65 @@ test.describe('登录后门户质量回归', () => {
     test.skip(Boolean(isMobile), '审批业务流在桌面项目执行')
     const state = await openApp(page, '/requests')
     await page.getByPlaceholder('搜索申请编号、类型、申请人或资产').fill('REQ-001')
-    const row = page.locator('.el-table__body-wrapper tbody tr').filter({ hasText: 'REQ-001' })
-    await row.getByRole('button', { name: '通过', exact: true }).click()
+    const row = page.locator('.panel tbody tr').filter({ hasText: 'REQ-001' })
+    await row.getByRole('button', { name: '批准', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '通过审批' })
     await dialog.locator('textarea').fill('信息无误')
     await dialog.getByRole('button', { name: '确认', exact: true }).click()
     await expect(dialog).toBeHidden()
     expect(state.requests.some((item) => item.path.endsWith('/requests/REQ-001/decision') && item.method === 'POST')).toBe(true)
+  })
+
+  test('迁移后的各业务域保留旧页面结构与主要操作入口', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '逐业务域视觉结构在桌面项目执行')
+    await installApiMocks(page)
+
+    await page.goto('/assets/inbound')
+    await expect(page.locator('.asset-inbound-ledger .inbound-order-table')).toBeVisible()
+    await expect(page.getByText('RK-001', { exact: true })).toBeVisible()
+
+    await page.goto('/assets/receive-return')
+    await expect(page.locator('.receive-return-tabs')).toContainText('员工申领')
+    await expect(page.locator('.receive-return-table')).toContainText('领用单号')
+
+    await page.goto('/assets/borrow-return')
+    await expect(page.locator('.borrow-return-table')).toContainText('签字图片')
+    await page.getByRole('button', { name: '归还', exact: true }).first().click()
+    await expect(page.locator('.borrow-return-table')).toContainText('GH-001')
+
+    await page.goto('/assets/stocktake')
+    await expect(page.locator('.stocktake-view .hero')).toContainText('支持普通管理员扫码盘点')
+    await expect(page.locator('.stocktake-view .panel table')).toContainText('任务编号')
+
+    await page.goto('/assets/settings/locations')
+    await expect(page.locator('.location-settings-shell')).toBeVisible()
+    await expect(page.locator('.location-settings-table')).toContainText('上级位置')
+
+    await page.goto('/assets/settings/categories')
+    await expect(page.locator('.asset-category-settings-shell')).toBeVisible()
+    await expect(page.locator('.asset-category-settings-table')).toContainText('计量单位')
+
+    await page.goto('/assets/settings/code-rules')
+    await expect(page.locator('.asset-code-rule-workspace')).toContainText('可选字段')
+    await expect(page.locator('.asset-code-rule-preview')).toContainText('规则预览')
+
+    await page.goto('/assets/settings/label-templates')
+    await expect(page.locator('.asset-label-template-page')).toBeVisible()
+    await expect(page.locator('.asset-label-template-left')).toContainText('标准资产标签')
+
+    await page.goto('/requests')
+    await expect(page.locator('.approvals-view .hero')).toContainText('审批管理')
+    await expect(page.locator('.approvals-view .panel table')).toContainText('当前节点')
+
+    await page.goto('/system/self-service')
+    await expect(page.locator('.self-service-panel')).toContainText('签字设置')
+    await expect(page.locator('.self-service-config-panel')).toContainText('自助资产领用')
+
+    await page.goto('/system/integrations')
+    await expect(page.locator('.account-management-panel, .system-content .panel').first()).toContainText('系统对接')
+
+    await page.goto('/system/forms')
+    await expect(page.locator('.system-content .panel')).toContainText('表单管理')
   })
 
   test('员工搜索、组织筛选、分页与详情抽屉可用', async ({ page, isMobile }) => {

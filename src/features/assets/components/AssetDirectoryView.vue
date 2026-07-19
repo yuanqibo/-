@@ -1,31 +1,36 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Download, Filter, Plus, Printer, Refresh, Search, Setting, Upload } from '@element-plus/icons-vue'
+import { Printer } from '@element-plus/icons-vue'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { searchDirectoryPeople } from '../api/assets.api'
 import { parseAssetWorkbook, type AssetImportMode } from '../composables/parseAssetWorkbook'
 import { useAssets } from '../composables/useAssets'
-import type { AssetCommand, AssetDraft, AssetImportRow, AssetRecord, DirectoryPerson } from '../types/assets'
+import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, AssetRecord, DirectoryPerson } from '../types/assets'
 
 type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
 type LegacyColumnKey = 'status' | 'code' | 'name' | 'category' | 'phone' | 'email' | 'date' | 'location' | 'price' | 'purchase' | 'rent' | 'supplier' | 'owner' | 'usage'
 type TableDensity = 'compact' | 'standard' | 'roomy'
+type ReceiveReturnTab = 'receive' | 'return' | 'employee' | 'handover'
+type BorrowReturnTab = 'borrow' | 'return'
 type ActionForm = { action: AssetCommand; assetIds: string[]; person: string; personSubject: string; location: string; date: string; expectedReturnDate: string; note: string }
 
 const props = withDefaults(defineProps<{ mode?: Mode }>(), { mode: 'list' })
-const { state, assets, store, load, create, copy, importMany, command } = useAssets()
+const { state, assets, operations, business, store, load, create, copy, importMany, command } = useAssets()
 const { user } = usePortalSession()
 const query = ref('')
 const status = ref('全部')
 const category = ref('全部')
 const page = ref(1)
 const pageSize = ref(20)
+const receiveReturnTab = ref<ReceiveReturnTab>('receive')
+const borrowReturnTab = ref<BorrowReturnTab>('borrow')
 const selected = ref<AssetRecord[]>([])
 const detail = ref<AssetRecord | null>(null)
 const createOpen = ref(false)
 const actionOpen = ref(false)
+const pickerOpen = ref(false)
 const editOpen = ref(false)
 const advancedOpen = ref(false)
 const importOpen = ref(false)
@@ -40,17 +45,17 @@ const editIds = ref<string[]>([])
 const importRows = ref<AssetImportRow[]>([])
 const importFileName = ref('')
 const importMode = ref<AssetImportMode>('asset')
+const pickerAction = ref<AssetCommand>('receive')
+const pickerSelection = ref<AssetRecord[]>([])
 const exportLink = ref<HTMLAnchorElement>()
 const exportUrl = ref('')
 
-const titleByMode: Record<Mode, string> = { list: '资产列表', inbound: '资产入库', 'receive-return': '领用退库', 'borrow-return': '借用归还' }
-const subtitleByMode: Record<Mode, string> = {
-  list: '统一查看资产状态、归属、位置与生命周期信息。',
-  inbound: '登记新资产、批量导入并查看入库记录。',
-  'receive-return': '管理员工领用、退库和资产交接记录。',
-  'borrow-return': '管理资产借用、预计归还日期与归还状态。'
-}
-const title = computed(() => titleByMode[props.mode])
+const viewClass = computed(() => {
+  if (props.mode === 'list') return 'asset-list-page asset-directory-view'
+  if (props.mode === 'inbound') return 'asset-list-page asset-inbound-ledger asset-directory-view'
+  if (props.mode === 'borrow-return') return 'asset-list-page receive-return-ledger borrow-return-ledger asset-directory-view'
+  return 'asset-list-page receive-return-ledger asset-directory-view'
+})
 const permissions = computed(() => new Set(user.value?.permissionCodes || []))
 const can = (code: string): boolean => permissions.value.has(code)
 
@@ -114,13 +119,12 @@ const toggleLegacyColumn = (key: LegacyColumnKey, checked: boolean): void => {
 const resetLegacySettings = (): void => { legacyVisibleColumns.value = [...legacyColumnKeys]; legacyDensity.value = 'compact' }
 
 const categories = computed(() => Array.from(new Set(assets.value.map((item) => item.category).filter(Boolean))).sort())
-const statuses = computed(() => Array.from(new Set(assets.value.map((item) => item.status).filter(Boolean))).sort())
 const advanced = reactive({ id: '', name: '', type: '', model: '', sn: '', owner: '', department: '', location: '', supplier: '', risk: '', tag: '' })
 const searchable = (item: AssetRecord): string => [item.id, item.name, item.assetTag, item.owner, item.department, item.location, item.model, item.sn]
   .map((value) => String(value || '').toLowerCase()).join(' ')
 const contains = (value: unknown, expected: string): boolean => !expected || String(value || '').toLowerCase().includes(expected.trim().toLowerCase())
 
-const filtered = computed(() => {
+const filteredAssets = computed(() => {
   const keyword = query.value.trim().toLowerCase()
   return assets.value.filter((item) => {
     const modeMatch = props.mode === 'receive-return'
@@ -139,8 +143,76 @@ const filtered = computed(() => {
       && (!advanced.tag || (item.tags || []).some((tag) => contains(tag, advanced.tag)))
   })
 })
-const paged = computed(() => filtered.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
-const pageCount = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize.value)))
+const operationAsset = (record: AssetOperationRecord): AssetRecord => {
+  const current = assets.value.find((item) => item.id === record.assetId)
+  return {
+    ...current,
+    id: record.assetId,
+    name: String(record.assetName || current?.name || '-'),
+    status: String(record.status || current?.status || '-'),
+    category: String(record.assetCategory || current?.category || '-'),
+    type: current?.type || '设备',
+    owner: String(record.party || current?.owner || '未分配'),
+    ownerSubject: String(record.partySubject || current?.ownerSubject || ''),
+    department: String(record.department || current?.department || ''),
+    company: String(record.company || current?.company || current?.ownerCompany || ''),
+    location: String(record.location || current?.location || ''),
+    custodian: String(record.operator || current?.custodian || ''),
+    model: String(record.assetModel || current?.model || ''),
+    brand: String(record.assetBrand || current?.brand || ''),
+    sn: String(record.assetSn || current?.sn || ''),
+    assetTag: current?.assetTag || '',
+    supplier: current?.supplier || '',
+    price: Number(record.assetPrice || current?.price || 0),
+    purchaseDate: current?.purchaseDate || '',
+    warrantyDate: current?.warrantyDate || '',
+    operationId: record.id,
+    operationType: record.type,
+    operationDate: record.date || '-',
+    operationStatus: record.status || '-',
+    purchaseMethod: record.sourceType || (String(current?.purchaseMethod || '').includes('导入') ? 'excel批量导入' : '新增资产'),
+    createdDate: record.date || '-',
+    operator: record.operator || '-',
+    employeeCode: record.employeeCode || '-',
+    expectedReturnDate: record.expectedReturnDate || current?.expectedReturnDate || '-',
+    returnOrderId: record.returnOrderId || '',
+    canSign: record.canSign === true,
+    note: record.note || current?.note || ''
+  }
+}
+const operationRows = (type: AssetOperationRecord['type']): AssetRecord[] => operations.value.filter((record) => record.type === type).map(operationAsset)
+const matchesFlowFilters = (item: AssetRecord): boolean => {
+  const keyword = query.value.trim().toLowerCase()
+  return (!keyword || searchable(item).includes(keyword) || String(item.operationId || '').toLowerCase().includes(keyword))
+    && contains(item.id, advanced.id) && contains(item.name, advanced.name) && contains(item.type, advanced.type)
+    && contains(item.model, advanced.model) && contains(item.sn, advanced.sn) && contains(item.owner, advanced.owner)
+    && contains(item.department, advanced.department) && contains(item.location, advanced.location)
+    && contains(item.supplier, advanced.supplier)
+}
+const employeeRequestRows = computed<AssetRecord[]>(() => (business.value.requests || [])
+  .filter((request) => request.type === '资产领用' && Array.isArray(request.assetIds))
+  .flatMap((request) => (request.assetIds as string[]).flatMap((assetId) => {
+    const asset = assets.value.find((item) => item.id === assetId)
+    return asset ? [{ ...asset, status: String(request.status || '待处理'), operationId: request.id, operationDate: request.date || '-', custodian: String(request.decisionOperator || '-'), owner: String(request.applicant || '-'), requestId: request.id } as AssetRecord] : []
+  })))
+const modeRows = computed<AssetRecord[]>(() => {
+  if (props.mode === 'inbound') return operationRows('INBOUND').filter(matchesFlowFilters)
+  if (props.mode === 'receive-return') {
+    if (receiveReturnTab.value === 'receive') return operationRows('RECEIVE').filter(matchesFlowFilters)
+    if (receiveReturnTab.value === 'return') return operationRows('RETURN').filter(matchesFlowFilters)
+    if (receiveReturnTab.value === 'handover') return operationRows('HANDOVER').filter(matchesFlowFilters)
+    return employeeRequestRows.value.filter(matchesFlowFilters)
+  }
+  if (props.mode === 'borrow-return') {
+    const rows = borrowReturnTab.value === 'return'
+      ? [...operationRows('BORROW').filter((item) => item.status === '待归还'), ...operationRows('BORROW_RETURN')]
+      : operationRows('BORROW')
+    return rows.filter(matchesFlowFilters)
+  }
+  return filteredAssets.value
+})
+const displayedRows = computed(() => modeRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
+const pageCount = computed(() => Math.max(1, Math.ceil(modeRows.value.length / pageSize.value)))
 const paginationItems = computed<Array<number | 'ellipsis'>>(() => {
   if (pageCount.value <= 7) return Array.from({ length: pageCount.value }, (_, index) => index + 1)
   const pages = Array.from(new Set([1, pageCount.value, page.value - 1, page.value, page.value + 1]))
@@ -149,19 +221,20 @@ const paginationItems = computed<Array<number | 'ellipsis'>>(() => {
 })
 const jumpPage = ref<number | undefined>()
 watch([query, status, category], () => { page.value = 1 })
-watch([filtered, pageSize], () => { page.value = Math.min(page.value, pageCount.value) })
+watch([modeRows, pageSize], () => { page.value = Math.min(page.value, pageCount.value) })
+watch([receiveReturnTab, borrowReturnTab], () => { page.value = 1; selected.value = [] })
 
 const selectedIds = computed(() => new Set(selected.value.map((item) => item.id)))
-const allPageSelected = computed(() => paged.value.length > 0 && paged.value.every((item) => selectedIds.value.has(item.id)))
+const allPageSelected = computed(() => displayedRows.value.length > 0 && displayedRows.value.every((item) => selectedIds.value.has(item.id)))
 const toggleAssetSelection = (item: AssetRecord, checked: boolean): void => {
   selected.value = checked
     ? [...selected.value.filter((row) => row.id !== item.id), item]
     : selected.value.filter((row) => row.id !== item.id)
 }
 const togglePageSelection = (checked: boolean): void => {
-  const pageIds = new Set(paged.value.map((item) => item.id))
+  const pageIds = new Set(displayedRows.value.map((item) => item.id))
   selected.value = checked
-    ? [...selected.value.filter((item) => !pageIds.has(item.id)), ...paged.value]
+    ? [...selected.value.filter((item) => !pageIds.has(item.id)), ...displayedRows.value]
     : selected.value.filter((item) => !pageIds.has(item.id))
 }
 const goToJumpPage = (): void => {
@@ -185,10 +258,27 @@ const legacyStatusClass = (value: string): string => {
   if (value === '交接待签字') return 'red'
   return 'violet'
 }
+const operationDate = (item: AssetRecord): string => String(item.operationDate || item.receiveDate || item.borrowDate || item.purchaseDate || '-')
+const operationId = (item: AssetRecord, prefix: string): string => String(
+  props.mode === 'borrow-return' && borrowReturnTab.value === 'return' && item.operationType === 'BORROW' && item.returnOrderId
+    ? item.returnOrderId
+    : item.operationId || item.inboundOrderId || `${prefix}-${item.id}`
+)
+const receiveAction = computed<AssetCommand>(() => receiveReturnTab.value === 'return' ? 'return' : receiveReturnTab.value === 'handover' ? 'handover' : 'receive')
+const pickerCandidates = computed(() => assets.value.filter((item) => {
+  if (pickerAction.value === 'receive' || pickerAction.value === 'borrow') return ['空闲', '闲置'].includes(item.status)
+  if (pickerAction.value === 'return' || pickerAction.value === 'handover') return ['在用', '领用中'].includes(item.status)
+  if (pickerAction.value === 'borrow-return') return item.status === '借用中'
+  return false
+}))
+const openAssetPicker = (action: AssetCommand): void => { pickerAction.value = action; pickerSelection.value = []; pickerOpen.value = true }
+const confirmAssetPicker = (): void => {
+  if (!pickerSelection.value.length) { ElMessage.warning('请至少选择一项资产'); return }
+  pickerOpen.value = false
+  openActionForIds(pickerSelection.value, pickerAction.value)
+}
 
 const clearAdvanced = (): void => { Object.assign(advanced, { id: '', name: '', type: '', model: '', sn: '', owner: '', department: '', location: '', supplier: '', risk: '', tag: '' }) }
-const reset = (): void => { query.value = ''; status.value = '全部'; category.value = '全部'; clearAdvanced(); page.value = 1 }
-const refresh = async (): Promise<void> => { await load(true); ElMessage.success('数据已刷新') }
 
 const createDraft = reactive<AssetDraft>({
   name: '', category: '', type: '设备', status: '闲置', location: '', company: '', department: '', owner: '未分配',
@@ -220,29 +310,12 @@ const submitCreate = async (): Promise<void> => {
 const actionForm = reactive<ActionForm>({ action: 'receive', assetIds: [], person: '', personSubject: '', location: '', date: new Date().toISOString().slice(0, 10), expectedReturnDate: '', note: '' })
 const actionLabels: Record<AssetCommand, string> = { receive: '领用', return: '退库', borrow: '借用', 'borrow-return': '归还', handover: '交接', delete: '删除', edit: '编辑', 'batch-edit': '批量修改', 'cancel-inbound': '撤销入库', 'repair-start': '报修', 'repair-complete': '完成维修', 'update-import': '更新导入', 'receive-import': '领用导入' }
 const actionLabel = (action: AssetCommand): string => actionLabels[action]
-const actionFor = (item: AssetRecord): AssetCommand | null => {
-  if (props.mode === 'receive-return') {
-    const action = ['在用', '领用中'].includes(item.status) ? 'return' : 'receive'
-    return can(action === 'return' ? 'asset:item:return' : 'asset:item:receive') ? action : null
-  }
-  if (props.mode === 'borrow-return') {
-    const action = item.status === '借用中' ? 'borrow-return' : 'borrow'
-    return can(action === 'borrow-return' ? 'asset:item:borrowReturn' : 'asset:item:borrow') ? action : null
-  }
-  return null
-}
 const openActionForIds = (items: AssetRecord[], action: AssetCommand): void => {
   if (!items.length) { ElMessage.warning('请先选择资产'); return }
   Object.assign(actionForm, { action, assetIds: items.map((item) => item.id), person: '', personSubject: '', location: items[0].location || '', date: new Date().toISOString().slice(0, 10), expectedReturnDate: '', note: '' })
   actionOpen.value = true
 }
 const openAction = (item: AssetRecord, action: AssetCommand): void => openActionForIds([item], action)
-const openSelectedWorkflow = (): void => {
-  const actions = selected.value.map(actionFor)
-  const action = actions[0]
-  if (!action || actions.some((item) => item !== action)) { ElMessage.warning('请选择状态一致且可执行当前操作的资产'); return }
-  openActionForIds(selected.value, action)
-}
 const needsPerson = computed(() => ['receive', 'borrow', 'handover'].includes(actionForm.action))
 const personSearch = async (keyword: string, callback: (values: Array<DirectoryPerson & { value: string }>) => void): Promise<void> => {
   try { people.value = await searchDirectoryPeople(keyword); callback(people.value.map((item) => ({ ...item, value: `${item.name} · ${item.account || item.email}` }))) }
@@ -359,7 +432,7 @@ const submitImport = async (): Promise<void> => {
 
 const csvCell = (value: unknown): string => `"${String(value ?? '').replace(/"/g, '""')}"`
 const exportAssets = async (): Promise<void> => {
-  const rows = selected.value.length ? selected.value : filtered.value
+  const rows = selected.value.length ? selected.value : filteredAssets.value
   if (!rows.length) { ElMessage.warning('没有可导出的资产'); return }
   const columns = props.mode === 'list' ? legacyDisplayedColumns.value : columnOptions.filter((item) => hasColumn(item.key))
   const csv = `\uFEFF${columns.map((item) => csvCell(item.label)).join(',')}\n${rows.map((row) => columns.map((item) => csvCell(props.mode === 'list' ? legacyCellValue(row, item.key as LegacyColumnKey) : row[item.key])).join(',')).join('\n')}`
@@ -367,7 +440,7 @@ const exportAssets = async (): Promise<void> => {
   await nextTick(); exportLink.value?.click(); window.setTimeout(() => { URL.revokeObjectURL(exportUrl.value); exportUrl.value = '' }, 0)
   ElMessage.success(`已导出 ${rows.length} 条资产`)
 }
-const printRows = computed(() => selected.value.length ? selected.value : filtered.value.slice(0, 100))
+const printRows = computed(() => selected.value.length ? selected.value : filteredAssets.value.slice(0, 100))
 const printSettings = computed(() => store.value.assetLabelPrintSettingsV2 || {})
 const printFields = computed(() => Array.isArray(printSettings.value.fields) ? printSettings.value.fields as string[] : ['name', 'id', 'category', 'location'])
 const printFieldLabels: Record<string, string> = { name: '资产名称', id: '资产编码', category: '资产分类', owner: '使用人', location: '所在位置', sn: '序列号' }
@@ -382,11 +455,15 @@ const statusType = (value: string): 'success' | 'warning' | 'info' | 'danger' =>
   if (value === '维修中') return 'danger'
   return 'info'
 }
+const detailText = (value: unknown): string => String(value ?? '').trim() || '-'
+const detailOperationRows = (item: AssetRecord): Array<[string, string, string]> => item.lifecycle?.length
+  ? item.lifecycle
+  : [[item.purchaseDate || new Date().toISOString().slice(0, 10), '资产入库', '通过资产系统录入']]
 onMounted(() => void load())
 </script>
 
 <template>
-  <section :class="mode === 'list' ? 'asset-list-page asset-directory-view' : 'standard-business-view asset-directory-view'">
+  <section :class="viewClass">
     <template v-if="mode === 'list'">
       <div class="asset-list-toolbar">
         <div class="asset-list-actions">
@@ -445,9 +522,9 @@ onMounted(() => void load())
         <div class="asset-table-scroll">
           <table class="asset-list-table" :style="{ minWidth: `${legacyTableMinWidth}px` }">
             <colgroup><col style="width: 36px"><col v-for="column in legacyDisplayedColumns" :key="column.key" :style="{ width: `${column.width}px` }"></colgroup>
-            <thead><tr><th class="asset-list-select-cell"><input type="checkbox" aria-label="全选" :checked="allPageSelected" :disabled="!paged.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th v-for="column in legacyDisplayedColumns" :key="column.key" :data-column-key="column.key">{{ column.label }}</th></tr></thead>
+            <thead><tr><th class="asset-list-select-cell"><input type="checkbox" aria-label="全选" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th v-for="column in legacyDisplayedColumns" :key="column.key" :data-column-key="column.key">{{ column.label }}</th></tr></thead>
             <tbody>
-              <tr v-for="item in paged" :key="item.id">
+              <tr v-for="item in displayedRows" :key="item.id">
                 <td class="asset-list-select-cell"><input type="checkbox" :aria-label="`选择${item.id}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td>
                 <td v-for="column in legacyDisplayedColumns" :key="column.key">
                   <span v-if="column.key === 'status'" class="asset-status-pill" :class="legacyStatusClass(item.status)">{{ item.status || '-' }}</span>
@@ -455,13 +532,13 @@ onMounted(() => void load())
                   <template v-else>{{ legacyCellValue(item, column.key) }}</template>
                 </td>
               </tr>
-              <tr v-if="!paged.length" class="empty-row"><td :colspan="legacyDisplayedColumns.length + 1">{{ query ? '没有匹配的资产结果。' : '当前账号下暂无资产。' }}</td></tr>
+              <tr v-if="!displayedRows.length" class="empty-row"><td :colspan="legacyDisplayedColumns.length + 1">{{ query ? '没有匹配的资产结果。' : '当前账号下暂无资产。' }}</td></tr>
             </tbody>
           </table>
         </div>
       </div>
       <div class="asset-list-pagination">
-        <span>共 {{ filtered.length }} 条</span>
+        <span>共 {{ modeRows.length }} 条</span>
         <button class="page-btn" type="button" aria-label="上一页" :disabled="page <= 1" @click="page--">‹</button>
         <template v-for="(item, index) in paginationItems" :key="`${item}-${index}`"><span v-if="item === 'ellipsis'" class="page-ellipsis">…</span><button v-else class="page-btn" :class="{ active: item === page }" type="button" :aria-current="item === page ? 'page' : undefined" @click="page = item">{{ item }}</button></template>
         <button class="page-btn" type="button" aria-label="下一页" :disabled="page >= pageCount" @click="page++">›</button>
@@ -470,70 +547,44 @@ onMounted(() => void load())
       </div>
     </template>
 
-    <template v-else>
-    <header class="standard-page-header">
-      <div><h1>{{ title }}</h1><p>{{ subtitleByMode[mode] }}</p></div>
-      <div class="standard-header-actions">
-        <el-button :icon="Refresh" @click="refresh">刷新</el-button>
-        <el-button v-if="mode === 'inbound' && can('asset:item:assetImport')" :icon="Upload" @click="openImport('asset')">导入资产</el-button>
-        <el-button v-if="mode === 'inbound' && can('asset:item:create')" type="primary" :icon="Plus" @click="openCreate()">新增资产</el-button>
+    <template v-else-if="mode === 'inbound'">
+      <div class="asset-list-toolbar asset-inbound-toolbar">
+        <div class="asset-list-actions">
+          <el-dropdown placement="bottom-start" trigger="click"><button class="table-action primary has-caret" type="button">新增<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item v-if="can('asset:item:create')" @click="openCreate()">新增资产</el-dropdown-item><el-dropdown-item v-if="can('asset:item:assetImport')" @click="openImport('asset')">批量导入</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+          <el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openPrint">打印入库单</el-dropdown-item><el-dropdown-item @click="openPrint">打印资产标签</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+          <button v-if="can('asset:item:export')" class="table-action inbound-export" type="button" @click="exportAssets">⇱ 导出</button>
+        </div>
+        <div class="asset-list-search inbound-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div>
       </div>
-    </header>
-
-    <div class="standard-toolbar">
-      <el-input v-model="query" clearable :prefix-icon="Search" placeholder="搜索资产编码、名称、人员或位置" />
-      <el-select v-model="category"><el-option label="全部分类" value="全部" /><el-option v-for="item in categories" :key="item" :label="item" :value="item" /></el-select>
-      <el-select v-model="status"><el-option label="全部状态" value="全部" /><el-option v-for="item in statuses" :key="item" :label="item" :value="item" /></el-select>
-      <el-button @click="reset">重置</el-button>
-      <el-button v-if="can('asset:item:advancedSearch')" :icon="Filter" @click="advancedOpen = true">高级筛选</el-button>
-      <span class="standard-toolbar-spacer"></span>
-      <span v-if="selected.length" class="standard-selection-count">已选 {{ selected.length }} 项</span>
-      <el-button v-if="mode !== 'inbound' && selected.length" type="primary" @click="openSelectedWorkflow">批量{{ actionFor(selected[0]) ? actionLabel(actionFor(selected[0])!) : '操作' }}</el-button>
-      <el-button v-if="can('asset:item:printLabel')" :icon="Printer" @click="openPrint">打印</el-button>
-      <el-button v-if="can('asset:item:export')" :icon="Download" @click="exportAssets">导出</el-button>
-      <el-popover v-if="can('asset:item:columnSettings')" placement="bottom-end" :width="260" trigger="click">
-        <template #reference><el-button :icon="Setting" circle aria-label="列表设置" /></template>
-        <div class="standard-column-settings"><strong>显示字段</strong><el-checkbox-group v-model="visibleColumns"><el-checkbox v-for="item in columnOptions" :key="item.key" :value="item.key">{{ item.label }}</el-checkbox></el-checkbox-group><el-button link type="primary" @click="visibleColumns = [...defaultColumns]">恢复默认</el-button></div>
-      </el-popover>
-      <a v-if="exportUrl" ref="exportLink" :href="exportUrl" :download="`资产列表_${new Date().toISOString().slice(0, 10)}.csv`" hidden>下载</a>
-    </div>
-
-    <el-alert v-if="state.errorMessage" :title="state.errorMessage" type="error" show-icon :closable="false" />
-    <div class="standard-table-shell">
-      <el-table v-loading="state.loading" :data="paged" row-key="id" height="100%" @selection-change="selected = $event">
-        <el-table-column type="selection" width="46" />
-        <el-table-column v-if="hasColumn('id')" prop="id" label="资产编码" min-width="130" fixed="left" />
-        <el-table-column v-if="hasColumn('name')" prop="name" label="资产名称" min-width="160" show-overflow-tooltip />
-        <el-table-column v-if="hasColumn('category')" prop="category" label="资产分类" min-width="130" />
-        <el-table-column v-if="hasColumn('status')" label="状态" width="90"><template #default="scope"><el-tag :type="statusType(scope.row.status)" effect="light">{{ scope.row.status || '-' }}</el-tag></template></el-table-column>
-        <el-table-column v-if="hasColumn('owner')" prop="owner" label="使用人" min-width="120" show-overflow-tooltip />
-        <el-table-column v-if="hasColumn('department')" prop="department" label="使用部门" min-width="150" show-overflow-tooltip />
-        <el-table-column v-if="hasColumn('location')" prop="location" label="所在位置" min-width="180" show-overflow-tooltip />
-        <el-table-column v-if="hasColumn('brand')" prop="brand" label="品牌" min-width="120" show-overflow-tooltip />
-        <el-table-column v-if="hasColumn('model')" prop="model" label="型号" min-width="130" show-overflow-tooltip />
-        <el-table-column v-if="hasColumn('sn')" prop="sn" label="序列号" min-width="150" show-overflow-tooltip />
-        <el-table-column v-if="hasColumn('supplier')" prop="supplier" label="供应商" min-width="160" show-overflow-tooltip />
-        <el-table-column v-if="hasColumn('price')" label="金额" width="120"><template #default="scope">{{ Number(scope.row.price || 0).toLocaleString('zh-CN') }}</template></el-table-column>
-        <el-table-column v-if="hasColumn('purchaseDate')" prop="purchaseDate" label="购置日期" width="120" />
-        <el-table-column label="操作" width="210" fixed="right">
-          <template #default="scope">
-            <el-button link type="primary" @click="detail = scope.row">详情</el-button>
-            <el-button v-if="actionFor(scope.row)" link type="primary" @click="openAction(scope.row, actionFor(scope.row)!)">{{ actionLabel(actionFor(scope.row)!) }}</el-button>
-            <el-dropdown v-if="mode === 'inbound'" trigger="click">
-              <el-button link type="primary">更多</el-button>
-              <template #dropdown><el-dropdown-menu>
-                <el-dropdown-item v-if="can('asset:item:update')" @click="openEdit([scope.row])">修改</el-dropdown-item>
-                <el-dropdown-item v-if="can('asset:item:copy')" @click="openCreate(scope.row)">复制资产</el-dropdown-item>
-                <el-dropdown-item v-if="mode === 'inbound' && can('asset:inbound:cancel')" @click="openAction(scope.row, 'cancel-inbound')">撤销入库</el-dropdown-item>
-                <el-dropdown-item v-if="can('asset:item:delete')" divided @click="removeAssets([scope.row])">删除</el-dropdown-item>
-              </el-dropdown-menu></template>
-            </el-dropdown>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
-    <div class="standard-pagination"><span>共 {{ filtered.length }} 条</span><el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="filtered.length" :page-sizes="[20, 50, 100]" layout="prev, pager, next, sizes" /></div>
+      <el-alert v-if="state.errorMessage" :title="state.errorMessage" type="error" show-icon :closable="false" />
+      <div v-loading="state.loading" class="asset-table-shell inbound-table-shell">
+        <div class="asset-table-actions inbound-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="advancedOpen = true">高级搜索</button><el-popover placement="bottom-end" :width="260" trigger="click"><template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template><div>入库状态、入库单号、入库类型、入库日期、入库人、采购人、创建日期、所属公司、入库备注、操作</div></el-popover></div>
+        <div class="asset-table-scroll inbound-table-scroll"><table class="asset-list-table inbound-order-table" style="min-width: 1080px"><thead><tr><th class="inbound-select-cell"><input type="checkbox" aria-label="全选入库单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>入库状态</th><th>入库单号</th><th>入库类型</th><th>入库日期</th><th>入库人</th><th>采购人</th><th>创建日期</th><th>所属公司</th><th>入库备注</th><th>操作</th></tr></thead><tbody>
+          <tr v-for="item in displayedRows" :key="operationId(item, 'RK')"><td class="inbound-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'RK')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="inbound-status-pill" :class="legacyStatusClass(item.status)">{{ item.status || '已入库' }}</span></td><td><button class="link inbound-order-link" type="button" @click="detail = item">{{ operationId(item, 'RK') }}</button></td><td>{{ item.purchaseMethod || '新增资产' }}</td><td>{{ operationDate(item) }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.purchaser || '-' }}</td><td>{{ item.createdDate || operationDate(item) }}</td><td>{{ item.ownerCompany || item.company || '-' }}</td><td>{{ item.note || '-' }}</td><td><button v-if="can('asset:inbound:cancel') && item.status !== '已取消'" class="link inbound-cancel-link" type="button" @click="openAction(item, 'cancel-inbound')">取消入库</button><span v-else class="muted-text">已取消</span></td></tr>
+          <tr v-if="!displayedRows.length" class="empty-row"><td colspan="11">{{ query ? '没有匹配的入库单。' : '暂无入库单，点击新增录入资产。' }}</td></tr>
+        </tbody></table></div>
+      </div>
     </template>
+
+    <template v-else-if="mode === 'receive-return'">
+      <div class="receive-return-tabs"><button v-for="tab in ([['receive','领用'],['return','退库'],['employee','员工申领'],['handover','交接']] as const)" :key="tab[0]" class="receive-return-tab" :class="{ active: receiveReturnTab === tab[0] }" type="button" @click="receiveReturnTab = tab[0]">{{ tab[1] }}</button></div>
+      <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button class="table-action primary" type="button" @click="openAssetPicker(receiveAction)">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openPrint">打印{{ receiveReturnTab === 'handover' ? '交接单' : receiveReturnTab === 'employee' ? '员工申领单' : receiveReturnTab === 'return' ? '领用退库单' : '领用单' }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
+      <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="advancedOpen = true">高级搜索</button><el-popover placement="bottom-end" :width="260" trigger="click"><template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template><div>{{ receiveReturnTab === 'handover' ? '交接状态、交接单号、经办人、接收人、接收公司、接收部门、操作' : '状态、单号、日期、经办人、领用人、工号、位置、所属公司、资产编码、操作' }}</div></el-popover></div><div class="asset-table-scroll receive-return-table-scroll"><table class="asset-list-table receive-return-table" style="min-width: 1040px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选领用退库单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>{{ receiveReturnTab === 'handover' ? '交接状态' : receiveReturnTab === 'employee' ? '申领状态' : receiveReturnTab === 'return' ? '退库状态' : '领用状态' }}</th><th>{{ receiveReturnTab === 'handover' ? '交接单号' : receiveReturnTab === 'employee' ? '申领单号' : receiveReturnTab === 'return' ? '退库单号' : '领用单号' }}</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领日期' : receiveReturnTab === 'return' ? '退库日期' : '领用日期' }}</th><th>经办人</th><th>{{ receiveReturnTab === 'handover' ? '接收人' : receiveReturnTab === 'employee' ? '申领人' : '领用人' }}</th><th v-if="receiveReturnTab !== 'handover'">工号</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领后位置' : receiveReturnTab === 'return' ? '退库后位置' : '领用后位置' }}</th><th>{{ receiveReturnTab === 'handover' ? '接收公司' : '所属公司' }}</th><th v-if="receiveReturnTab === 'handover'">接收部门</th><th v-else>资产编码</th><th>操作</th></tr></thead><tbody>
+        <tr v-for="item in displayedRows" :key="operationId(item, 'FLOW')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'FLOW')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="legacyStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, receiveReturnTab === 'handover' ? 'JJ' : receiveReturnTab === 'return' ? 'TK' : 'LY') }}</button></td><td v-if="receiveReturnTab !== 'handover'">{{ operationDate(item) }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.employeeCode || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.location || '-' }}</td><td>{{ item.company || item.ownerCompany || '-' }}</td><td v-if="receiveReturnTab === 'handover'">{{ item.department || '-' }}</td><td v-else>{{ item.id }}</td><td><button class="link receive-return-action-link" type="button" @click="detail = item">{{ receiveReturnTab === 'handover' && item.canSign ? '签字' : '查看' }}</button></td></tr>
+        <tr v-if="!displayedRows.length" class="empty-row"><td :colspan="receiveReturnTab === 'handover' ? 9 : 11">{{ query ? '没有匹配的领用退库记录。' : '暂无领用退库记录。' }}</td></tr>
+      </tbody></table></div></div>
+    </template>
+
+    <template v-else>
+      <div class="receive-return-tabs"><button class="receive-return-tab" :class="{ active: borrowReturnTab === 'borrow' }" type="button" @click="borrowReturnTab = 'borrow'">借用</button><button class="receive-return-tab" :class="{ active: borrowReturnTab === 'return' }" type="button" @click="borrowReturnTab = 'return'">归还</button></div>
+      <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button class="table-action primary" type="button" @click="openAssetPicker('borrow')">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openPrint">打印借用归还单</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
+      <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="advancedOpen = true">高级搜索</button><el-popover placement="bottom-end" :width="300" trigger="click"><template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template><div>借用状态、借用单号、经办人、借用人、借用日期、借用人公司、借用人部门、工号、手机号、邮箱、借用后位置、签字人、签字图片、借用备注、资产信息、操作</div></el-popover></div><div class="asset-table-scroll receive-return-table-scroll"><table class="asset-list-table receive-return-table borrow-return-table" style="min-width: 1900px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选借用归还单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>借用状态</th><th>借用单号</th><th>经办人</th><th>借用人</th><th>借用日期</th><th>借用人公司</th><th>借用人部门</th><th>工号</th><th>手机号</th><th>邮箱</th><th>借用后位置</th><th>签字人</th><th>签字图片</th><th>借用备注</th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌</th><th>型号</th><th>设备序列号</th><th>操作</th></tr></thead><tbody>
+        <tr v-for="item in displayedRows" :key="operationId(item, 'JY')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'JY')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="legacyStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, 'JY') }}</button></td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td>{{ operationDate(item) }}</td><td>{{ item.company || '-' }}</td><td>{{ item.department || '-' }}</td><td>{{ item.employeeCode || '-' }}</td><td>{{ item.phone || '-' }}</td><td>{{ item.email || '-' }}</td><td>{{ item.location || '-' }}</td><td>{{ item.owner || '-' }}</td><td>-</td><td>{{ item.note || '-' }}</td><td>{{ item.id }}</td><td>{{ item.category || '-' }}</td><td>{{ item.name || '-' }}</td><td>{{ item.brand || '-' }}</td><td>{{ item.model || '-' }}</td><td>{{ item.sn || '-' }}</td><td><template v-if="borrowReturnTab === 'return' && item.operationType === 'BORROW'"><button class="link receive-return-action-link" type="button" @click="openAction(item, 'borrow-return')">归还</button><button class="link receive-return-action-link" type="button" @click="openAction(item, 'borrow')">延期</button></template><button v-else class="link receive-return-action-link" type="button" @click="detail = item">查看</button></td></tr>
+        <tr v-if="!displayedRows.length" class="empty-row"><td colspan="22">{{ query ? (borrowReturnTab === 'return' ? '没有匹配的归还记录。' : '没有匹配的借用记录。') : (borrowReturnTab === 'return' ? '暂无可归还记录。' : '暂无借用记录。') }}</td></tr>
+      </tbody></table></div></div>
+    </template>
+
+    <div v-if="mode !== 'list'" class="asset-list-pagination"><span>共 {{ modeRows.length }} 条</span><button class="page-btn" type="button" aria-label="上一页" :disabled="page <= 1" @click="page--">‹</button><template v-for="(item, index) in paginationItems" :key="`${item}-${index}`"><span v-if="item === 'ellipsis'" class="page-ellipsis">…</span><button v-else class="page-btn" :class="{ active: item === page }" type="button" @click="page = item">{{ item }}</button></template><button class="page-btn" type="button" aria-label="下一页" :disabled="page >= pageCount" @click="page++">›</button><select v-model.number="pageSize" aria-label="每页条数"><option :value="20">20 条/页</option><option :value="50">50 条/页</option></select><span>跳至</span><input v-model.number="jumpPage" aria-label="跳转页码" @keydown.enter="goToJumpPage"><span>页</span></div>
 
     <el-drawer v-model="advancedOpen" title="高级筛选" size="min(620px, 92vw)" append-to-body>
       <el-form label-position="top" class="standard-form-grid">
@@ -547,22 +598,45 @@ onMounted(() => void load())
       <template #footer><el-button @click="clearAdvanced">重置</el-button><el-button type="primary" @click="advancedOpen = false; page = 1">查询</el-button></template>
     </el-drawer>
 
-    <el-drawer :model-value="Boolean(detail)" class="standard-detail-drawer asset-vue-detail-drawer" aria-label="资产详情" size="min(760px, 92vw)" :with-header="false" append-to-body @close="detail = null">
-      <template v-if="detail">
-        <div class="standard-drawer-header"><div><span>资产详情</span><h2>{{ detail.name }}</h2><p>{{ detail.id }}</p></div><el-tag :type="statusType(detail.status)">{{ detail.status }}</el-tag></div>
-        <el-descriptions :column="2" border class="standard-descriptions">
-          <el-descriptions-item label="资产分类">{{ detail.category || detail.type || '-' }}</el-descriptions-item><el-descriptions-item label="资产状况">{{ detail.condition || detail.status || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="使用人">{{ detail.owner || '-' }}</el-descriptions-item><el-descriptions-item label="使用部门">{{ detail.department || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="使用公司">{{ detail.company || '-' }}</el-descriptions-item><el-descriptions-item label="所在位置">{{ detail.location || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="品牌">{{ detail.brand || '-' }}</el-descriptions-item><el-descriptions-item label="型号">{{ detail.model || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="序列号">{{ detail.sn || '-' }}</el-descriptions-item><el-descriptions-item label="管理员">{{ detail.custodian || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="供应商">{{ detail.supplier || '-' }}</el-descriptions-item><el-descriptions-item label="金额">{{ Number(detail.price || 0).toLocaleString('zh-CN') }} 元</el-descriptions-item>
-          <el-descriptions-item label="购置日期">{{ detail.purchaseDate || '-' }}</el-descriptions-item><el-descriptions-item label="维保到期">{{ detail.warrantyDate || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="备注" :span="2">{{ detail.note || '-' }}</el-descriptions-item>
-        </el-descriptions>
-        <section class="standard-detail-section"><h3>操作记录</h3><el-timeline><el-timeline-item v-for="(item, index) in detail.lifecycle || []" :key="index" :timestamp="item[0]">{{ item[1] }} · {{ item[2] }}</el-timeline-item><el-empty v-if="!detail.lifecycle?.length" description="暂无操作记录" :image-size="72" /></el-timeline></section>
-      </template>
+    <el-drawer :model-value="Boolean(detail)" class="asset-detail-drawer" aria-label="资产详情" title="资产详情" size="min(1120px, 96vw)" append-to-body @close="detail = null">
+      <div v-if="detail" class="asset-detail-page">
+        <div class="asset-detail-content">
+          <div class="asset-detail-title-row"><h3>资产详情</h3><el-tag :type="statusType(detail.status)">{{ detail.status }}</el-tag></div>
+          <section class="asset-detail-section"><h3>领用信息</h3><div class="asset-detail-form-grid">
+            <label class="asset-detail-form-item"><span>人员姓名：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.owner === '未分配' ? '' : detail.owner) }}</strong></div></label>
+            <label class="asset-detail-form-item"><span>使用公司：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.company || detail.ownerCompany) }}</strong></div></label>
+            <label class="asset-detail-form-item"><span>使用部门：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.department) }}</strong></div></label>
+            <label class="asset-detail-form-item"><span>领用/借用日期：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.receiveDate || detail.borrowDate) }}</strong></div></label>
+          </div></section>
+          <section class="asset-detail-section"><h3>基本信息</h3><div class="asset-detail-form-grid">
+            <label v-for="field in ([['资产编码', detail.id], ['资产名称', detail.name], ['资产分类', detail.category || detail.type], ['管理员', detail.custodian], ['品牌', detail.brand], ['型号', detail.model], ['所属/承租公司', detail.ownerCompany || detail.company], ['资产状况', detail.condition || detail.status], ['所在位置', detail.location], ['购置/起租日期', detail.purchaseDate], ['订单号', detail.orderNo], ['计量单位', detail.unit], ['购置方式', detail.purchaseMethod]] as Array<[string, unknown]>)" :key="field[0]" class="asset-detail-form-item"><span>{{ field[0] }}：</span><div class="asset-detail-readonly"><strong>{{ detailText(field[1]) }}</strong></div></label>
+            <label class="asset-detail-form-item"><span>使用期限：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.usageMonths) }}</strong><em>月</em></div></label>
+            <label class="asset-detail-form-item"><span>金额：</span><div class="asset-detail-readonly"><strong>{{ Number(detail.price || 0).toLocaleString('zh-CN') }}</strong><em>元</em></div></label>
+            <label class="asset-detail-form-item wide"><span>备注：</span><div class="asset-detail-readonly tall"><strong>{{ detailText(detail.note) }}</strong></div></label>
+          </div></section>
+          <section class="asset-detail-section"><h3>资产图片</h3><div class="asset-detail-image-panel"><img v-if="detail.image" :src="detail.image" :alt="detail.name"><div v-else class="asset-detail-empty-image"><span aria-hidden="true">▧</span><strong>暂无图片</strong></div></div></section>
+          <section class="asset-detail-section"><h3>扩展信息</h3><div class="asset-detail-form-grid"><label class="asset-detail-form-item"><span>设备序列号：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.sn) }}</strong></div></label></div></section>
+          <section class="asset-detail-section"><h3>维保信息</h3><div class="asset-detail-form-grid">
+            <label v-for="field in ([['供应商', detail.supplier], ['联系人', detail.supplierContact || detail.contact], ['联系方式', detail.supplierPhone || detail.contactPhone || detail.phone || detail.email], ['维保到期时间', detail.warrantyDate === '未设置' ? '' : detail.warrantyDate]] as Array<[string, unknown]>)" :key="field[0]" class="asset-detail-form-item"><span>{{ field[0] }}：</span><div class="asset-detail-readonly"><strong>{{ detailText(field[1]) }}</strong></div></label>
+            <label class="asset-detail-form-item wide"><span>维保说明：</span><div class="asset-detail-readonly tall"><strong>{{ detailText(detail.maintenanceNote || detail.repairNote) }}</strong></div></label>
+          </div></section>
+          <section class="asset-detail-section asset-detail-operations"><h3>操作记录</h3><div class="asset-detail-table-wrap"><table class="asset-detail-operation-table"><thead><tr><th>操作时间</th><th>操作人</th><th>渠道</th><th>操作类型</th><th>操作内容</th></tr></thead><tbody><tr v-for="(row, index) in detailOperationRows(detail)" :key="index"><td>{{ row[0] }}</td><td>{{ detail.custodian || user?.name || 'admin' }}</td><td>网页</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td></tr></tbody></table></div><div class="asset-detail-operation-footer"><span>共 {{ detailOperationRows(detail).length }} 条</span><button class="page-btn" type="button" disabled>‹</button><button class="page-btn active" type="button">1</button><button class="page-btn" type="button" disabled>›</button><select aria-label="每页条数"><option>20 条/页</option></select></div></section>
+        </div>
+        <div class="asset-detail-footer-actions">
+          <button v-if="can(detail.status === '在用' || detail.status === '领用中' ? 'asset:item:return' : 'asset:item:receive')" class="table-action primary" type="button" @click="openAction(detail, detail.status === '在用' || detail.status === '领用中' ? 'return' : 'receive')">{{ detail.status === '在用' || detail.status === '领用中' ? '退库' : '领用' }}</button>
+          <button v-if="can(detail.status === '借用中' ? 'asset:item:borrowReturn' : 'asset:item:borrow')" class="table-action primary" type="button" @click="openAction(detail, detail.status === '借用中' ? 'borrow-return' : 'borrow')">{{ detail.status === '借用中' ? '归还' : '借用' }}</button>
+          <button v-if="can('asset:item:handover')" class="table-action" type="button" @click="openAction(detail, 'handover')">交接</button>
+        </div>
+      </div>
     </el-drawer>
+
+    <el-dialog v-model="pickerOpen" :title="`选择${actionLabel(pickerAction)}资产`" width="min(980px, 94vw)" append-to-body>
+      <div class="asset-picker-toolbar"><span>共 {{ pickerCandidates.length }} 项可选资产</span></div>
+      <el-table :data="pickerCandidates" max-height="460" row-key="id" @selection-change="pickerSelection = $event">
+        <el-table-column type="selection" width="48" /><el-table-column prop="id" label="资产编码" min-width="130" /><el-table-column prop="name" label="资产名称" min-width="160" /><el-table-column prop="category" label="资产分类" min-width="120" /><el-table-column prop="status" label="状态" width="90" /><el-table-column prop="owner" label="使用人" width="110" /><el-table-column prop="location" label="所在位置" min-width="140" />
+      </el-table>
+      <template #footer><el-button @click="pickerOpen = false">取消</el-button><el-button type="primary" @click="confirmAssetPicker">下一步</el-button></template>
+    </el-dialog>
 
     <el-dialog v-model="createOpen" :title="copySourceId ? '复制资产' : '新增资产'" width="min(900px, 94vw)" destroy-on-close append-to-body>
       <el-form ref="createFormRef" :model="createDraft" :rules="createRules" label-position="top" class="standard-form-grid">

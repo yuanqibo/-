@@ -1,5 +1,5 @@
 import { computed, reactive, readonly } from 'vue'
-import { decideApproval, fetchApprovals } from '../api/approvals.api'
+import { createApproval, decideApproval, fetchApprovals } from '../api/approvals.api'
 import type { ApprovalDecision, ApprovalRecord } from '../types/approval'
 
 const state = reactive({ rows: [] as ApprovalRecord[], loading: false, errorMessage: '' })
@@ -18,4 +18,9 @@ const decide = async (id: string, decision: ApprovalDecision, reason: string, op
   state.rows = await decideApproval(id, decision, reason, operator)
 }
 
-export const useApprovals = () => ({ state: readonly(state), rows: computed(() => state.rows), load, decide })
+const create = async (draft: Pick<ApprovalRecord, 'type' | 'applicant' | 'asset' | 'reason'> & { details?: Record<string, unknown> }): Promise<void> => {
+  const item = await createApproval(draft)
+  state.rows = [item, ...state.rows]
+}
+
+export const useApprovals = () => ({ state: readonly(state), rows: computed(() => state.rows), load, decide, create })

@@ -1,5 +1,5 @@
 import { apiRequest } from '../../../shared/api/http'
-import type { AssetCommand, AssetDraft, AssetRecord, BusinessRecord, DirectoryPerson, PortalStoreValues } from '../types/assets'
+import type { AssetCommand, AssetDraft, AssetOperationRecord, AssetRecord, BusinessRecord, DirectoryPerson, PortalStoreValues } from '../types/assets'
 
 type AssetListResponse = { items: AssetRecord[] }
 type BusinessDataResponse = {
@@ -11,6 +11,18 @@ type DirectoryResponse = { items?: Array<Record<string, unknown>> }
 
 export const fetchAssets = async (): Promise<AssetRecord[]> =>
   (await apiRequest<AssetListResponse>('/api/assets')).items || []
+
+export const fetchAssetOperations = async (): Promise<AssetOperationRecord[]> => {
+  const records: AssetOperationRecord[] = []
+  const size = 500
+  for (let page = 1; page <= 20; page += 1) {
+    const payload = await apiRequest<{ items?: AssetOperationRecord[]; total?: number }>(`/api/asset-operations?page=${page}&size=${size}`)
+    const items = payload.items || []
+    records.push(...items)
+    if (items.length < size || records.length >= Number(payload.total || 0)) break
+  }
+  return records
+}
 
 export const createAsset = async (item: AssetDraft): Promise<AssetRecord> =>
   (await apiRequest<{ item: AssetRecord }>('/api/assets', { method: 'POST', body: { item } })).item
