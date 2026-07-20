@@ -1123,6 +1123,59 @@ button {
   padding: 16px 40px;
 }
 
+.el-dialog.legacy-catalog-dialog,
+.el-dialog.legacy-business-dialog {
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.legacy-catalog-dialog .el-dialog__header,
+.legacy-business-dialog .el-dialog__header {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.legacy-catalog-dialog .el-dialog__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 0;
+  overflow: auto;
+}
+
+.legacy-business-dialog .el-dialog__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 24px;
+  overflow: auto;
+}
+
+.legacy-business-dialog .el-dialog__footer {
+  flex: 0 0 auto;
+  padding: 14px 24px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.legacy-business-form .el-form-item.field {
+  margin: 0;
+}
+
+.legacy-business-form .el-form-item__label {
+  width: auto;
+  height: auto;
+  margin: 0;
+}
+
+.legacy-business-form .el-form-item__content,
+.legacy-business-form .el-input-number {
+  width: 100%;
+}
+
 @media (max-width: 760px) {
   .location-form {
     min-height: 0;
@@ -1144,6 +1197,14 @@ button {
 
   .location-form .modal-actions {
     padding: 18px 22px;
+  }
+
+  .legacy-catalog-dialog .el-dialog__header,
+  .legacy-business-dialog .el-dialog__header,
+  .legacy-business-dialog .el-dialog__body,
+  .legacy-business-dialog .el-dialog__footer {
+    padding-left: 14px;
+    padding-right: 14px;
   }
 }
 

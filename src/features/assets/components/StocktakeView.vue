@@ -47,10 +47,18 @@ onMounted(() => void load())
     <el-drawer :model-value="Boolean(detail)" size="min(620px, 92vw)" append-to-body @close="detail = null">
       <template #header><div><span class="eyebrow">盘点明细</span><h2>{{ detail?.name }}</h2></div></template>
       <template v-if="detail"><div class="detail-grid"><div v-for="field in [['任务编号', detail.id], ['盘点范围', detail.scope], ['负责人', detail.owner], ['应盘数量', detail.total || 0], ['已盘数量', detail.checked || 0], ['差异数量', detail.diff || 0], ['计划日期', detail.date || '-']]" :key="String(field[0])" class="detail-item"><span class="detail-label">{{ field[0] }}</span><strong class="detail-value">{{ field[1] }}</strong></div><div class="detail-item"><span class="detail-label">状态</span><strong class="detail-value"><span class="tag blue">{{ detail.progress || '未开始' }}</span></strong></div></div><h3>差异处理</h3><div class="timeline"><div class="timeline-item"><div class="timeline-date">盘亏</div><div><div class="timeline-title">{{ detail.diff || 0 }} 项差异待核查</div><div class="timeline-desc">建议发起资产核查或报废流程。</div></div></div><div class="timeline-item"><div class="timeline-date">照片</div><div><div class="timeline-title">盘点照片待审核</div><div class="timeline-desc">移动端上传照片带时间和位置水印。</div></div></div></div></template>
-      <template #footer><el-button v-if="detail && can('asset:stocktake:update')" type="primary" @click="openUpdate(detail)">更新盘点进度</el-button></template>
     </el-drawer>
 
-    <el-dialog v-model="createOpen" title="新建盘点任务" width="min(620px, 94vw)" append-to-body><el-form label-position="top"><el-form-item label="盘点任务名称" required><el-input v-model="createForm.name" /></el-form-item><el-form-item label="盘点范围" required><el-input v-model="createForm.scope" /></el-form-item><el-form-item label="负责人" required><el-input v-model="createForm.owner" /></el-form-item><el-form-item label="应盘数量" required><el-input-number v-model="createForm.total" :min="1" :max="5000" /></el-form-item><el-form-item label="计划日期"><el-date-picker v-model="createForm.date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item></el-form><template #footer><el-button @click="createOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitCreate">创建</el-button></template></el-dialog>
+    <el-dialog v-model="createOpen" title="新建盘点" width="min(720px, 94vw)" class="legacy-business-dialog" append-to-body>
+      <el-form class="form-grid legacy-business-form" label-position="top" @submit.prevent="submitCreate">
+        <el-form-item class="field" label="任务名称" required><el-input v-model="createForm.name" /></el-form-item>
+        <el-form-item class="field" label="盘点范围" required><el-input v-model="createForm.scope" /></el-form-item>
+        <el-form-item class="field" label="负责人" required><el-input v-model="createForm.owner" /></el-form-item>
+        <el-form-item class="field" label="应盘数量" required><el-input-number v-model="createForm.total" :min="1" :max="5000" /></el-form-item>
+        <el-form-item class="field" label="计划日期" required><el-date-picker v-model="createForm.date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="createOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitCreate">确定</el-button></template>
+    </el-dialog>
     <el-dialog v-model="updateOpen" title="更新盘点进度" width="min(520px, 94vw)" append-to-body><el-form label-position="top"><el-form-item label="已盘数量"><el-input-number v-model="updateForm.checked" :min="0" :max="updateForm.total" /></el-form-item><el-form-item label="差异数量"><el-input-number v-model="updateForm.diff" :min="0" :max="updateForm.checked" /></el-form-item></el-form><template #footer><el-button @click="updateOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitUpdate">保存</el-button></template></el-dialog>
   </section>
 </template>

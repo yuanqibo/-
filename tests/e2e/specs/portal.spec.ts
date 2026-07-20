@@ -260,6 +260,53 @@ test.describe('登录后门户质量回归', () => {
     await expect(page.locator('.system-content .panel')).toContainText('表单管理')
   })
 
+  test('盘点与资产设置表单保留迁移前结构和层级逻辑', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '密集设置表单在桌面项目执行')
+    const state = await openApp(page, '/assets/stocktake')
+
+    await page.getByRole('button', { name: '新建盘点', exact: true }).click()
+    const stocktakeDialog = page.getByRole('dialog', { name: '新建盘点' })
+    await expect(stocktakeDialog.locator('.legacy-business-form')).toHaveCSS('grid-template-columns', /.+ .+/)
+    for (const label of ['任务名称', '盘点范围', '负责人', '应盘数量', '计划日期']) {
+      await expect(stocktakeDialog.locator('.el-form-item').filter({ hasText: label })).toHaveCount(1)
+    }
+    await stocktakeDialog.locator('.el-form-item').filter({ hasText: '任务名称' }).locator('input').fill('迁移回归盘点')
+    await stocktakeDialog.getByRole('button', { name: '确定', exact: true }).click()
+    await expect(stocktakeDialog).toBeHidden()
+    expect(state.requests.find((item) => item.method === 'POST' && item.path === '/api/business-data/stocktakes')?.body).toMatchObject({
+      name: '迁移回归盘点', scope: '全部资产', owner: '测试管理员', total: 45
+    })
+
+    await page.goto('/assets/settings/locations')
+    await page.getByRole('button', { name: '＋ 新增位置', exact: true }).click()
+    const locationDialog = page.getByRole('dialog', { name: '新增位置' })
+    for (const label of ['位置名称', '上级位置', '位置编码', '资产编码开关']) {
+      await expect(locationDialog.locator('.location-form-row').filter({ hasText: label })).toHaveCount(1)
+    }
+    await locationDialog.locator('.location-form-row').filter({ hasText: '位置名称' }).locator('input').fill('研发办公室')
+    await locationDialog.locator('.location-form-row').filter({ hasText: '上级位置' }).locator('select').selectOption('loc-hz')
+    await locationDialog.locator('.location-form-row').filter({ hasText: '位置编码' }).locator('input').fill('RD')
+    await locationDialog.getByRole('button', { name: '确定', exact: true }).click()
+    await expect(locationDialog).toBeHidden()
+    const locationRequest = [...state.requests].reverse().find((item) => item.method === 'PUT' && item.path === '/api/config/catalog/locations')
+    expect(locationRequest?.body).toMatchObject({ value: [{ id: 'loc-hz', children: [{ name: '研发办公室', code: 'RD' }] }] })
+
+    await page.goto('/assets/settings/categories')
+    await page.getByRole('button', { name: '＋ 新增分类', exact: true }).click()
+    const categoryDialog = page.getByRole('dialog', { name: '新增分类' })
+    for (const label of ['分类编码', '分类名称', '上级分类', '使用期限', '计量单位', '资产编码开关']) {
+      await expect(categoryDialog.locator('.location-form-row').filter({ hasText: label })).toHaveCount(1)
+    }
+    await categoryDialog.locator('.location-form-row').filter({ hasText: '分类编码' }).locator('input').fill('0101')
+    await categoryDialog.locator('.location-form-row').filter({ hasText: '分类名称' }).locator('input').fill('笔记本电脑')
+    await categoryDialog.locator('.location-form-row').filter({ hasText: '上级分类' }).locator('select').selectOption('cat-it')
+    await categoryDialog.locator('.location-form-row').filter({ hasText: '使用期限' }).locator('input').fill('48')
+    await categoryDialog.getByRole('button', { name: '确定', exact: true }).click()
+    await expect(categoryDialog).toBeHidden()
+    const categoryRequest = [...state.requests].reverse().find((item) => item.method === 'PUT' && item.path === '/api/config/catalog/categories')
+    expect(categoryRequest?.body).toMatchObject({ value: [{ id: 'cat-it', children: [{ name: '笔记本电脑', code: '0101', usefulLife: '48', unit: '台' }] }] })
+  })
+
   test('员工搜索、组织筛选、分页与详情抽屉可用', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '目录业务流在桌面项目执行')
     const state = await openApp(page, '/system/employees')
@@ -327,6 +374,35 @@ test.describe('登录后门户质量回归', () => {
     expect(layout.right).toBeLessThanOrEqual(layout.viewport + 1)
     expect(layout.fieldsInside).toBe(true)
     expect(layout.overlaps).toBe(false)
+    await expectNoPageOverflow(page)
+  })
+
+  test('移动端盘点和资产设置弹窗保持原表单且不溢出', async ({ page, isMobile }) => {
+    test.skip(!isMobile, '仅在移动端项目执行')
+    await openApp(page, '/assets/stocktake')
+    await page.getByRole('button', { name: '新建盘点', exact: true }).click()
+    let dialog = page.getByRole('dialog', { name: '新建盘点' })
+    await expect(dialog.locator('.legacy-business-form .field')).toHaveCount(5)
+    await expect(dialog.getByRole('button', { name: '确定', exact: true })).toBeVisible()
+    await dialog.getByRole('button', { name: '取消', exact: true }).click()
+
+    await page.goto('/assets/settings/locations')
+    await page.getByRole('button', { name: '＋ 新增位置', exact: true }).click()
+    dialog = page.getByRole('dialog', { name: '新增位置' })
+    await expect(dialog.locator('.location-form-row')).toHaveCount(4)
+    const layout = await dialog.evaluate((element) => {
+      const dialogRect = element.getBoundingClientRect()
+      const controls = Array.from(element.querySelectorAll('input, select, button')).map((control) => control.getBoundingClientRect())
+      return {
+        viewport: document.documentElement.clientWidth,
+        left: dialogRect.left,
+        right: dialogRect.right,
+        controlsInside: controls.every((control) => control.left >= dialogRect.left - 1 && control.right <= dialogRect.right + 1)
+      }
+    })
+    expect(layout.left).toBeGreaterThanOrEqual(0)
+    expect(layout.right).toBeLessThanOrEqual(layout.viewport + 1)
+    expect(layout.controlsInside).toBe(true)
     await expectNoPageOverflow(page)
   })
 })

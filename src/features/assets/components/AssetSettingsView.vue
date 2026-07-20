@@ -9,7 +9,7 @@ import type { CatalogNode } from '../types/assets'
 
 const route = useRoute()
 const { user } = usePortalSession()
-const { state, store, load, saveCatalogValue, saveCodeRules, saveLabels } = useAssets()
+const { state, assets, store, load, saveCatalogValue, saveCodeRules, saveLabels } = useAssets()
 const saving = ref(false)
 const catalogBusy = ref(false)
 const downloadUrl = ref('')
@@ -60,11 +60,14 @@ const labelFields = computed<string[]>(() => Array.isArray(labelSettings.fields)
 const labelScanFields = computed<string[]>({ get: () => Array.isArray(labelSettings.scanFields) ? labelSettings.scanFields as string[] : [], set: (value) => { labelSettings.scanFields = value } })
 const labelCustomFields = computed<string>({ get: () => String(labelSettings.customFields || ''), set: (value) => { labelSettings.customFields = value } })
 const setLabelField = (index: number, value: string): void => { const fields = [...labelFields.value]; fields[index] = value; labelSettings.fields = fields.filter((field, fieldIndex) => field || fieldIndex < index) }
-type FlatCatalogRow = CatalogNode & { parentName: string }
-const flattenCatalog = (nodes: CatalogNode[], parentName = '暂无上级'): FlatCatalogRow[] => nodes.flatMap((node) => [
-  { ...node, parentName },
-  ...flattenCatalog(node.children || [], node.name)
-])
+type FlatCatalogRow = CatalogNode & { parentId: string; parentName: string; path: string; level: number }
+const flattenCatalog = (nodes: CatalogNode[], parent: CatalogNode | null = null, parentPath: string[] = []): FlatCatalogRow[] => nodes.flatMap((node) => {
+  const pathParts = [...parentPath, node.name]
+  return [
+    { ...node, parentId: parent?.id || '', parentName: parent?.name || '暂无上级', path: pathParts.join(' / '), level: parentPath.length },
+    ...flattenCatalog(node.children || [], node, pathParts)
+  ]
+})
 const catalogRows = computed(() => {
   const keyword = catalogQuery.value.trim().toLowerCase()
   const rows = flattenCatalog(catalog.value)
@@ -119,6 +122,21 @@ const findParent = (nodes: CatalogNode[], id: string): CatalogNode | null => {
   return null
 }
 
+const catalogDialogTitle = computed(() => `${editNodeId.value ? '编辑' : '新增'}${kind.value === 'locations' ? '位置' : '分类'}`)
+const catalogParentOptions = computed(() => {
+  const editing = editNodeId.value ? findNode(catalog.value, editNodeId.value) : null
+  const blocked = new Set([
+    editNodeId.value,
+    ...flattenCatalog(editing?.children || []).map((node) => node.id)
+  ].filter(Boolean))
+  return [
+    { value: '', label: '暂无上级' },
+    ...flattenCatalog(catalog.value)
+      .filter((node) => !blocked.has(node.id))
+      .map((node) => ({ value: node.id, label: `${'　'.repeat(node.level)}${kind.value === 'locations' ? node.path : node.name}` }))
+  ]
+})
+
 const openCatalogDialog = (node?: CatalogNode, asChild = false): void => {
   if (!canCatalog(node && !asChild ? 'update' : 'create')) return
   editNodeId.value = asChild ? '' : node?.id || ''
@@ -127,21 +145,59 @@ const openCatalogDialog = (node?: CatalogNode, asChild = false): void => {
   catalogDialog.value = true
 }
 
+const takeNode = (nodes: CatalogNode[], id: string): CatalogNode | null => {
+  const index = nodes.findIndex((node) => node.id === id)
+  if (index >= 0) return nodes.splice(index, 1)[0]
+  for (const node of nodes) {
+    const found = takeNode(node.children || [], id)
+    if (found) return found
+  }
+  return null
+}
+
+const insertNode = (node: CatalogNode, parentId = ''): boolean => {
+  if (!parentId) { catalog.value.push(node); return true }
+  const parent = findNode(catalog.value, parentId)
+  if (!parent) return false
+  parent.children = parent.children || []
+  parent.children.push(node)
+  return true
+}
+
 const saveCatalogNode = async (): Promise<void> => {
   if (!canCatalog(editNodeId.value ? 'update' : 'create')) return
-  if (!catalogForm.name.trim()) { ElMessage.warning('请输入名称'); return }
+  const name = String(catalogForm.name || '').trim()
+  const code = String(catalogForm.code || '').trim()
+  const unit = String(catalogForm.unit || '').trim()
+  const usefulLife = String(catalogForm.usefulLife || '').trim()
+  if (kind.value === 'categories' && (!code || !name)) { ElMessage.warning('请填写分类编码和分类名称'); return }
+  if (kind.value === 'locations' && !name) { ElMessage.warning('请填写位置名称'); return }
+  const rows = flattenCatalog(catalog.value)
+  if (kind.value === 'categories') {
+    const duplicateCode = rows.find((row) => row.code === code && row.id !== editNodeId.value)
+    if (duplicateCode) { ElMessage.warning(`分类编码已被“${duplicateCode.name}”使用`); return }
+    if (rows.some((row) => row.name === name && row.id !== editNodeId.value)) { ElMessage.warning(`分类名称已存在：${name}`); return }
+  }
+  const previous = clone(catalog.value)
+  const values = kind.value === 'categories'
+    ? { name, code, unit, usefulLife, enabled: catalogForm.enabled }
+    : { name, code: code || `LOC-${String(rows.length + 1).padStart(2, '0')}`, enabled: catalogForm.enabled }
   if (editNodeId.value) {
     const node = findNode(catalog.value, editNodeId.value)
-    if (node) Object.assign(node, catalogForm)
+    if (!node) return
+    Object.assign(node, values)
+    if ((findParent(catalog.value, editNodeId.value)?.id || '') !== editParentId.value) {
+      const moved = takeNode(catalog.value, editNodeId.value)
+      if (moved && !insertNode(moved, editParentId.value)) catalog.value.push(moved)
+    }
   } else {
-    const node: CatalogNode = { id: `${kind.value}-${Date.now()}`, ...catalogForm, children: [] }
-    const parent = findNode(catalog.value, editParentId.value)
-    if (parent) parent.children.push(node)
-    else catalog.value.push(node)
+    const prefix = kind.value === 'locations' ? 'loc' : 'cat'
+    const node: CatalogNode = { id: `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, ...values, children: [] }
+    if (!insertNode(node, editParentId.value)) catalog.value.push(node)
   }
   saving.value = true
   try { await saveCatalogValue(kind.value as 'categories' | 'locations', clone(catalog.value)); catalogDialog.value = false; ElMessage.success('配置已保存') }
-  catch (error) { syncFromStore(); ElMessage.error(error instanceof Error ? error.message : '保存失败') }
+  catch (error) { catalog.value = previous; ElMessage.error(error instanceof Error ? error.message : '保存失败') }
   finally { saving.value = false }
 }
 
@@ -152,7 +208,14 @@ const removeFrom = (nodes: CatalogNode[], id: string): boolean => {
 }
 const removeNode = async (node: CatalogNode): Promise<void> => {
   if (!canCatalog('delete')) return
-  await ElMessageBox.confirm(`确定删除“${node.name}”及其下级节点吗？`, '删除确认', { type: 'warning' })
+  const descendantIds = new Set(flattenCatalog([node]).map((item) => item.id))
+  const descendants = flattenCatalog(catalog.value).filter((item) => descendantIds.has(item.id))
+  const referenced = kind.value === 'categories'
+    ? assets.value.filter((asset) => descendants.some((item) => item.name === asset.category))
+    : assets.value.filter((asset) => descendants.some((item) => item.path === asset.location))
+  if (referenced.length) { ElMessage.warning(`已有 ${referenced.length} 个资产使用该${kind.value === 'categories' ? '分类' : '位置'}，不能删除`); return }
+  const childCount = descendants.length - 1
+  await ElMessageBox.confirm(`确定删除“${node.name}”吗？${childCount ? `这会同时删除 ${childCount} 个下级${kind.value === 'categories' ? '分类' : '位置'}。` : ''}`, '删除确认', { type: 'warning' })
   const previous = clone(catalog.value)
   removeFrom(catalog.value, node.id)
   try { await saveCatalogValue(kind.value as 'categories' | 'locations', clone(catalog.value)); ElMessage.success('节点已删除') }
@@ -282,7 +345,20 @@ onMounted(async () => { await load(); syncFromStore() })
       </form></div>
     </section>
 
-    <el-dialog v-model="catalogDialog" :title="editNodeId ? '编辑节点' : '新增节点'" width="min(520px, 94vw)" append-to-body><el-form label-position="top"><el-form-item label="名称" required><el-input v-model="catalogForm.name" /></el-form-item><el-form-item label="编码"><el-input v-model="catalogForm.code" /></el-form-item><el-form-item v-if="kind === 'categories'" label="计量单位"><el-input v-model="catalogForm.unit" /></el-form-item><el-form-item v-if="kind === 'categories'" label="使用年限"><el-input v-model="catalogForm.usefulLife" /></el-form-item><el-form-item label="启用"><el-switch v-model="catalogForm.enabled" /></el-form-item></el-form><template #footer><el-button @click="catalogDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveCatalogNode">保存</el-button></template></el-dialog>
+    <el-dialog v-model="catalogDialog" :title="catalogDialogTitle" width="min(680px, 94vw)" class="legacy-catalog-dialog" append-to-body>
+      <form class="location-form" :class="{ 'asset-category-form': kind === 'categories' }" @submit.prevent="saveCatalogNode">
+        <div class="location-form-body">
+          <label v-if="kind === 'categories'" class="location-form-row"><span><em>*</em> 分类编码：</span><input v-model="catalogForm.code" required placeholder="请输入" autocomplete="off"></label>
+          <label class="location-form-row"><span><em>*</em> {{ kind === 'locations' ? '位置名称' : '分类名称' }}：</span><input v-model="catalogForm.name" required placeholder="请输入" autocomplete="off"></label>
+          <label class="location-form-row"><span>上级{{ kind === 'locations' ? '位置' : '分类' }}：</span><select v-model="editParentId"><option v-for="option in catalogParentOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
+          <label v-if="kind === 'locations'" class="location-form-row"><span>位置编码：</span><input v-model="catalogForm.code" placeholder="请输入" autocomplete="off"></label>
+          <label v-if="kind === 'categories'" class="location-form-row"><span>使用期限：</span><input v-model="catalogForm.usefulLife" type="number" min="0" step="1" placeholder="请输入" autocomplete="off"></label>
+          <label v-if="kind === 'categories'" class="location-form-row"><span>计量单位：</span><input v-model="catalogForm.unit" placeholder="请输入" autocomplete="off"></label>
+          <div class="location-form-row location-form-switch-row"><span>资产编码开关：</span><button class="location-switch" :class="{ on: catalogForm.enabled }" type="button" :aria-pressed="catalogForm.enabled" @click="catalogForm.enabled = !catalogForm.enabled"><strong>{{ catalogForm.enabled ? '开' : '关' }}</strong><b aria-hidden="true"></b></button></div>
+        </div>
+        <div class="modal-actions"><button class="btn" type="button" @click="catalogDialog = false">取消</button><button class="btn primary" type="submit" :disabled="saving">{{ saving ? '保存中...' : '确定' }}</button></div>
+      </form>
+    </el-dialog>
     <el-dialog v-model="templateDialog" :title="templateForm.key ? '重命名自定义模板' : '保存为自定义模板'" width="min(480px, 94vw)" append-to-body><el-form label-position="top"><el-form-item label="模板名称" required><el-input v-model="templateForm.name" maxlength="30" /></el-form-item></el-form><template #footer><el-button @click="templateDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveCustomTemplate">保存</el-button></template></el-dialog>
   </section>
 </template>
