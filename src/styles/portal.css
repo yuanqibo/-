@@ -11628,9 +11628,29 @@ body.is-resizing-column * {
 .asset-create-form .el-input__wrapper,
 .asset-create-form .el-select__wrapper,
 .asset-flow-form .el-input__wrapper,
-.asset-flow-form .el-select__wrapper {
+.asset-flow-form .el-select__wrapper,
+.legacy-business-form .el-input__wrapper,
+.legacy-business-form .el-select__wrapper {
   min-height: 38px;
   border-radius: 7px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none !important;
+}
+
+.asset-create-form .el-input__wrapper:hover,
+.asset-create-form .el-input__wrapper.is-focus,
+.asset-create-form .el-select__wrapper:hover,
+.asset-create-form .el-select__wrapper.is-focused,
+.asset-flow-form .el-input__wrapper:hover,
+.asset-flow-form .el-input__wrapper.is-focus,
+.asset-flow-form .el-select__wrapper:hover,
+.asset-flow-form .el-select__wrapper.is-focused,
+.legacy-business-form .el-input__wrapper:hover,
+.legacy-business-form .el-input__wrapper.is-focus,
+.legacy-business-form .el-select__wrapper:hover,
+.legacy-business-form .el-select__wrapper.is-focused {
+  box-shadow: none !important;
 }
 
 .asset-form-suffix {
