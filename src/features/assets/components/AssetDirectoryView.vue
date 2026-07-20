@@ -905,7 +905,7 @@ onMounted(() => void load())
               </el-autocomplete>
             </el-form-item>
             <el-form-item class="field" label="使用公司" prop="company"><el-select v-model="createDraft.company" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-            <el-form-item class="field" label="使用部门"><el-select v-model="createDraft.department" filterable allow-create placement="bottom-start" placeholder=""><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field" label="使用部门"><el-select v-model="createDraft.department" :disabled="!createDraft.ownerSubject" filterable allow-create placement="bottom-start" placeholder=""><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item class="field" label="领用/借用日期"><el-date-picker v-model="createDraft.receiveDate" value-format="YYYY-MM-DD" /></el-form-item>
           </div>
         </section>

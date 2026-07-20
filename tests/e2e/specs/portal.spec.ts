@@ -170,6 +170,9 @@ test.describe('登录后门户质量回归', () => {
     const personWrapper = personField.locator('.el-input__wrapper')
     const neutralShadow = await personWrapper.evaluate((element) => getComputedStyle(element).boxShadow)
     await expect(departmentField.locator('input')).toHaveValue('')
+    await expect(departmentField.locator('.el-select__wrapper')).toHaveClass(/is-disabled/)
+    await departmentField.locator('.el-select__wrapper').click({ force: true })
+    await expect(page.getByRole('option', { name: '研发部', exact: true })).toHaveCount(0)
     await personInput.click()
     await page.waitForTimeout(400)
     await expect(page.locator('.el-autocomplete-suggestion li')).toHaveCount(0)
@@ -179,8 +182,27 @@ test.describe('登录后门户质量回归', () => {
     await expect(page.getByRole('option', { name: /张三/ })).toBeVisible()
     await page.getByRole('option', { name: /张三/ }).click()
     await expect(personInput).toHaveValue('张三')
+    await expect(departmentField.locator('.el-select__wrapper')).not.toHaveClass(/is-disabled/)
     await expect(departmentField.getByText('研发部', { exact: true })).toBeVisible()
-    expect(state.requests.some((item) => item.path.startsWith('/api/ecp/directory/users?') && item.path.includes('q=%E5%BC%A0%E4%B8%89'))).toBe(true)
+    expect(state.requests.some((item) => item.path.startsWith('/api/ecp/directory/users?') && item.path.includes('query=%E5%BC%A0%E4%B8%89'))).toBe(true)
+    await departmentField.locator('.el-select').click()
+    await expect(departmentField.locator('.el-select__input')).toHaveCSS('box-shadow', 'none')
+    await page.keyboard.press('Escape')
+    const alignment = await dialog.evaluate((element) => {
+      const items = Array.from(element.querySelectorAll('.asset-form-grid .el-form-item'))
+      const offsets = items.map((item) => {
+        const label = item.querySelector('.el-form-item__label')?.getBoundingClientRect()
+        const control = item.querySelector('.el-input__wrapper, .el-select__wrapper')?.getBoundingClientRect()
+        return label && control ? Math.abs((label.top + label.height / 2) - (control.top + control.height / 2)) : 0
+      })
+      const overflowingLabels = items.filter((item) => {
+        const label = item.querySelector<HTMLElement>('.el-form-item__label')
+        return Boolean(label && label.scrollWidth > label.clientWidth + 1)
+      }).length
+      return { maxOffset: Math.max(0, ...offsets), overflowingLabels }
+    })
+    expect(alignment.maxOffset, JSON.stringify(alignment)).toBeLessThanOrEqual(1)
+    expect(alignment.overflowingLabels, JSON.stringify(alignment)).toBe(0)
     await dialog.locator('.el-form-item').filter({ hasText: '资产名称' }).locator('input').fill('新测试设备')
     await dialog.locator('.el-form-item').filter({ hasText: '品牌' }).locator('input').fill('测试品牌')
     await dialog.locator('.el-form-item').filter({ hasText: '资产分类' }).locator('.el-select').click()

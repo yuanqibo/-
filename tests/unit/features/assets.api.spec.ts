@@ -45,6 +45,9 @@ describe('assets feature API', () => {
     await expect(searchDirectoryPeople('研发')).resolves.toEqual([{
       subject: 'sub-1', name: '张三', account: 'A001', email: 'zs@example.com', department: '研发部', company: '示例公司'
     }])
-    expect(apiRequest.mock.calls[0][0]).toContain('/api/ecp/directory/users?')
+    const requestUrl = new URL(String(apiRequest.mock.calls[0][0]), 'http://localhost')
+    expect(requestUrl.pathname).toBe('/api/ecp/directory/users')
+    expect(requestUrl.searchParams.get('query')).toBe('研发')
+    expect(requestUrl.searchParams.has('q')).toBe(false)
   })
 })

@@ -84,7 +84,7 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
     if (url.pathname === '/api/ecp/organization') return fulfill(organization)
     if (url.pathname.includes('/api/ecp/control-plane/iam/account-sets')) return fulfill({ items: organization.accountSets })
     if (url.pathname === '/api/ecp/directory/users') {
-      const query = (url.searchParams.get('query') || url.searchParams.get('q') || '').toLowerCase()
+      const query = (url.searchParams.get('query') || '').toLowerCase()
       const current = Number(url.searchParams.get('page') || 1)
       const size = Number(url.searchParams.get('size') || 50)
       const filtered = employees.filter((item) => !query || [item.name, item.employeeNo, item.email].some((value) => value.toLowerCase().includes(query)))

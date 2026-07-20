@@ -79,7 +79,7 @@ const personFromPayload = (item: Record<string, unknown>): DirectoryPerson => {
 }
 
 export const searchDirectoryPeople = async (keyword: string): Promise<DirectoryPerson[]> => {
-  const query = new URLSearchParams({ page: '1', size: '100', q: keyword })
+  const query = new URLSearchParams({ page: '1', size: '100', query: keyword })
   const payload = await apiRequest<DirectoryResponse>(`/api/ecp/directory/users?${query}`)
   const normalized = keyword.trim().toLowerCase()
   return (payload.items || []).map(personFromPayload).filter((item) => item.subject && item.name && (

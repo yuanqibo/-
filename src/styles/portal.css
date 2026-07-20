@@ -11404,6 +11404,14 @@ body.is-resizing-column * {
   margin: 0;
 }
 
+.asset-form-grid .el-form-item__label {
+  min-height: 38px;
+  padding: 0;
+  align-items: center;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
 .asset-form-grid .el-form-item__content,
 .asset-flow-grid .el-form-item__content {
   min-width: 0;
@@ -11436,6 +11444,13 @@ body.is-resizing-column * {
 .asset-create-form .el-input__wrapper.is-focus,
 .asset-create-form .el-select__wrapper.is-focused {
   box-shadow: 0 0 0 1px var(--el-border-color, #dcdfe6) inset;
+}
+
+.asset-create-form .el-input__inner:focus,
+.asset-create-form .el-select__input:focus {
+  border: 0;
+  box-shadow: none;
+  outline: 0;
 }
 
 .asset-create-form .el-input__inner,
@@ -12757,6 +12772,12 @@ body.is-resizing-column * {
     grid-column: 1 / -1;
     grid-template-columns: 1fr;
     gap: 7px;
+  }
+
+  .asset-form-grid .el-form-item__label {
+    min-height: 0;
+    align-items: flex-start;
+    white-space: normal;
   }
 
   .asset-flow-grid {
