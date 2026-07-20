@@ -3738,42 +3738,6 @@ button.asset-code-rule-field-name {
   font-size: 12px;
 }
 
-.standard-print-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.standard-print-label {
-  display: grid;
-  position: relative;
-  min-height: 112px;
-  gap: 5px;
-  align-content: center;
-  border: 1px solid #2f3b4e;
-  padding: 14px 18px;
-  break-inside: avoid;
-}
-
-.standard-print-label strong { font-size: 16px; }
-.standard-print-label span { display: flex; gap: 8px; color: #1768dc; font-weight: 650; }
-.standard-print-label span small { min-width: 64px; color: #657288; font-weight: 400; }
-.standard-print-label small { color: #657288; }
-
-.standard-print-qr {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border: 3px double #344054;
-  color: #344054;
-  font-size: 8px;
-  font-style: normal;
-}
-
 .standard-settings-tabs {
   flex: 0 0 auto;
 }
@@ -3928,7 +3892,6 @@ button.asset-code-rule-field-name {
   .standard-self-service-fields label.wide { grid-column: auto; }
   .standard-label-preview { width: 100%; }
   .standard-pagination { align-items: flex-end; flex-direction: column; }
-  .standard-print-grid { grid-template-columns: 1fr; }
   .standard-template-toolbar { align-items: stretch; flex-direction: column; }
   .standard-template-toolbar .el-select { width: 100%; }
   .standard-sign-page-tabs { display: flex; flex-direction: column; }
@@ -10187,6 +10150,26 @@ body.is-resizing-column * {
   padding: 0;
 }
 
+.el-dialog.legacy-asset-label-print-dialog {
+  max-height: calc(100vh - 24px);
+  margin-top: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  background: #111111;
+}
+
+.legacy-asset-label-print-dialog .el-dialog__header,
+.legacy-asset-label-print-dialog .el-dialog__footer {
+  display: none;
+}
+
+.legacy-asset-label-print-dialog .el-dialog__body {
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 0;
+  background: #111111;
+}
+
 .modal.asset-label-print-modal.default-label-editor-modal {
   width: min(640px, calc(100vw - 24px));
   max-height: calc(100vh - 10px);
@@ -11442,12 +11425,16 @@ body.is-resizing-column * {
 }
 
 .asset-create-form .el-input__wrapper.is-focus,
-.asset-create-form .el-select__wrapper.is-focused {
+.asset-create-form .el-select__wrapper.is-focused,
+.asset-flow-form .el-input__wrapper.is-focus,
+.asset-flow-form .el-select__wrapper.is-focused {
   box-shadow: 0 0 0 1px var(--el-border-color, #dcdfe6) inset;
 }
 
 .asset-create-form .el-input__inner:focus,
-.asset-create-form .el-select__input:focus {
+.asset-create-form .el-select__input:focus,
+.asset-flow-form .el-input__inner:focus,
+.asset-flow-form .el-select__input:focus {
   border: 0;
   box-shadow: none;
   outline: 0;

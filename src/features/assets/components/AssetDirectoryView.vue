@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type TableInstance } from 'element-plus'
-import { Printer } from '@element-plus/icons-vue'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { searchDirectoryPeople } from '../api/assets.api'
 import { parseAssetWorkbook, type AssetImportMode } from '../composables/parseAssetWorkbook'
 import { useAssets } from '../composables/useAssets'
 import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, AssetRecord, CatalogNode, DirectoryPerson } from '../types/assets'
+import AssetLabelPrintPreview from './AssetLabelPrintPreview.vue'
 
 type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
@@ -463,9 +463,10 @@ const allActionAssetsSelected = computed(() => actionForm.assetIds.length > 0 &&
 const needsPerson = computed(() => actionForm.action === 'receive' || actionForm.action === 'borrow' || (actionForm.action === 'handover' && actionForm.handoverType === 'personal'))
 const openActionForIds = (items: AssetRecord[], action: AssetCommand): void => {
   if (!items.length) { ElMessage.warning('请先选择资产'); return }
+  const clearsDepartment = action === 'receive' || action === 'borrow' || action === 'handover'
   Object.assign(actionForm, {
     action, assetIds: items.map((item) => item.id), person: '', personSubject: '',
-    company: items[0].company || user.value?.company || '', department: items[0].department || user.value?.department || '',
+    company: items[0].company || user.value?.company || '', department: clearsDepartment ? '' : items[0].department || user.value?.department || '',
     operator: user.value?.name || '', handoverType: 'personal', location: items[0].location || '',
     date: new Date().toISOString().slice(0, 10), expectedReturnDate: action === 'borrow' ? new Date().toISOString().slice(0, 10) : '',
     expectedReturnDates: action === 'borrow' ? Object.fromEntries(items.map((item) => [item.id, new Date().toISOString().slice(0, 10)])) : {}, note: ''
@@ -479,7 +480,13 @@ const selectPerson = (person: DirectoryPerson): void => {
   actionForm.person = person.name
   actionForm.personSubject = person.subject
   actionForm.company = person.company || actionForm.company
-  actionForm.department = person.department || actionForm.department
+  actionForm.department = person.department || ''
+}
+const clearActionPersonIdentity = (): void => {
+  actionForm.personSubject = ''
+  if (actionForm.action === 'receive' || actionForm.action === 'borrow' || (actionForm.action === 'handover' && actionForm.handoverType === 'personal')) {
+    actionForm.department = ''
+  }
 }
 const reopenActionPicker = (): void => {
   pickerAction.value = actionForm.action
@@ -696,14 +703,17 @@ const exportAssets = async (): Promise<void> => {
   await nextTick(); exportLink.value?.click(); window.setTimeout(() => { URL.revokeObjectURL(exportUrl.value); exportUrl.value = '' }, 0)
   ElMessage.success(`已导出 ${rows.length} 条资产`)
 }
-const printRows = computed(() => selected.value.length ? selected.value : filteredAssets.value.slice(0, 100))
+const printRows = computed(() => selected.value)
 const printSettings = computed(() => store.value.assetLabelPrintSettingsV2 || {})
-const printFields = computed(() => Array.isArray(printSettings.value.fields) ? printSettings.value.fields as string[] : ['name', 'id', 'category', 'location'])
-const printFieldLabels: Record<string, string> = { name: '资产名称', id: '资产编码', category: '资产分类', owner: '使用人', location: '所在位置', sn: '序列号' }
-const printGridStyle = computed(() => ({ gridTemplateColumns: `repeat(${Math.max(1, Number(printSettings.value.columns || 2))}, minmax(0, 1fr))` }))
-const printLabelStyle = computed(() => ({ minHeight: `${Math.max(15, Number(printSettings.value.labelHeight || 30)) * 3.2}px`, fontSize: `${Math.max(8, Number(printSettings.value.fontSize || 12))}px` }))
-const openPrint = (): void => { if (!printRows.value.length) ElMessage.warning('没有可打印的资产'); else printOpen.value = true }
-const printNow = (): void => window.print()
+const printTemplates = computed(() => store.value.assetLabelCustomTemplatesV1 || [])
+const openPrint = (): void => { if (!printRows.value.length) ElMessage.warning('请选择打印资产'); else printOpen.value = true }
+const printNow = (): void => {
+  const cleanup = (): void => document.body.classList.remove('printing-asset-labels')
+  document.body.classList.add('printing-asset-labels')
+  window.addEventListener('afterprint', cleanup, { once: true })
+  window.print()
+  window.setTimeout(cleanup, 1000)
+}
 
 const statusType = (value: string): 'success' | 'warning' | 'info' | 'danger' => {
   if (value === '在用') return 'success'
@@ -996,12 +1006,12 @@ onMounted(() => void load())
         <section class="asset-flow-section">
           <div v-if="actionForm.action === 'handover'" class="handover-mode-row" role="radiogroup" aria-label="交接类型"><span class="handover-mode-label">交接类型：</span><el-radio-group v-model="actionForm.handoverType"><el-radio value="personal">员工交接</el-radio><el-radio value="public">公共交接</el-radio></el-radio-group></div>
           <div class="asset-flow-grid">
-            <el-form-item v-if="needsPerson" class="field" :style="actionForm.action === 'handover' ? { order: 1 } : undefined" :label="actionForm.action === 'handover' ? '接收人：' : actionForm.action === 'borrow' ? '借用人：' : '领用人'" required><el-autocomplete v-model="actionForm.person" clearable :fetch-suggestions="personSearch" placeholder="搜索姓名、工号、邮箱或手机号" @input="actionForm.personSubject = ''" @select="selectPerson"><template #default="{ item }"><div class="standard-person-option"><strong>{{ item.name }}</strong><span>{{ item.account }} · {{ item.department }}</span></div></template></el-autocomplete></el-form-item>
+            <el-form-item v-if="needsPerson" class="field" :style="actionForm.action === 'handover' ? { order: 1 } : undefined" :label="actionForm.action === 'handover' ? '接收人：' : actionForm.action === 'borrow' ? '借用人：' : '领用人'" required><el-autocomplete v-model="actionForm.person" clearable :fetch-suggestions="personSearch" :trigger-on-focus="false" placeholder="搜索姓名、工号、邮箱或手机号" @input="clearActionPersonIdentity" @select="selectPerson"><template #default="{ item }"><div class="standard-person-option"><strong>{{ item.name }}</strong><span>{{ item.account }} · {{ item.department }}</span></div></template></el-autocomplete></el-form-item>
             <el-form-item v-if="actionForm.action === 'receive' || actionForm.action === 'borrow' || (actionForm.action === 'handover' && actionForm.handoverType === 'personal')" class="field" :style="actionForm.action === 'handover' ? { order: 2 } : undefined" :label="actionForm.action === 'handover' ? '接收公司：' : '所属公司'" required><el-input v-model="actionForm.company" readonly /></el-form-item>
             <el-form-item v-if="actionForm.action === 'receive' || actionForm.action === 'borrow'" class="field" :label="actionForm.action === 'borrow' ? '所在部门：' : '所在部门'"><el-input v-model="actionForm.department" readonly /></el-form-item>
             <el-form-item v-if="actionForm.action === 'return'" class="field" :style="{ order: 2 }" label="退库后使用公司" required><el-select v-model="actionForm.company" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item v-if="actionForm.action === 'return'" class="field" :style="{ order: 3 }" label="退库后使用部门"><el-select v-model="actionForm.department" filterable allow-create placement="bottom-start"><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-            <el-form-item v-if="actionForm.action === 'handover'" class="field" :style="{ order: 3 }" label="接收部门："><el-select v-model="actionForm.department" filterable allow-create placement="bottom-start"><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item v-if="actionForm.action === 'handover'" class="field" :style="{ order: 3 }" label="接收部门："><el-select v-model="actionForm.department" :disabled="actionForm.handoverType === 'personal' && !actionForm.personSubject" filterable allow-create placement="bottom-start" placeholder=""><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item class="field" :style="actionForm.action === 'return' ? { order: 1 } : actionForm.action === 'handover' ? { order: 5 } : undefined" :label="actionForm.action === 'return' ? '退库日期' : actionForm.action === 'borrow-return' ? '归还日期：' : actionForm.action === 'borrow' ? '借用日期：' : actionForm.action === 'handover' ? '交接日期：' : '领用日期'" required><el-date-picker v-model="actionForm.date" value-format="YYYY-MM-DD" /></el-form-item>
             <el-form-item v-if="actionForm.action === 'borrow'" class="field" label="预计归还日期："><el-date-picker v-model="actionForm.expectedReturnDate" value-format="YYYY-MM-DD" /></el-form-item>
             <el-form-item class="field" :style="actionForm.action === 'return' || actionForm.action === 'handover' ? { order: 4 } : undefined" :label="actionForm.action === 'return' ? '退库后位置' : actionForm.action === 'borrow-return' ? '归还后位置：' : actionForm.action === 'borrow' ? '借用后位置：' : actionForm.action === 'handover' ? '接收位置：' : '领用后位置'" required><el-select v-model="actionForm.location" filterable placement="bottom-start"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
@@ -1032,9 +1042,8 @@ onMounted(() => void load())
       <template #footer><el-button @click="importOpen = false">取消</el-button><el-button type="primary" :disabled="!validImportRows.length" :loading="submitting" @click="submitImport">确定</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="printOpen" title="资产标签打印预览" width="min(900px, 94vw)" append-to-body class="standard-print-dialog">
-      <div class="standard-print-grid" :style="printGridStyle"><article v-for="item in printRows" :key="item.id" class="standard-print-label" :style="printLabelStyle"><strong v-if="printSettings.showLogo">{{ printSettings.logoText || '资产云管家' }}</strong><span v-for="field in printFields" :key="field"><small>{{ printFieldLabels[field] || field }}</small>{{ item[field] || '-' }}</span><i class="standard-print-qr">QR</i></article></div>
-      <template #footer><el-button @click="printOpen = false">取消</el-button><el-button type="primary" :icon="Printer" @click="printNow">打印</el-button></template>
+    <el-dialog v-model="printOpen" title="打印标签" width="min(760px, calc(100vw - 48px))" append-to-body class="standard-print-dialog legacy-asset-label-print-dialog">
+      <AssetLabelPrintPreview :assets="printRows" :settings="printSettings" :custom-templates="printTemplates" @print="printNow" />
     </el-dialog>
   </section>
 </template>

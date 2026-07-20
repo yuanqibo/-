@@ -1,0 +1,415 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { AssetRecord } from '../types/assets'
+
+type LabelSettings = {
+  templateKey: string
+  labelWidth: number
+  labelHeight: number
+  logoWidth: number
+  logoHeight: number
+  logoScale: number
+  logoText: string
+  logoImage: string
+  qrSize: number
+  qrTextGap: number
+  contentScale: number
+  offsetX: number
+  offsetY: number
+  fontSize: number
+  fieldFontSizes: number[]
+  columns: number
+  rows: number
+  columnGap: number
+  rowGap: number
+  fields: string[]
+  scanFields: string[]
+  customFields: string
+  showLogo: boolean
+}
+
+type LabelRow = { label: string; value: string; fontSize: number }
+type LabelEntry = { asset: AssetRecord; rows: LabelRow[]; scanText: string; qr: QrGraphic }
+type QrVersion = { version: number; dataCodewords: number; ecCodewords: number; blocks: number; remainder: number; align: number[] }
+type QrGraphic = { viewBox: string; path: string; label: string }
+
+const props = defineProps<{
+  assets: AssetRecord[]
+  settings: Record<string, unknown>
+  customTemplates: Array<Record<string, unknown>>
+}>()
+
+defineEmits<{ print: [] }>()
+
+const fieldLabels: Record<string, string> = {
+  id: '资产编码', name: '资产名称', category: '资产分类', status: '资产状态', owner: '使用人', employeeCode: '员工工号',
+  department: '使用部门', location: '所在位置', brand: '品牌', model: '型号', sn: '序列号', phone: '手机号', email: '电子邮箱',
+  receiveDate: '领用日期', assetTag: '资产标签', price: '金额', supplier: '供应商', purchaseMethod: '购置方式', custodian: '管理员',
+  note: '备注', company: '所属公司'
+}
+
+const presets: Record<string, Omit<LabelSettings, 'templateKey' | 'fieldFontSizes'>> = {
+  standard: {
+    labelWidth: 40, labelHeight: 30, logoWidth: 14, logoHeight: 8, logoScale: 80, logoText: 'AM', logoImage: '', qrSize: 13,
+    qrTextGap: 2, contentScale: 80, offsetX: 0, offsetY: 0, fontSize: 12, columns: 1, rows: 1, columnGap: 0, rowGap: 0,
+    fields: ['name', 'id', 'category'], scanFields: [], customFields: '', showLogo: false
+  },
+  compact: {
+    labelWidth: 60, labelHeight: 40, logoWidth: 10, logoHeight: 6, logoScale: 100, logoText: 'IT', logoImage: '', qrSize: 15,
+    qrTextGap: 10, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 7, columns: 1, rows: 1, columnGap: 5, rowGap: 5,
+    fields: ['id', 'name', 'category', 'owner'], scanFields: [], customFields: '', showLogo: false
+  },
+  full: {
+    labelWidth: 60, labelHeight: 40, logoWidth: 18, logoHeight: 10, logoScale: 100, logoText: '资产云', logoImage: '', qrSize: 24,
+    qrTextGap: 6, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 12, columns: 1, rows: 1, columnGap: 5, rowGap: 5,
+    fields: ['name', 'id'], scanFields: [], customFields: '管理员=custodian', showLogo: false
+  },
+  defaultAsset: {
+    labelWidth: 60, labelHeight: 40, logoWidth: 14, logoHeight: 8, logoScale: 100, logoText: 'AM', logoImage: '', qrSize: 18,
+    qrTextGap: 2, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 9, columns: 3, rows: 8, columnGap: 3, rowGap: 2,
+    fields: ['id', 'name', 'category', 'owner', 'location'], scanFields: ['id', 'name', 'owner', 'phone', 'location'], customFields: '', showLogo: true
+  }
+}
+
+const clampNumber = (value: unknown, fallback: number, min: number, max: number): number => {
+  const number = Number(value)
+  return Number.isFinite(number) ? Math.min(Math.max(number, min), max) : fallback
+}
+
+const stringList = (value: unknown, fallback: string[]): string[] => {
+  const list = Array.isArray(value) ? value : String(value || '').split(',')
+  const normalized = Array.from(new Set(list.map((item) => String(item || '').trim()).filter(Boolean)))
+  return normalized.length ? normalized : fallback
+}
+
+const customTemplate = computed(() => props.customTemplates.find((item) => String(item.key || item.id || '') === String(props.settings.templateKey || '')))
+const baseTemplateKey = computed(() => {
+  const direct = String(props.settings.templateKey || 'standard')
+  if (presets[direct]) return direct
+  const customBase = String(customTemplate.value?.baseTemplateKey || '')
+  const storedSettings = customTemplate.value?.settings as Record<string, unknown> | undefined
+  const storedBase = String(storedSettings?.templateKey || '')
+  return presets[customBase] ? customBase : presets[storedBase] ? storedBase : 'standard'
+})
+
+const normalizedSettings = computed<LabelSettings>(() => {
+  const key = baseTemplateKey.value
+  const defaults = presets[key] || presets.standard
+  const customSettings = customTemplate.value?.settings && typeof customTemplate.value.settings === 'object'
+    ? customTemplate.value.settings as Record<string, unknown>
+    : {}
+  const source = { ...customSettings, ...props.settings }
+  const fontSize = clampNumber(source.fontSize, defaults.fontSize, 5, 22)
+  const rawFontSizes = Array.isArray(source.fieldFontSizes) ? source.fieldFontSizes : String(source.fieldFontSizes || '').split(',')
+  const fields = stringList(source.fields, defaults.fields).slice(0, key === 'full' ? 2 : 24)
+  return {
+    templateKey: String(props.settings.templateKey || key),
+    labelWidth: clampNumber(source.labelWidth, defaults.labelWidth, 20, 160),
+    labelHeight: clampNumber(source.labelHeight, defaults.labelHeight, 12, 120),
+    logoWidth: clampNumber(source.logoWidth, defaults.logoWidth, 0, 60),
+    logoHeight: clampNumber(source.logoHeight, defaults.logoHeight, 0, 40),
+    logoScale: Math.round(clampNumber(source.logoScale, defaults.logoScale, 50, 160)),
+    logoText: String(source.logoText ?? defaults.logoText).slice(0, 12),
+    logoImage: String(source.logoImage ?? defaults.logoImage),
+    qrSize: clampNumber(source.qrSize, defaults.qrSize, 8, 60),
+    qrTextGap: clampNumber(source.qrTextGap, defaults.qrTextGap, 0, 30),
+    contentScale: clampNumber(source.contentScale, defaults.contentScale, 50, 160),
+    offsetX: clampNumber(source.offsetX, defaults.offsetX, -30, 30),
+    offsetY: clampNumber(source.offsetY, defaults.offsetY, -30, 30),
+    fontSize,
+    fieldFontSizes: rawFontSizes.map((item) => Math.round(clampNumber(item, fontSize, 5, 22))).slice(0, 12),
+    columns: Math.round(clampNumber(source.columns, defaults.columns, 1, 8)),
+    rows: Math.round(clampNumber(source.rows, defaults.rows, 1, 14)),
+    columnGap: clampNumber(source.columnGap, defaults.columnGap, 0, 30),
+    rowGap: clampNumber(source.rowGap, defaults.rowGap, 0, 30),
+    fields,
+    scanFields: stringList(source.scanFields, defaults.scanFields),
+    customFields: String(source.customFields ?? defaults.customFields).slice(0, 600),
+    showLogo: source.showLogo === undefined ? defaults.showLogo : Boolean(source.showLogo)
+  }
+})
+
+const fieldValue = (asset: AssetRecord, key: string): string => {
+  const values: Record<string, unknown> = {
+    id: asset.id, name: asset.name, category: asset.category, status: asset.status, owner: asset.owner,
+    employeeCode: asset.employeeCode, department: asset.department, location: asset.location, brand: asset.brand, model: asset.model,
+    sn: asset.sn, phone: asset.phone, email: asset.email, receiveDate: asset.receiveDate, assetTag: asset.assetTag,
+    price: asset.price ? `¥${Number(asset.price).toLocaleString('zh-CN')}` : '', supplier: asset.supplier,
+    purchaseMethod: asset.purchaseMethod, custodian: asset.custodian, note: asset.note, company: asset.company
+  }
+  const value = Object.prototype.hasOwnProperty.call(values, key) ? values[key] : asset[key]
+  return value === undefined || value === null || value === '' ? '-' : String(value)
+}
+
+const customFields = (text: string): Array<{ label: string; source: string }> => String(text)
+  .split(/\n|;/)
+  .map((line) => line.trim())
+  .filter(Boolean)
+  .map((line) => {
+    const index = line.search(/[=:：]/)
+    return index === -1
+      ? { label: line, source: line }
+      : { label: line.slice(0, index).trim() || '自定义字段', source: line.slice(index + 1).trim() }
+  })
+
+const customValue = (asset: AssetRecord, source: string): string => source in fieldLabels || source in asset ? fieldValue(asset, source) : source || '-'
+const rowFontSize = (settings: LabelSettings, index: number): number => Math.round(clampNumber(settings.fieldFontSizes[index], settings.fontSize, 5, 22))
+const rowsFor = (asset: AssetRecord, settings: LabelSettings): LabelRow[] => [
+  ...settings.fields.map((key, index) => ({ label: fieldLabels[key] || key, value: fieldValue(asset, key), fontSize: rowFontSize(settings, index) })),
+  ...customFields(settings.customFields).map((field, index) => ({ label: field.label, value: customValue(asset, field.source), fontSize: rowFontSize(settings, settings.fields.length + index) }))
+].filter((row) => row.value && row.value !== '-')
+
+const scanTextFor = (asset: AssetRecord, settings: LabelSettings): string => {
+  const rows = settings.scanFields.map((key) => `${fieldLabels[key] || key}:${fieldValue(asset, key)}`)
+  customFields(settings.customFields).forEach((field) => rows.push(`${field.label}:${customValue(asset, field.source)}`))
+  return rows.filter(Boolean).join('\n') || `资产编码:${asset.id}`
+}
+
+const qrVersions: QrVersion[] = [
+  { version: 1, dataCodewords: 19, ecCodewords: 7, blocks: 1, remainder: 0, align: [] },
+  { version: 2, dataCodewords: 34, ecCodewords: 10, blocks: 1, remainder: 7, align: [6, 18] },
+  { version: 3, dataCodewords: 55, ecCodewords: 15, blocks: 1, remainder: 7, align: [6, 22] },
+  { version: 4, dataCodewords: 80, ecCodewords: 20, blocks: 1, remainder: 7, align: [6, 26] },
+  { version: 5, dataCodewords: 108, ecCodewords: 26, blocks: 1, remainder: 7, align: [6, 30] },
+  { version: 6, dataCodewords: 136, ecCodewords: 18, blocks: 2, remainder: 7, align: [6, 34] },
+  { version: 7, dataCodewords: 156, ecCodewords: 20, blocks: 2, remainder: 0, align: [6, 22, 38] },
+  { version: 8, dataCodewords: 194, ecCodewords: 24, blocks: 2, remainder: 0, align: [6, 24, 42] },
+  { version: 9, dataCodewords: 232, ecCodewords: 30, blocks: 2, remainder: 0, align: [6, 26, 46] }
+]
+
+const qrGf = (() => {
+  const exp = Array<number>(512).fill(0)
+  const log = Array<number>(256).fill(0)
+  let value = 1
+  for (let index = 0; index < 255; index += 1) {
+    exp[index] = value
+    log[value] = index
+    value <<= 1
+    if (value & 0x100) value ^= 0x11d
+  }
+  for (let index = 255; index < exp.length; index += 1) exp[index] = exp[index - 255]
+  return { exp, log }
+})()
+
+const qrMultiply = (left: number, right: number): number => left && right ? qrGf.exp[qrGf.log[left] + qrGf.log[right]] : 0
+const qrDivisor = (degree: number): number[] => {
+  const result = Array<number>(degree).fill(0)
+  result[degree - 1] = 1
+  let root = 1
+  for (let index = 0; index < degree; index += 1) {
+    for (let offset = 0; offset < result.length; offset += 1) {
+      result[offset] = qrMultiply(result[offset], root)
+      if (offset + 1 < result.length) result[offset] ^= result[offset + 1]
+    }
+    root = qrMultiply(root, 0x02)
+  }
+  return result
+}
+
+const qrRemainder = (data: number[], degree: number): number[] => {
+  const divisor = qrDivisor(degree)
+  const result = Array<number>(degree).fill(0)
+  data.forEach((byte) => {
+    const factor = byte ^ (result.shift() || 0)
+    result.push(0)
+    divisor.forEach((coefficient, index) => { result[index] ^= qrMultiply(coefficient, factor) })
+  })
+  return result
+}
+
+const utf8Bytes = (text: string): number[] => Array.from(new TextEncoder().encode(text))
+const bitsForText = (bytes: number[]): number[] => {
+  const bits = [0, 1, 0, 0]
+  for (let shift = 7; shift >= 0; shift -= 1) bits.push((bytes.length >>> shift) & 1)
+  bytes.forEach((byte) => { for (let shift = 7; shift >= 0; shift -= 1) bits.push((byte >>> shift) & 1) })
+  return bits
+}
+
+const qrFitText = (text: string): { text: string; bytes: number[]; config: QrVersion } => {
+  let value = text || '-'
+  let bytes = utf8Bytes(value)
+  let config = qrVersions.find((item) => bitsForText(bytes).length <= item.dataCodewords * 8) || qrVersions[qrVersions.length - 1]
+  const maxBytes = Math.floor((config.dataCodewords * 8 - 12) / 8)
+  if (bytes.length <= maxBytes) return { text: value, bytes, config }
+  while (value.length && utf8Bytes(`${value}...`).length > maxBytes) value = value.slice(0, -1)
+  value = `${value}...`
+  bytes = utf8Bytes(value)
+  config = qrVersions.find((item) => bitsForText(bytes).length <= item.dataCodewords * 8) || qrVersions[qrVersions.length - 1]
+  return { text: value, bytes, config }
+}
+
+const qrCodewords = (text: string): { text: string; config: QrVersion; codewords: number[] } => {
+  const fitted = qrFitText(text)
+  const bits = bitsForText(fitted.bytes)
+  const capacity = fitted.config.dataCodewords * 8
+  for (let index = 0; index < Math.min(4, capacity - bits.length); index += 1) bits.push(0)
+  while (bits.length % 8) bits.push(0)
+  const data: number[] = []
+  for (let index = 0; index < bits.length; index += 8) data.push(bits.slice(index, index + 8).reduce((value, bit) => (value << 1) | bit, 0))
+  for (let pad = 0; data.length < fitted.config.dataCodewords; pad += 1) data.push(pad % 2 === 0 ? 0xec : 0x11)
+  const blockSize = fitted.config.dataCodewords / fitted.config.blocks
+  const blocks = Array.from({ length: fitted.config.blocks }, (_, index) => {
+    const blockData = data.slice(index * blockSize, (index + 1) * blockSize)
+    return { data: blockData, ec: qrRemainder(blockData, fitted.config.ecCodewords) }
+  })
+  const codewords: number[] = []
+  for (let index = 0; index < blockSize; index += 1) blocks.forEach((block) => codewords.push(block.data[index]))
+  for (let index = 0; index < fitted.config.ecCodewords; index += 1) blocks.forEach((block) => codewords.push(block.ec[index]))
+  return { text: fitted.text, config: fitted.config, codewords }
+}
+
+const qrSet = (matrix: boolean[][], reserved: boolean[][], row: number, column: number, value: boolean, isFunction = true): void => {
+  matrix[row][column] = value
+  if (isFunction) reserved[row][column] = true
+}
+const qrFinder = (matrix: boolean[][], reserved: boolean[][], row: number, column: number): void => {
+  for (let y = -4; y <= 4; y += 1) for (let x = -4; x <= 4; x += 1) {
+    const currentRow = row + y
+    const currentColumn = column + x
+    if (currentRow < 0 || currentColumn < 0 || currentRow >= matrix.length || currentColumn >= matrix.length) continue
+    const distance = Math.max(Math.abs(x), Math.abs(y))
+    qrSet(matrix, reserved, currentRow, currentColumn, distance !== 2 && distance !== 4)
+  }
+}
+const qrAlignment = (matrix: boolean[][], reserved: boolean[][], row: number, column: number): void => {
+  for (let y = -2; y <= 2; y += 1) for (let x = -2; x <= 2; x += 1) qrSet(matrix, reserved, row + y, column + x, Math.max(Math.abs(x), Math.abs(y)) === 2 || (x === 0 && y === 0))
+}
+const qrFormatBits = (mask = 0): number => {
+  const data = (1 << 3) | mask
+  let remainder = data
+  for (let index = 0; index < 10; index += 1) remainder = (remainder << 1) ^ ((remainder >>> 9) * 0x537)
+  return ((data << 10) | remainder) ^ 0x5412
+}
+const qrDrawFormat = (matrix: boolean[][], reserved: boolean[][], mask = 0): void => {
+  const size = matrix.length
+  const bits = qrFormatBits(mask)
+  const bit = (index: number): boolean => Boolean((bits >>> index) & 1)
+  for (let index = 0; index <= 5; index += 1) qrSet(matrix, reserved, 8, index, bit(index))
+  qrSet(matrix, reserved, 8, 7, bit(6)); qrSet(matrix, reserved, 8, 8, bit(7)); qrSet(matrix, reserved, 7, 8, bit(8))
+  for (let index = 9; index < 15; index += 1) qrSet(matrix, reserved, 14 - index, 8, bit(index))
+  for (let index = 0; index < 8; index += 1) qrSet(matrix, reserved, size - 1 - index, 8, bit(index))
+  for (let index = 8; index < 15; index += 1) qrSet(matrix, reserved, 8, size - 15 + index, bit(index))
+  qrSet(matrix, reserved, 8, size - 8, true)
+}
+
+const qrGraphic = (text: string): QrGraphic => {
+  const { text: fittedText, config, codewords } = qrCodewords(text)
+  const size = 21 + (config.version - 1) * 4
+  const matrix = Array.from({ length: size }, () => Array<boolean>(size).fill(false))
+  const reserved = Array.from({ length: size }, () => Array<boolean>(size).fill(false))
+  qrFinder(matrix, reserved, 3, 3); qrFinder(matrix, reserved, 3, size - 4); qrFinder(matrix, reserved, size - 4, 3)
+  for (let index = 0; index < size; index += 1) {
+    if (!reserved[6][index]) qrSet(matrix, reserved, 6, index, index % 2 === 0)
+    if (!reserved[index][6]) qrSet(matrix, reserved, index, 6, index % 2 === 0)
+  }
+  config.align.forEach((row) => config.align.forEach((column) => {
+    const overlapsFinder = (row === 6 && column === 6) || (row === 6 && column === size - 7) || (row === size - 7 && column === 6)
+    if (!overlapsFinder) qrAlignment(matrix, reserved, row, column)
+  }))
+  qrDrawFormat(matrix, reserved)
+  const dataBits = codewords.flatMap((byte) => Array.from({ length: 8 }, (_, index) => (byte >>> (7 - index)) & 1))
+  for (let index = 0; index < config.remainder; index += 1) dataBits.push(0)
+  let bitIndex = 0
+  let upward = true
+  for (let column = size - 1; column >= 1; column -= 2) {
+    if (column === 6) column -= 1
+    for (let offset = 0; offset < size; offset += 1) {
+      const row = upward ? size - 1 - offset : offset
+      for (let currentColumn = column; currentColumn >= column - 1; currentColumn -= 1) {
+        if (reserved[row][currentColumn]) continue
+        matrix[row][currentColumn] = Boolean(dataBits[bitIndex] || 0) !== ((row + currentColumn) % 2 === 0)
+        bitIndex += 1
+      }
+    }
+    upward = !upward
+  }
+  const path: string[] = []
+  matrix.forEach((row, y) => row.forEach((active, x) => { if (active) path.push(`M${x + 4} ${y + 4}h1v1H${x + 4}z`) }))
+  return { viewBox: `0 0 ${size + 8} ${size + 8}`, path: path.join(''), label: fittedText.replace(/\s+/g, ' ').trim() }
+}
+
+const entries = computed<LabelEntry[]>(() => props.assets.map((asset) => {
+  const scanText = scanTextFor(asset, normalizedSettings.value)
+  return { asset, rows: rowsFor(asset, normalizedSettings.value), scanText, qr: qrGraphic(scanText) }
+}))
+const perPage = computed(() => Math.max(1, normalizedSettings.value.columns * normalizedSettings.value.rows))
+const pages = computed(() => {
+  const chunks: LabelEntry[][] = []
+  for (let index = 0; index < entries.value.length; index += perPage.value) chunks.push(entries.value.slice(index, index + perPage.value))
+  return chunks
+})
+const countText = computed(() => `共 ${props.assets.length} 张 / ${Math.max(1, pages.value.length)} 页`)
+const cssVars = computed<Record<string, string>>(() => {
+  const settings = normalizedSettings.value
+  const logoScale = settings.logoScale / 100
+  const maxQr = Math.max(8, Math.min(settings.labelWidth - 4, settings.labelHeight - 4, 72))
+  const printQr = Math.round(Math.min(settings.qrSize * 1.2, maxQr) * 10) / 10
+  return {
+    '--label-width': `${settings.labelWidth}mm`, '--label-height': `${settings.labelHeight}mm`,
+    '--label-logo-width': `${settings.logoWidth * logoScale}mm`, '--label-logo-height': `${settings.logoHeight * logoScale}mm`,
+    '--label-qr-size': `${settings.qrSize}mm`, '--label-print-qr-size': `${printQr}mm`, '--label-qr-text-gap': `${settings.qrTextGap}mm`,
+    '--label-font-size': `${settings.fontSize}px`, '--label-content-scale': `${settings.contentScale / 100}`,
+    '--label-offset-x': `${settings.offsetX}mm`, '--label-offset-y': `${settings.offsetY}mm`, '--label-columns': `${settings.columns}`,
+    '--label-column-gap': `${settings.columnGap}mm`, '--label-row-gap': `${settings.rowGap}mm`
+  }
+})
+const templateRows = (entry: LabelEntry, count: number): LabelRow[] => {
+  const settings = normalizedSettings.value
+  const keys = settings.fields.filter(Boolean).slice(0, count)
+  const fallback = ['name', 'id', 'category'].slice(0, count)
+  return (keys.length ? keys : fallback).map((key, index) => ({ label: fieldLabels[key] || key, value: fieldValue(entry.asset, key), fontSize: rowFontSize(settings, index) }))
+}
+</script>
+
+<template>
+  <div class="asset-label-print-workspace direct-label-print">
+    <div class="asset-label-direct-actions">
+      <button type="button" class="btn primary asset-label-direct-print-button" @click="$emit('print')">打 印</button>
+    </div>
+    <div class="asset-label-preview-panel">
+      <div class="asset-label-preview-scroll">
+        <div class="asset-label-direct-count">{{ countText }}</div>
+        <div class="asset-label-print-area">
+          <section v-for="(page, pageIndex) in pages" :key="pageIndex" class="asset-label-sheet" :style="cssVars" :data-label-page="pageIndex + 1">
+            <article v-for="entry in page" :key="entry.asset.id" class="asset-print-label template-print-label" :class="`is-${baseTemplateKey}-template`">
+              <template v-if="baseTemplateKey === 'standard'">
+                <span v-if="normalizedSettings.logoImage" class="template-print-logo has-image"><img :src="normalizedSettings.logoImage" :alt="normalizedSettings.logoText || 'Logo'"></span>
+                <span v-else-if="normalizedSettings.showLogo" class="template-print-logo">{{ normalizedSettings.logoText || 'AM' }}</span>
+                <div class="standard-template-print-content">
+                  <div class="standard-template-print-qr"><svg class="asset-label-qr" :viewBox="entry.qr.viewBox" role="img" :aria-label="entry.qr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.qr.path" fill="#000"/></svg></div>
+                  <div class="standard-template-print-fields"><span v-for="row in templateRows(entry, 3)" :key="row.label" :style="{ '--template-row-font-size': `${row.fontSize}px` }">{{ row.value }}</span></div>
+                </div>
+              </template>
+              <template v-else-if="baseTemplateKey === 'compact'">
+                <div class="compact-template-print-content">
+                  <div class="compact-template-print-qr"><svg class="asset-label-qr" :viewBox="entry.qr.viewBox" role="img" :aria-label="entry.qr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.qr.path" fill="#000"/></svg></div>
+                  <div class="compact-template-print-fields"><span v-for="row in templateRows(entry, 4)" :key="row.label" :style="{ '--template-row-font-size': `${row.fontSize}px` }">{{ row.value }}</span></div>
+                </div>
+              </template>
+              <template v-else-if="baseTemplateKey === 'full'">
+                <div class="full-template-print-body">
+                  <div class="full-template-print-qr"><svg class="asset-label-qr" :viewBox="entry.qr.viewBox" role="img" :aria-label="entry.qr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.qr.path" fill="#000"/></svg></div>
+                  <div class="full-template-print-fields"><span v-for="row in templateRows(entry, 2)" :key="row.label" :style="{ '--template-row-font-size': `${row.fontSize}px` }">{{ row.value }}</span></div>
+                </div>
+              </template>
+              <div v-else class="asset-label-content">
+                <div class="asset-label-main">
+                  <header class="asset-label-header">
+                    <span v-if="normalizedSettings.showLogo" class="asset-label-logo" :class="{ 'has-image': normalizedSettings.logoImage }"><img v-if="normalizedSettings.logoImage" :src="normalizedSettings.logoImage" :alt="normalizedSettings.logoText || 'Logo'"><template v-else>{{ normalizedSettings.logoText || 'AM' }}</template></span>
+                    <strong>{{ entry.asset.id }}</strong>
+                  </header>
+                  <div class="asset-label-name">{{ entry.asset.name || '-' }}</div>
+                  <div class="asset-label-fields"><div v-for="row in entry.rows" :key="row.label" :style="{ '--label-row-font-size': `${row.fontSize}px` }"><span>{{ row.label }}</span><strong>{{ row.value }}</strong></div></div>
+                </div>
+                <aside class="asset-label-scan">
+                  <svg class="asset-label-qr" :viewBox="entry.qr.viewBox" role="img" :aria-label="entry.qr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.qr.path" fill="#000"/></svg>
+                  <small>{{ entry.scanText.split('\n').slice(0, 2).join(' / ') }}</small>
+                </aside>
+              </div>
+            </article>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>

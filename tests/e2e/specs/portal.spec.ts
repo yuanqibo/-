@@ -58,6 +58,24 @@ const expectUnifiedControlFrames = async (dialog: ReturnType<Page['getByRole']>)
   expect(frames.unitsOutside, JSON.stringify(frames)).toBe(0)
 }
 
+const expectNeutralAutocompleteFocus = async (field: ReturnType<Page['locator']>): Promise<void> => {
+  const input = field.locator('input')
+  await input.click()
+  const focusStyle = await field.evaluate((element) => {
+    const inner = element.querySelector('input')
+    const wrapper = element.querySelector('.el-input__wrapper')
+    return {
+      innerShadow: inner ? getComputedStyle(inner).boxShadow : '',
+      innerBorder: inner ? getComputedStyle(inner).borderTopWidth : '',
+      wrapperShadow: wrapper ? getComputedStyle(wrapper).boxShadow : ''
+    }
+  })
+  expect(focusStyle.innerShadow, JSON.stringify(focusStyle)).toBe('none')
+  expect(focusStyle.innerBorder, JSON.stringify(focusStyle)).toBe('0px')
+  expect(focusStyle.wrapperShadow, JSON.stringify(focusStyle)).not.toContain('64, 158, 255')
+  expect(focusStyle.wrapperShadow, JSON.stringify(focusStyle)).not.toContain('3px')
+}
+
 test.describe('登录后门户质量回归', () => {
   let runtimeErrors: string[]
 
@@ -260,8 +278,13 @@ test.describe('登录后门户质量回归', () => {
     for (const label of ['领用人', '所属公司', '所在部门', '领用日期', '领用后位置', '经办人', '领用备注']) await expect(receiveDialog.getByText(label, { exact: false }).first()).toBeVisible()
     await expect(receiveDialog.getByText('AST-0002', { exact: true })).toBeVisible()
     await expectUnifiedControlFrames(receiveDialog)
-    await receiveDialog.locator('.el-form-item').filter({ hasText: '领用人' }).locator('input').fill('张三')
+    const receivePerson = receiveDialog.locator('.el-form-item').filter({ hasText: '领用人' })
+    const receiveDepartment = receiveDialog.locator('.el-form-item').filter({ hasText: '所在部门' }).locator('input')
+    await expect(receiveDepartment).toHaveValue('')
+    await expectNeutralAutocompleteFocus(receivePerson)
+    await receivePerson.locator('input').fill('张三')
     await page.locator('.el-autocomplete-suggestion li').filter({ hasText: '张三' }).first().click()
+    await expect(receiveDepartment).toHaveValue('研发部')
     await receiveDialog.getByRole('button', { name: '保存并提交', exact: true }).click()
     await expect(receiveDialog).toBeHidden()
     const receiveRequest = state.requests.find((item) => item.method === 'POST' && item.path === '/api/assets/commands/receive')
@@ -277,6 +300,47 @@ test.describe('登录后门户质量回归', () => {
     await expect(borrowDialog.getByText('AST-0002', { exact: true })).toBeVisible()
     await expectUnifiedControlFrames(borrowDialog)
     await expect(borrowDialog.locator('.asset-flow-table .el-date-editor')).toHaveCount(1)
+    const borrowPerson = borrowDialog.locator('.el-form-item').filter({ hasText: '借用人' })
+    await expect(borrowDialog.locator('.el-form-item').filter({ hasText: '所在部门' }).locator('input')).toHaveValue('')
+    await expectNeutralAutocompleteFocus(borrowPerson)
+    await borrowDialog.getByRole('button', { name: '取消', exact: true }).click()
+
+    await page.goto('/assets/receive-return')
+    await page.locator('.receive-return-tab').filter({ hasText: '交接' }).click()
+    await page.getByRole('button', { name: '＋ 新增', exact: true }).click()
+    picker = page.getByRole('dialog', { name: '选择交接资产' })
+    await picker.locator('tbody tr').filter({ hasText: 'AST-0001' }).locator('.el-checkbox').click()
+    await picker.getByRole('button', { name: '下一步', exact: true }).click()
+    const handoverDialog = page.getByRole('dialog', { name: '新增交接单' })
+    const handoverPerson = handoverDialog.locator('.el-form-item').filter({ hasText: '接收人' })
+    const handoverDepartment = handoverDialog.locator('.el-form-item').filter({ hasText: '接收部门' })
+    await expect(handoverDepartment.locator('input')).toHaveValue('')
+    await expect(handoverDepartment).not.toContainText('研发部')
+    await expect(handoverDepartment.locator('.el-select__wrapper')).toHaveClass(/is-disabled/)
+    await expectNeutralAutocompleteFocus(handoverPerson)
+    await handoverPerson.locator('input').fill('张三')
+    await page.locator('.el-autocomplete-suggestion li').filter({ hasText: '张三' }).first().click()
+    await expect(handoverDepartment).toContainText('研发部')
+    await expect(handoverDepartment.locator('.el-select__wrapper')).not.toHaveClass(/is-disabled/)
+  })
+
+  test('资产标签打印保持迁移前模板、分页和二维码', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '标签物理尺寸与打印预览在桌面项目执行')
+    await openApp(page, '/assets')
+    await page.getByRole('checkbox', { name: '选择AST-0001' }).check()
+    await page.getByRole('button', { name: '打印标签', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '打印标签' })
+    await expect(dialog.locator('.asset-label-print-workspace.direct-label-print')).toBeVisible()
+    await expect(dialog.getByRole('button', { name: '打 印', exact: true })).toBeVisible()
+    await expect(dialog.getByText('共 1 张 / 1 页', { exact: true })).toBeVisible()
+    await expect(dialog.locator('.asset-label-sheet')).toHaveCount(1)
+    await expect(dialog.locator('.asset-print-label')).toHaveCount(1)
+    const qr = dialog.locator('svg.asset-label-qr')
+    await expect(qr).toHaveCount(1)
+    await expect(qr.locator('path')).toHaveAttribute('d', /M\d/)
+    const panel = dialog.locator('.el-dialog.legacy-asset-label-print-dialog')
+    await expect(panel).toHaveCount(1)
+    await expect(panel).toHaveCSS('background-color', 'rgb(17, 17, 17)')
   })
 
   test('审批搜索与处理弹窗保持可操作', async ({ page, isMobile }) => {
