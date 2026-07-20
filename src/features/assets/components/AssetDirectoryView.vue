@@ -74,7 +74,6 @@ const submitting = ref(false)
 const parsing = ref(false)
 const createFormRef = ref<FormInstance>()
 const pickerTableRef = ref<TableInstance>()
-const people = ref<DirectoryPerson[]>([])
 const copySourceId = ref('')
 const editAction = ref<'edit' | 'batch-edit'>('edit')
 const editIds = ref<string[]>([])
@@ -387,7 +386,7 @@ const createRules: FormRules = {
 }
 const emptyDraft = (): AssetDraft => ({
   id: '', name: '', category: '', type: '', status: '空闲', location: '', company: user.value?.company || '',
-  department: user.value?.department || '', owner: '', ownerSubject: '', ownerCompany: user.value?.company || '',
+  department: '', owner: '', ownerSubject: '', ownerCompany: user.value?.company || '',
   custodian: user.value?.name || '', brand: '', model: '', sn: '', assetTag: '', supplier: '', price: undefined,
   purchaseDate: new Date().toISOString().slice(0, 10), receiveDate: new Date().toISOString().slice(0, 10),
   purchaseMethod: '', condition: '', usageMonths: '', orderNo: '', unit: '台', rent: undefined, note: ''
@@ -408,18 +407,26 @@ const applyCategoryDefaults = (category: string, target: AssetDraft | EditForm):
   if (!target.usageMonths && option.usefulLife) target.usageMonths = option.usefulLife
 }
 const directorySearch = async (keyword: string, callback: (values: Array<DirectoryPerson & { value: string }>) => void): Promise<void> => {
+  const query = keyword.trim()
+  if (!query) {
+    callback([])
+    return
+  }
   try {
-    people.value = await searchDirectoryPeople(keyword)
-    callback(people.value.map((item) => ({ ...item, value: `${item.name} · ${item.account || item.email}` })))
+    const matches = await searchDirectoryPeople(query)
+    callback(matches.map((item) => ({ ...item, value: `${item.name} · ${item.account || item.email}` })))
   } catch { callback([]) }
 }
 const selectCreatePerson = (person: DirectoryPerson): void => {
   createDraft.owner = person.name
   createDraft.ownerSubject = person.subject
   createDraft.company = person.company || createDraft.company
-  createDraft.department = person.department || createDraft.department
+  createDraft.department = person.department || ''
 }
-const clearCreatePersonIdentity = (): void => { createDraft.ownerSubject = '' }
+const clearCreatePersonIdentity = (): void => {
+  createDraft.ownerSubject = ''
+  createDraft.department = ''
+}
 const submitCreate = async (): Promise<void> => {
   if (!await createFormRef.value?.validate().catch(() => false)) return
   const ownerSelected = Boolean(createDraft.ownerSubject)
@@ -893,12 +900,12 @@ onMounted(() => void load())
           <div class="asset-form-section-head"><h3>使用信息</h3></div>
           <div class="asset-form-grid">
             <el-form-item class="field" label="人员姓名">
-              <el-autocomplete v-model="createDraft.owner" clearable :fetch-suggestions="directorySearch" placeholder="搜索姓名、工号、邮箱或手机号" @input="clearCreatePersonIdentity" @select="selectCreatePerson">
+              <el-autocomplete v-model="createDraft.owner" clearable :fetch-suggestions="directorySearch" :trigger-on-focus="false" placeholder="搜索姓名、工号、邮箱或手机号" @input="clearCreatePersonIdentity" @select="selectCreatePerson">
                 <template #default="{ item }"><div class="standard-person-option"><strong>{{ item.name }}</strong><span>{{ item.account }} · {{ item.department }}</span></div></template>
               </el-autocomplete>
             </el-form-item>
             <el-form-item class="field" label="使用公司" prop="company"><el-select v-model="createDraft.company" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-            <el-form-item class="field" label="使用部门"><el-select v-model="createDraft.department" filterable allow-create placement="bottom-start"><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field" label="使用部门"><el-select v-model="createDraft.department" filterable allow-create placement="bottom-start" placeholder=""><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item class="field" label="领用/借用日期"><el-date-picker v-model="createDraft.receiveDate" value-format="YYYY-MM-DD" /></el-form-item>
           </div>
         </section>

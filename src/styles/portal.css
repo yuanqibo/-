@@ -11433,6 +11433,11 @@ body.is-resizing-column * {
   border-radius: 7px;
 }
 
+.asset-create-form .el-input__wrapper.is-focus,
+.asset-create-form .el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px var(--el-border-color, #dcdfe6) inset;
+}
+
 .asset-create-form .el-input__inner,
 .asset-create-form .el-select__input,
 .asset-flow-form .el-input__inner,
