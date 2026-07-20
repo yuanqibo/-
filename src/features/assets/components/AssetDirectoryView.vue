@@ -7,6 +7,7 @@ import { parseAssetWorkbook, type AssetImportMode } from '../composables/parseAs
 import { useAssets } from '../composables/useAssets'
 import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, AssetRecord, CatalogNode, DirectoryPerson } from '../types/assets'
 import AssetLabelPrintPreview from './AssetLabelPrintPreview.vue'
+import AssetOrderPrintPreview, { type AssetOrderPrintKind } from './AssetOrderPrintPreview.vue'
 
 type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
@@ -70,6 +71,10 @@ const editOpen = ref(false)
 const advancedOpen = ref(false)
 const importOpen = ref(false)
 const printOpen = ref(false)
+const orderPrintOpen = ref(false)
+const orderPrintKind = ref<AssetOrderPrintKind>('inbound')
+const orderPrintRows = ref<AssetRecord[]>([])
+const labelPrintRows = ref<AssetRecord[]>([])
 const submitting = ref(false)
 const parsing = ref(false)
 const createFormRef = ref<FormInstance>()
@@ -350,20 +355,15 @@ const pickerCandidates = computed(() => assets.value.filter((item) => {
   if (pickerAction.value === 'borrow-return') return item.status === '借用中'
   return false
 }))
-const openAssetPicker = (action: AssetCommand): void => { pickerAction.value = action; pickerSelection.value = []; pickerOpen.value = true }
 const confirmAssetPicker = (): void => {
   if (!pickerSelection.value.length) { ElMessage.warning('请至少选择一项资产'); return }
   pickerOpen.value = false
-  if (actionOpen.value) {
-    actionForm.assetIds = pickerSelection.value.map((item) => item.id)
-    if (actionForm.action === 'borrow') {
-      const fallback = actionForm.expectedReturnDate || new Date().toISOString().slice(0, 10)
-      actionForm.expectedReturnDates = Object.fromEntries(actionForm.assetIds.map((id) => [id, actionForm.expectedReturnDates[id] || fallback]))
-    }
-    actionSelectedIds.value = []
-    return
+  actionForm.assetIds = pickerSelection.value.map((item) => item.id)
+  if (actionForm.action === 'borrow') {
+    const fallback = actionForm.expectedReturnDate || new Date().toISOString().slice(0, 10)
+    actionForm.expectedReturnDates = Object.fromEntries(actionForm.assetIds.map((id) => [id, actionForm.expectedReturnDates[id] || fallback]))
   }
-  openActionForIds(pickerSelection.value, pickerAction.value)
+  actionSelectedIds.value = []
 }
 
 const clearAdvanced = (): void => { Object.assign(advanced, { id: '', name: '', type: '', model: '', sn: '', owner: '', department: '', location: '', supplier: '', risk: '', tag: '' }) }
@@ -461,19 +461,24 @@ const actionDialogTitle = computed(() => ({
 const actionAssets = computed(() => actionForm.assetIds.map((id) => assets.value.find((item) => item.id === id)).filter((item): item is AssetRecord => Boolean(item)))
 const allActionAssetsSelected = computed(() => actionForm.assetIds.length > 0 && actionForm.assetIds.every((id) => actionSelectedIds.value.includes(id)))
 const needsPerson = computed(() => actionForm.action === 'receive' || actionForm.action === 'borrow' || (actionForm.action === 'handover' && actionForm.handoverType === 'personal'))
-const openActionForIds = (items: AssetRecord[], action: AssetCommand): void => {
-  if (!items.length) { ElMessage.warning('请先选择资产'); return }
+const initializeActionForm = (items: AssetRecord[], action: AssetCommand): void => {
+  const first = items[0]
   const clearsDepartment = action === 'receive' || action === 'borrow' || action === 'handover'
   Object.assign(actionForm, {
     action, assetIds: items.map((item) => item.id), person: '', personSubject: '',
-    company: items[0].company || user.value?.company || '', department: clearsDepartment ? '' : items[0].department || user.value?.department || '',
-    operator: user.value?.name || '', handoverType: 'personal', location: items[0].location || '',
+    company: first?.company || user.value?.company || '', department: clearsDepartment ? '' : first?.department || '',
+    operator: user.value?.name || '', handoverType: 'personal', location: first?.location || '',
     date: new Date().toISOString().slice(0, 10), expectedReturnDate: action === 'borrow' ? new Date().toISOString().slice(0, 10) : '',
     expectedReturnDates: action === 'borrow' ? Object.fromEntries(items.map((item) => [item.id, new Date().toISOString().slice(0, 10)])) : {}, note: ''
   })
   actionSelectedIds.value = []
   actionOpen.value = true
 }
+const openActionForIds = (items: AssetRecord[], action: AssetCommand): void => {
+  if (!items.length) { ElMessage.warning('请先选择资产'); return }
+  initializeActionForm(items, action)
+}
+const openBlankAction = (action: AssetCommand): void => initializeActionForm([], action)
 const openAction = (item: AssetRecord, action: AssetCommand): void => openActionForIds([item], action)
 const personSearch = directorySearch
 const selectPerson = (person: DirectoryPerson): void => {
@@ -703,10 +708,33 @@ const exportAssets = async (): Promise<void> => {
   await nextTick(); exportLink.value?.click(); window.setTimeout(() => { URL.revokeObjectURL(exportUrl.value); exportUrl.value = '' }, 0)
   ElMessage.success(`已导出 ${rows.length} 条资产`)
 }
-const printRows = computed(() => selected.value)
 const printSettings = computed(() => store.value.assetLabelPrintSettingsV2 || {})
 const printTemplates = computed(() => store.value.assetLabelCustomTemplatesV1 || [])
-const openPrint = (): void => { if (!printRows.value.length) ElMessage.warning('请选择打印资产'); else printOpen.value = true }
+const openPrint = (rows: AssetRecord[] = selected.value): void => {
+  if (!rows.length) { ElMessage.warning('请选择打印资产'); return }
+  labelPrintRows.value = [...rows]
+  printOpen.value = true
+}
+const printableRows = (): AssetRecord[] => selected.value.length ? selected.value : displayedRows.value
+const orderPrintTitles: Record<AssetOrderPrintKind, string> = {
+  inbound: '打印入库单', receive: '打印领用单', return: '打印领用退库单', employee: '打印员工申领单', handover: '打印交接单'
+}
+const orderPrintEmptyNouns: Record<AssetOrderPrintKind, string> = {
+  inbound: '入库单', receive: '领用信息', return: '退库信息', employee: '员工申领信息', handover: '交接信息'
+}
+const orderPrintTitle = computed(() => orderPrintTitles[orderPrintKind.value])
+const labelPrintTitle = computed(() => props.mode === 'inbound' ? '打印资产标签' : '打印标签')
+const openOrderPrint = (kind: AssetOrderPrintKind): void => {
+  const rows = printableRows()
+  if (!rows.length) { ElMessage.warning(`暂无可打印的${orderPrintEmptyNouns[kind]}`); return }
+  orderPrintKind.value = kind
+  orderPrintRows.value = [...rows]
+  orderPrintOpen.value = true
+}
+const flowOrderPrintKind = computed<AssetOrderPrintKind>(() => receiveReturnTab.value === 'return'
+  ? 'return'
+  : receiveReturnTab.value === 'employee' ? 'employee' : receiveReturnTab.value === 'handover' ? 'handover' : 'receive')
+const notifyBorrowPrint = (): void => { ElMessage.success('已生成借用归还单打印预览') }
 const printNow = (): void => {
   const cleanup = (): void => document.body.classList.remove('printing-asset-labels')
   document.body.classList.add('printing-asset-labels')
@@ -714,6 +742,7 @@ const printNow = (): void => {
   window.print()
   window.setTimeout(cleanup, 1000)
 }
+const printOrderNow = (): void => window.print()
 
 const statusType = (value: string): 'success' | 'warning' | 'info' | 'danger' => {
   if (value === '在用') return 'success'
@@ -762,7 +791,7 @@ onMounted(() => void load())
               <el-dropdown-item v-if="can('asset:item:export')" @click="exportAssets">导出资产</el-dropdown-item>
             </el-dropdown-menu></template>
           </el-dropdown>
-          <button v-if="can('asset:item:printLabel')" class="table-action" type="button" @click="openPrint">打印标签</button>
+          <button v-if="can('asset:item:printLabel')" class="table-action" type="button" @click="openPrint()">打印标签</button>
           <a v-if="exportUrl" ref="exportLink" :href="exportUrl" :download="`资产列表_${new Date().toISOString().slice(0, 10)}.csv`" hidden>下载</a>
         </div>
         <div class="asset-list-search">
@@ -817,7 +846,7 @@ onMounted(() => void load())
       <div class="asset-list-toolbar asset-inbound-toolbar">
         <div class="asset-list-actions">
           <el-dropdown placement="bottom-start" trigger="click"><button class="table-action primary has-caret" type="button">新增<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item v-if="can('asset:item:create')" @click="openCreate()">新增资产</el-dropdown-item><el-dropdown-item v-if="can('asset:item:assetImport')" @click="openImport('asset')">批量导入</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
-          <el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openPrint">打印入库单</el-dropdown-item><el-dropdown-item @click="openPrint">打印资产标签</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+          <el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openOrderPrint('inbound')">打印入库单</el-dropdown-item><el-dropdown-item @click="openPrint(printableRows())">打印资产标签</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
           <button v-if="can('asset:item:export')" class="table-action inbound-export" type="button" @click="exportAssets">⇱ 导出</button>
         </div>
         <div class="asset-list-search inbound-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div>
@@ -834,7 +863,7 @@ onMounted(() => void load())
 
     <template v-else-if="mode === 'receive-return'">
       <div class="receive-return-tabs"><button v-for="tab in ([['receive','领用'],['return','退库'],['employee','员工申领'],['handover','交接']] as const)" :key="tab[0]" class="receive-return-tab" :class="{ active: receiveReturnTab === tab[0] }" type="button" @click="receiveReturnTab = tab[0]">{{ tab[1] }}</button></div>
-      <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button class="table-action primary" type="button" @click="openAssetPicker(receiveAction)">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openPrint">打印{{ receiveReturnTab === 'handover' ? '交接单' : receiveReturnTab === 'employee' ? '员工申领单' : receiveReturnTab === 'return' ? '领用退库单' : '领用单' }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
+      <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button class="table-action primary" type="button" @click="openBlankAction(receiveAction)">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openOrderPrint(flowOrderPrintKind)">打印{{ receiveReturnTab === 'handover' ? '交接单' : receiveReturnTab === 'employee' ? '员工申领单' : receiveReturnTab === 'return' ? '领用退库单' : '领用单' }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
       <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="advancedOpen = true">高级搜索</button><el-popover placement="bottom-end" :width="260" trigger="click"><template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template><div>{{ receiveReturnTab === 'handover' ? '交接状态、交接单号、经办人、接收人、接收公司、接收部门、操作' : '状态、单号、日期、经办人、领用人、工号、位置、所属公司、资产编码、操作' }}</div></el-popover></div><div class="asset-table-scroll receive-return-table-scroll"><table class="asset-list-table receive-return-table" style="min-width: 1040px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选领用退库单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>{{ receiveReturnTab === 'handover' ? '交接状态' : receiveReturnTab === 'employee' ? '申领状态' : receiveReturnTab === 'return' ? '退库状态' : '领用状态' }}</th><th>{{ receiveReturnTab === 'handover' ? '交接单号' : receiveReturnTab === 'employee' ? '申领单号' : receiveReturnTab === 'return' ? '退库单号' : '领用单号' }}</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领日期' : receiveReturnTab === 'return' ? '退库日期' : '领用日期' }}</th><th>经办人</th><th>{{ receiveReturnTab === 'handover' ? '接收人' : receiveReturnTab === 'employee' ? '申领人' : '领用人' }}</th><th v-if="receiveReturnTab !== 'handover'">工号</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领后位置' : receiveReturnTab === 'return' ? '退库后位置' : '领用后位置' }}</th><th>{{ receiveReturnTab === 'handover' ? '接收公司' : '所属公司' }}</th><th v-if="receiveReturnTab === 'handover'">接收部门</th><th v-else>资产编码</th><th>操作</th></tr></thead><tbody>
         <tr v-for="item in displayedRows" :key="operationId(item, 'FLOW')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'FLOW')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="legacyStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, receiveReturnTab === 'handover' ? 'JJ' : receiveReturnTab === 'return' ? 'TK' : 'LY') }}</button></td><td v-if="receiveReturnTab !== 'handover'">{{ operationDate(item) }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.employeeCode || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.location || '-' }}</td><td>{{ item.company || item.ownerCompany || '-' }}</td><td v-if="receiveReturnTab === 'handover'">{{ item.department || '-' }}</td><td v-else>{{ item.id }}</td><td><button class="link receive-return-action-link" type="button" @click="detail = item">{{ receiveReturnTab === 'handover' && item.canSign ? '签字' : '查看' }}</button></td></tr>
         <tr v-if="!displayedRows.length" class="empty-row"><td :colspan="receiveReturnTab === 'handover' ? 9 : 11">{{ query ? '没有匹配的领用退库记录。' : '暂无领用退库记录。' }}</td></tr>
@@ -843,7 +872,7 @@ onMounted(() => void load())
 
     <template v-else>
       <div class="receive-return-tabs"><button class="receive-return-tab" :class="{ active: borrowReturnTab === 'borrow' }" type="button" @click="borrowReturnTab = 'borrow'">借用</button><button class="receive-return-tab" :class="{ active: borrowReturnTab === 'return' }" type="button" @click="borrowReturnTab = 'return'">归还</button></div>
-      <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button class="table-action primary" type="button" @click="openAssetPicker('borrow')">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openPrint">打印借用归还单</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
+      <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button class="table-action primary" type="button" @click="openBlankAction('borrow')">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="notifyBorrowPrint">打印借用归还单</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
       <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="advancedOpen = true">高级搜索</button><el-popover placement="bottom-end" :width="300" trigger="click"><template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template><div>借用状态、借用单号、经办人、借用人、借用日期、借用人公司、借用人部门、工号、手机号、邮箱、借用后位置、签字人、签字图片、借用备注、资产信息、操作</div></el-popover></div><div class="asset-table-scroll receive-return-table-scroll"><table class="asset-list-table receive-return-table borrow-return-table" style="min-width: 1900px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选借用归还单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>借用状态</th><th>借用单号</th><th>经办人</th><th>借用人</th><th>借用日期</th><th>借用人公司</th><th>借用人部门</th><th>工号</th><th>手机号</th><th>邮箱</th><th>借用后位置</th><th>签字人</th><th>签字图片</th><th>借用备注</th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌</th><th>型号</th><th>设备序列号</th><th>操作</th></tr></thead><tbody>
         <tr v-for="item in displayedRows" :key="operationId(item, 'JY')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'JY')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="legacyStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, 'JY') }}</button></td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td>{{ operationDate(item) }}</td><td>{{ item.company || '-' }}</td><td>{{ item.department || '-' }}</td><td>{{ item.employeeCode || '-' }}</td><td>{{ item.phone || '-' }}</td><td>{{ item.email || '-' }}</td><td>{{ item.location || '-' }}</td><td>{{ item.owner || '-' }}</td><td>-</td><td>{{ item.note || '-' }}</td><td>{{ item.id }}</td><td>{{ item.category || '-' }}</td><td>{{ item.name || '-' }}</td><td>{{ item.brand || '-' }}</td><td>{{ item.model || '-' }}</td><td>{{ item.sn || '-' }}</td><td><template v-if="borrowReturnTab === 'return' && item.operationType === 'BORROW'"><button class="link receive-return-action-link" type="button" @click="openAction(item, 'borrow-return')">归还</button><button class="link receive-return-action-link" type="button" @click="openAction(item, 'borrow')">延期</button></template><button v-else class="link receive-return-action-link" type="button" @click="detail = item">查看</button></td></tr>
         <tr v-if="!displayedRows.length" class="empty-row"><td colspan="22">{{ query ? (borrowReturnTab === 'return' ? '没有匹配的归还记录。' : '没有匹配的借用记录。') : (borrowReturnTab === 'return' ? '暂无可归还记录。' : '暂无借用记录。') }}</td></tr>
@@ -1042,8 +1071,13 @@ onMounted(() => void load())
       <template #footer><el-button @click="importOpen = false">取消</el-button><el-button type="primary" :disabled="!validImportRows.length" :loading="submitting" @click="submitImport">确定</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="printOpen" title="打印标签" width="min(760px, calc(100vw - 48px))" append-to-body class="standard-print-dialog legacy-asset-label-print-dialog">
-      <AssetLabelPrintPreview :assets="printRows" :settings="printSettings" :custom-templates="printTemplates" @print="printNow" />
+    <el-dialog v-model="printOpen" :title="labelPrintTitle" width="min(760px, calc(100vw - 48px))" append-to-body class="standard-print-dialog legacy-asset-label-print-dialog">
+      <AssetLabelPrintPreview :assets="labelPrintRows" :settings="printSettings" :custom-templates="printTemplates" @print="printNow" />
+    </el-dialog>
+
+    <el-dialog v-model="orderPrintOpen" :title="orderPrintTitle" width="min(1080px, 94vw)" append-to-body class="standard-print-dialog legacy-order-print-dialog">
+      <AssetOrderPrintPreview :kind="orderPrintKind" :rows="orderPrintRows" :current-user="user?.name" />
+      <template #footer><el-button @click="orderPrintOpen = false">取消</el-button><el-button type="primary" @click="printOrderNow">打印</el-button></template>
     </el-dialog>
   </section>
 </template>
