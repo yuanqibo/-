@@ -118,12 +118,81 @@ test.describe('登录后门户质量回归', () => {
     await page.getByRole('button', { name: /^新增/ }).click()
     await page.getByRole('menuitem', { name: '新增资产', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '新增资产' })
+    await expect(dialog.getByRole('heading', { name: '使用信息', exact: true })).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: '基本信息', exact: true })).toBeVisible()
+    for (const label of ['人员姓名', '使用公司', '使用部门', '领用/借用日期', '资产编码', '所属/承租公司', '资产状况', '使用期限', '租金']) {
+      await expect(dialog.locator('.el-form-item').filter({ hasText: label }).first()).toBeVisible()
+    }
     await dialog.locator('.el-form-item').filter({ hasText: '资产名称' }).locator('input').fill('新测试设备')
-    await dialog.locator('.el-form-item').filter({ hasText: '资产分类' }).locator('input').fill('IT设备')
-    await dialog.locator('.el-form-item').filter({ hasText: '所在位置' }).locator('input').fill('杭州仓库')
-    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    await dialog.locator('.el-form-item').filter({ hasText: '品牌' }).locator('input').fill('测试品牌')
+    await dialog.locator('.el-form-item').filter({ hasText: '资产分类' }).locator('.el-select').click()
+    await page.getByRole('option', { name: 'IT设备', exact: true }).click()
+    await dialog.locator('.el-form-item').filter({ hasText: '资产状况' }).locator('.el-select').click()
+    await page.getByRole('option', { name: '正常', exact: true }).click()
+    await dialog.locator('.el-form-item').filter({ hasText: '所在位置' }).locator('.el-select').click()
+    await page.getByRole('option', { name: '杭州仓库', exact: true }).click()
+    await dialog.locator('.el-form-item').filter({ hasText: '购置方式' }).locator('.el-select').click()
+    await page.getByRole('option', { name: '采购', exact: true }).click()
+    await dialog.getByRole('button', { name: '确定', exact: true }).click()
     await expect(dialog).toBeHidden()
     expect(state.requests.some((item) => item.method === 'POST' && item.path === '/api/assets')).toBe(true)
+    const createRequest = state.requests.find((item) => item.method === 'POST' && item.path === '/api/assets')
+    expect(createRequest?.body).toMatchObject({ item: { name: '新测试设备', category: 'IT设备', type: 'IT设备', brand: '测试品牌', condition: '正常', location: '杭州仓库', purchaseMethod: '采购' } })
+  })
+
+  test('资产编辑、批量修改和导入保留迁移前结构', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '密集表单在桌面项目执行')
+    await openApp(page, '/assets')
+    await page.getByLabel('选择AST-0001').check()
+    await page.getByRole('button', { name: '编辑', exact: true }).click()
+    await page.getByRole('menuitem', { name: '修改', exact: true }).click()
+    const editDialog = page.getByRole('dialog', { name: '编辑资产' })
+    await expect(editDialog.getByRole('heading', { name: '使用信息', exact: true })).toBeVisible()
+    await expect(editDialog.getByRole('heading', { name: '基本信息', exact: true })).toBeVisible()
+    await expect(editDialog.locator('.el-form-item').filter({ hasText: '资产编码' }).locator('input')).toHaveValue('AST-0001')
+    await editDialog.getByRole('button', { name: '取消', exact: true }).click()
+
+    await page.getByRole('button', { name: '编辑', exact: true }).click()
+    await page.getByRole('menuitem', { name: '批量修改', exact: true }).click()
+    const batchDialog = page.getByRole('dialog', { name: '批量修改资产' })
+    await expect(batchDialog.getByRole('heading', { name: '批量修改', exact: true })).toBeVisible()
+    await expect(batchDialog.getByText('AST-0001', { exact: true })).toBeVisible()
+    await batchDialog.getByRole('button', { name: '取消', exact: true }).click()
+
+    await page.getByRole('button', { name: '导入/导出', exact: true }).click()
+    await page.getByRole('menuitem', { name: '资产导入', exact: true }).click()
+    const importDialog = page.getByRole('dialog', { name: '资产导入' })
+    await expect(importDialog.getByText('上传表格', { exact: true })).toBeVisible()
+    await expect(importDialog.getByRole('link', { name: /资产导入模板\.xlsx/ })).toBeVisible()
+    await expect(importDialog.getByText('最大数据行数不超过5000行；', { exact: true })).toBeVisible()
+  })
+
+  test('领用与借用表单保留资产明细和逐项日期', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '密集流程表单在桌面项目执行')
+    const state = await openApp(page, '/assets/receive-return')
+    await page.getByRole('button', { name: '＋ 新增', exact: true }).click()
+    let picker = page.getByRole('dialog', { name: '选择领用资产' })
+    await picker.locator('tbody tr').filter({ hasText: 'AST-0002' }).locator('.el-checkbox').click()
+    await picker.getByRole('button', { name: '下一步', exact: true }).click()
+    const receiveDialog = page.getByRole('dialog', { name: '新增领用单' })
+    for (const label of ['领用人', '所属公司', '所在部门', '领用日期', '领用后位置', '经办人', '领用备注']) await expect(receiveDialog.getByText(label, { exact: false }).first()).toBeVisible()
+    await expect(receiveDialog.getByText('AST-0002', { exact: true })).toBeVisible()
+    await receiveDialog.locator('.el-form-item').filter({ hasText: '领用人' }).locator('input').fill('张三')
+    await page.locator('.el-autocomplete-suggestion li').filter({ hasText: '张三' }).first().click()
+    await receiveDialog.getByRole('button', { name: '保存并提交', exact: true }).click()
+    await expect(receiveDialog).toBeHidden()
+    const receiveRequest = state.requests.find((item) => item.method === 'POST' && item.path === '/api/assets/commands/receive')
+    expect(receiveRequest?.body).toMatchObject({ assetIds: ['AST-0002'], fields: { receiver: '张三', receiverSubject: 'sub-1', company: '示例公司', department: '研发部', location: '杭州仓库' } })
+
+    await page.goto('/assets/borrow-return')
+    await page.getByRole('button', { name: '＋ 新增', exact: true }).click()
+    picker = page.getByRole('dialog', { name: '选择借用资产' })
+    await picker.locator('tbody tr').filter({ hasText: 'AST-0002' }).locator('.el-checkbox').click()
+    await picker.getByRole('button', { name: '下一步', exact: true }).click()
+    const borrowDialog = page.getByRole('dialog', { name: '新增借用单' })
+    await expect(borrowDialog.getByText('资产详情', { exact: true })).toBeVisible()
+    await expect(borrowDialog.getByText('AST-0002', { exact: true })).toBeVisible()
+    await expect(borrowDialog.locator('.asset-flow-table .el-date-editor')).toHaveCount(1)
   })
 
   test('审批搜索与处理弹窗保持可操作', async ({ page, isMobile }) => {
@@ -232,5 +301,32 @@ test.describe('登录后门户质量回归', () => {
       })
       if (layout) expect(layout.contentTop).toBeGreaterThanOrEqual(layout.headerBottom - 1)
     }
+  })
+
+  test('移动端新增资产分区不重叠且操作区可达', async ({ page, isMobile }) => {
+    test.skip(!isMobile, '仅在移动端项目执行')
+    await openApp(page, '/assets/inbound')
+    await page.getByRole('button', { name: /^新增/ }).click()
+    await page.getByRole('menuitem', { name: '新增资产', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '新增资产' })
+    await expect(dialog.getByRole('heading', { name: '使用信息', exact: true })).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: '基本信息', exact: true })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: '确定', exact: true })).toBeVisible()
+    const layout = await dialog.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const fields = Array.from(element.querySelectorAll('.asset-form-grid .field')).map((field) => field.getBoundingClientRect())
+      return {
+        left: rect.left,
+        right: rect.right,
+        viewport: document.documentElement.clientWidth,
+        fieldsInside: fields.every((field) => field.left >= rect.left - 1 && field.right <= rect.right + 1),
+        overlaps: fields.some((field, index) => fields.slice(index + 1).some((other) => field.top < other.bottom && field.bottom > other.top && field.left < other.right && field.right > other.left))
+      }
+    })
+    expect(layout.left).toBeGreaterThanOrEqual(0)
+    expect(layout.right).toBeLessThanOrEqual(layout.viewport + 1)
+    expect(layout.fieldsInside).toBe(true)
+    expect(layout.overlaps).toBe(false)
+    await expectNoPageOverflow(page)
   })
 })

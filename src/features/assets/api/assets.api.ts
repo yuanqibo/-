@@ -60,14 +60,23 @@ export const saveAssetCodeSettings = (value: unknown): Promise<unknown> =>
 export const saveLabelSettings = (entries: Record<string, unknown>, operation: 'save' | 'reset' | 'create' | 'update' | 'delete'): Promise<unknown> =>
   apiRequest('/api/store', { method: 'POST', body: { entries, operation } })
 
-const personFromPayload = (item: Record<string, unknown>): DirectoryPerson => ({
-  subject: String(item.subject || item.directorySubject || item.externalId || item.account || ''),
-  name: String(item.name || item.displayName || item.account || ''),
-  account: String(item.account || item.employeeNo || ''),
-  email: String(item.email || ''),
-  department: String(item.department || item.departmentName || ''),
-  company: String(item.company || item.companyName || '')
-})
+const relatedName = (value: unknown): string => {
+  if (typeof value === 'string') return value
+  if (value && typeof value === 'object') return String((value as Record<string, unknown>).name || '')
+  return ''
+}
+
+const personFromPayload = (item: Record<string, unknown>): DirectoryPerson => {
+  const departments = Array.isArray(item.departments) ? item.departments as Array<Record<string, unknown>> : []
+  return {
+    subject: String(item.subject || item.directorySubject || item.externalId || item.account || ''),
+    name: String(item.name || item.displayName || item.account || ''),
+    account: String(item.account || item.employeeNo || ''),
+    email: String(item.email || ''),
+    department: String(item.departmentName || relatedName(item.department) || relatedName(departments[0])),
+    company: String(item.companyName || relatedName(item.company))
+  }
+}
 
 export const searchDirectoryPeople = async (keyword: string): Promise<DirectoryPerson[]> => {
   const query = new URLSearchParams({ page: '1', size: '100', q: keyword })

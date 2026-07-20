@@ -39,11 +39,11 @@ describe('assets feature API', () => {
 
   it('normalizes and filters ECP directory people', async () => {
     apiRequest.mockResolvedValue({ items: [
-      { directorySubject: 'sub-1', displayName: '张三', employeeNo: 'A001', email: 'zs@example.com', departmentName: '研发部' },
+      { directorySubject: 'sub-1', displayName: '张三', employeeNo: 'A001', email: 'zs@example.com', company: { name: '示例公司' }, departments: [{ name: '研发部' }] },
       { displayName: '无标识账号' }
     ] })
     await expect(searchDirectoryPeople('研发')).resolves.toEqual([{
-      subject: 'sub-1', name: '张三', account: 'A001', email: 'zs@example.com', department: '研发部', company: ''
+      subject: 'sub-1', name: '张三', account: 'A001', email: 'zs@example.com', department: '研发部', company: '示例公司'
     }])
     expect(apiRequest.mock.calls[0][0]).toContain('/api/ecp/directory/users?')
   })

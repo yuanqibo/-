@@ -26,6 +26,9 @@ import {
   ElPagination,
   ElPopover,
   ElProgress,
+  ElRadio,
+  ElRadioButton,
+  ElRadioGroup,
   ElResult,
   ElSelect,
   ElSkeleton,
@@ -53,7 +56,7 @@ const elementComponents = [
   ElAlert, ElAutocomplete, ElAvatar, ElButton, ElCheckbox, ElCheckboxGroup, ElConfigProvider,
   ElDatePicker, ElDescriptions, ElDescriptionsItem, ElDialog, ElDrawer, ElDropdown, ElDropdownItem,
   ElDropdownMenu, ElEmpty, ElForm, ElFormItem, ElIcon, ElInput, ElInputNumber, ElOption, ElPagination,
-  ElPopover, ElProgress, ElResult, ElSelect, ElSkeleton, ElSwitch, ElTabPane, ElTable, ElTableColumn,
+  ElPopover, ElProgress, ElRadio, ElRadioButton, ElRadioGroup, ElResult, ElSelect, ElSkeleton, ElSwitch, ElTabPane, ElTable, ElTableColumn,
   ElTabs, ElTag, ElTimeline, ElTimelineItem, ElTooltip, ElTree
 ]
 

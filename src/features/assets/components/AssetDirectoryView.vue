@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type TableInstance } from 'element-plus'
 import { Printer } from '@element-plus/icons-vue'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { searchDirectoryPeople } from '../api/assets.api'
 import { parseAssetWorkbook, type AssetImportMode } from '../composables/parseAssetWorkbook'
 import { useAssets } from '../composables/useAssets'
-import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, AssetRecord, DirectoryPerson } from '../types/assets'
+import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, AssetRecord, CatalogNode, DirectoryPerson } from '../types/assets'
 
 type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
@@ -14,7 +14,42 @@ type LegacyColumnKey = 'status' | 'code' | 'name' | 'category' | 'phone' | 'emai
 type TableDensity = 'compact' | 'standard' | 'roomy'
 type ReceiveReturnTab = 'receive' | 'return' | 'employee' | 'handover'
 type BorrowReturnTab = 'borrow' | 'return'
-type ActionForm = { action: AssetCommand; assetIds: string[]; person: string; personSubject: string; location: string; date: string; expectedReturnDate: string; note: string }
+type ActionForm = {
+  action: AssetCommand
+  assetIds: string[]
+  person: string
+  personSubject: string
+  company: string
+  department: string
+  operator: string
+  handoverType: 'personal' | 'public'
+  location: string
+  date: string
+  expectedReturnDate: string
+  expectedReturnDates: Record<string, string>
+  note: string
+}
+type EditForm = {
+  name: string
+  category: string
+  company: string
+  department: string
+  ownerCompany: string
+  condition: string
+  location: string
+  custodian: string
+  brand: string
+  model: string
+  price?: number
+  purchaseDate: string
+  purchaseMethod: string
+  orderNo: string
+  unit: string
+  usageMonths: string
+  rent?: number
+  note: string
+}
+type ManagedOption = { value: string; label: string; unit?: string; usefulLife?: string }
 
 const props = withDefaults(defineProps<{ mode?: Mode }>(), { mode: 'list' })
 const { state, assets, operations, business, store, load, create, copy, importMany, command } = useAssets()
@@ -38,17 +73,24 @@ const printOpen = ref(false)
 const submitting = ref(false)
 const parsing = ref(false)
 const createFormRef = ref<FormInstance>()
+const pickerTableRef = ref<TableInstance>()
 const people = ref<DirectoryPerson[]>([])
 const copySourceId = ref('')
 const editAction = ref<'edit' | 'batch-edit'>('edit')
 const editIds = ref<string[]>([])
 const importRows = ref<AssetImportRow[]>([])
 const importFileName = ref('')
+const importFileSize = ref('')
 const importMode = ref<AssetImportMode>('asset')
+const importFileInput = ref<HTMLInputElement>()
+const importDragActive = ref(false)
+const importTemplateLink = ref<HTMLAnchorElement>()
+const importTemplateUrl = ref('')
 const pickerAction = ref<AssetCommand>('receive')
 const pickerSelection = ref<AssetRecord[]>([])
 const exportLink = ref<HTMLAnchorElement>()
 const exportUrl = ref('')
+const actionSelectedIds = ref<string[]>([])
 
 const viewClass = computed(() => {
   if (props.mode === 'list') return 'asset-list-page asset-directory-view'
@@ -119,6 +161,43 @@ const toggleLegacyColumn = (key: LegacyColumnKey, checked: boolean): void => {
 const resetLegacySettings = (): void => { legacyVisibleColumns.value = [...legacyColumnKeys]; legacyDensity.value = 'compact' }
 
 const categories = computed(() => Array.from(new Set(assets.value.map((item) => item.category).filter(Boolean))).sort())
+const flattenCatalog = (nodes: CatalogNode[], parentPath: string[] = [], leafOnly = false): ManagedOption[] => nodes.flatMap((node) => {
+  if (node.enabled === false) return []
+  const path = [...parentPath, node.name]
+  const enabledChildren = (node.children || []).filter((child) => child.enabled !== false)
+  const children = flattenCatalog(enabledChildren, path, leafOnly)
+  if (leafOnly && enabledChildren.length) return children
+  return [{ value: leafOnly ? node.name : path.join(' / '), label: path.join(' / '), unit: node.unit, usefulLife: node.usefulLife }, ...children]
+})
+const managedCategories = computed<ManagedOption[]>(() => {
+  const configured = flattenCatalog(store.value.assetCategoryTree || [], [], true)
+  const values = configured.length ? configured : categories.value.map((value) => ({ value, label: value }))
+  const selected = [String(createDraft.category || ''), String(editForm.category || '')].filter(Boolean)
+  selected.forEach((value) => { if (!values.some((item) => item.value === value)) values.push({ value, label: value }) })
+  return values
+})
+const managedLocations = computed<ManagedOption[]>(() => {
+  const configured = flattenCatalog(store.value.assetLocationTree || [])
+  const fallback = Array.from(new Set(assets.value.map((item) => item.location).filter(Boolean))).sort().map((value) => ({ value, label: value }))
+  const values = configured.length ? configured : fallback
+  const selected = [String(createDraft.location || ''), editForm.location, actionForm.location].filter(Boolean)
+  selected.forEach((value) => { if (!values.some((item) => item.value === value)) values.push({ value, label: value }) })
+  return values
+})
+const formCompanies = computed(() => Array.from(new Set([
+  user.value?.company,
+  ...assets.value.flatMap((item) => [item.company, String(item.ownerCompany || '')])
+].filter(Boolean) as string[])))
+const formDepartments = computed(() => Array.from(new Set([
+  user.value?.department,
+  ...assets.value.map((item) => item.department)
+].filter(Boolean) as string[])))
+const formAdministrators = computed(() => Array.from(new Set([
+  user.value?.name,
+  ...assets.value.map((item) => item.custodian)
+].filter(Boolean) as string[])))
+const assetConditions = ['正常', '全新', '良好', '维修中', '待验收']
+const purchaseMethods = ['采购', '租赁', '自购', '调拨入库']
 const advanced = reactive({ id: '', name: '', type: '', model: '', sn: '', owner: '', department: '', location: '', supplier: '', risk: '', tag: '' })
 const searchable = (item: AssetRecord): string => [item.id, item.name, item.assetTag, item.owner, item.department, item.location, item.model, item.sn]
   .map((value) => String(value || '').toLowerCase()).join(' ')
@@ -266,8 +345,9 @@ const operationId = (item: AssetRecord, prefix: string): string => String(
 )
 const receiveAction = computed<AssetCommand>(() => receiveReturnTab.value === 'return' ? 'return' : receiveReturnTab.value === 'handover' ? 'handover' : 'receive')
 const pickerCandidates = computed(() => assets.value.filter((item) => {
-  if (pickerAction.value === 'receive' || pickerAction.value === 'borrow') return ['空闲', '闲置'].includes(item.status)
-  if (pickerAction.value === 'return' || pickerAction.value === 'handover') return ['在用', '领用中'].includes(item.status)
+  if (pickerAction.value === 'receive' || pickerAction.value === 'borrow') return ['空闲', '闲置', '上架', '待验收'].includes(item.status)
+  if (pickerAction.value === 'return') return ['在用', '领用中'].includes(item.status)
+  if (pickerAction.value === 'handover') return ['在用', '借用中', '交接待签字'].includes(item.status)
   if (pickerAction.value === 'borrow-return') return item.status === '借用中'
   return false
 }))
@@ -275,62 +355,158 @@ const openAssetPicker = (action: AssetCommand): void => { pickerAction.value = a
 const confirmAssetPicker = (): void => {
   if (!pickerSelection.value.length) { ElMessage.warning('请至少选择一项资产'); return }
   pickerOpen.value = false
+  if (actionOpen.value) {
+    actionForm.assetIds = pickerSelection.value.map((item) => item.id)
+    if (actionForm.action === 'borrow') {
+      const fallback = actionForm.expectedReturnDate || new Date().toISOString().slice(0, 10)
+      actionForm.expectedReturnDates = Object.fromEntries(actionForm.assetIds.map((id) => [id, actionForm.expectedReturnDates[id] || fallback]))
+    }
+    actionSelectedIds.value = []
+    return
+  }
   openActionForIds(pickerSelection.value, pickerAction.value)
 }
 
 const clearAdvanced = (): void => { Object.assign(advanced, { id: '', name: '', type: '', model: '', sn: '', owner: '', department: '', location: '', supplier: '', risk: '', tag: '' }) }
 
 const createDraft = reactive<AssetDraft>({
-  name: '', category: '', type: '设备', status: '闲置', location: '', company: '', department: '', owner: '未分配',
-  custodian: '', brand: '', model: '', sn: '', assetTag: '', supplier: '', price: 0, purchaseDate: new Date().toISOString().slice(0, 10)
+  name: '', category: '', type: '', status: '空闲', location: '', company: '', department: '', owner: '', ownerSubject: '',
+  custodian: '', brand: '', model: '', sn: '', assetTag: '', supplier: '', purchaseDate: new Date().toISOString().slice(0, 10)
 })
 const createRules: FormRules = {
   name: [{ required: true, message: '请输入资产名称', trigger: 'blur' }],
   category: [{ required: true, message: '请选择资产分类', trigger: 'change' }],
-  location: [{ required: true, message: '请输入所在位置', trigger: 'blur' }]
+  company: [{ required: true, message: '请选择使用公司', trigger: 'change' }],
+  custodian: [{ required: true, message: '请选择管理员', trigger: 'change' }],
+  brand: [{ required: true, message: '请输入品牌', trigger: 'blur' }],
+  ownerCompany: [{ required: true, message: '请选择所属/承租公司', trigger: 'change' }],
+  condition: [{ required: true, message: '请选择资产状况', trigger: 'change' }],
+  location: [{ required: true, message: '请选择所在位置', trigger: 'change' }],
+  purchaseDate: [{ required: true, message: '请选择购置/起租日期', trigger: 'change' }],
+  purchaseMethod: [{ required: true, message: '请选择购置方式', trigger: 'change' }]
 }
-const emptyDraft = (): AssetDraft => ({ name: '', category: categories.value[0] || '', type: '设备', status: '闲置', location: '', company: user.value?.company || '', department: '', owner: '未分配', custodian: user.value?.name || '', brand: '', model: '', sn: '', assetTag: '', supplier: '', price: 0, purchaseDate: new Date().toISOString().slice(0, 10), purchaseMethod: '', orderNo: '', unit: '', rent: 0, note: '' })
+const emptyDraft = (): AssetDraft => ({
+  id: '', name: '', category: '', type: '', status: '空闲', location: '', company: user.value?.company || '',
+  department: user.value?.department || '', owner: '', ownerSubject: '', ownerCompany: user.value?.company || '',
+  custodian: user.value?.name || '', brand: '', model: '', sn: '', assetTag: '', supplier: '', price: undefined,
+  purchaseDate: new Date().toISOString().slice(0, 10), receiveDate: new Date().toISOString().slice(0, 10),
+  purchaseMethod: '', condition: '', usageMonths: '', orderNo: '', unit: '台', rent: undefined, note: ''
+})
 const openCreate = (source?: AssetRecord): void => {
   copySourceId.value = source?.id || ''
-  Object.assign(createDraft, source ? { ...source, id: undefined, name: `${source.name} - 副本`, assetTag: '', sn: '' } : emptyDraft())
+  Object.assign(createDraft, source ? {
+    ...emptyDraft(), ...source, id: '', name: `${source.name} - 副本`, owner: source.owner === '未分配' ? '' : source.owner,
+    ownerCompany: source.ownerCompany || source.company || user.value?.company || '', condition: source.condition || '正常',
+    assetTag: '', sn: ''
+  } : emptyDraft())
   createOpen.value = true
 }
+const applyCategoryDefaults = (category: string, target: AssetDraft | EditForm): void => {
+  const option = managedCategories.value.find((item) => item.value === category)
+  if (!option) return
+  if (!target.unit && option.unit) target.unit = option.unit
+  if (!target.usageMonths && option.usefulLife) target.usageMonths = option.usefulLife
+}
+const directorySearch = async (keyword: string, callback: (values: Array<DirectoryPerson & { value: string }>) => void): Promise<void> => {
+  try {
+    people.value = await searchDirectoryPeople(keyword)
+    callback(people.value.map((item) => ({ ...item, value: `${item.name} · ${item.account || item.email}` })))
+  } catch { callback([]) }
+}
+const selectCreatePerson = (person: DirectoryPerson): void => {
+  createDraft.owner = person.name
+  createDraft.ownerSubject = person.subject
+  createDraft.company = person.company || createDraft.company
+  createDraft.department = person.department || createDraft.department
+}
+const clearCreatePersonIdentity = (): void => { createDraft.ownerSubject = '' }
 const submitCreate = async (): Promise<void> => {
   if (!await createFormRef.value?.validate().catch(() => false)) return
+  const ownerSelected = Boolean(createDraft.ownerSubject)
+  const payload: AssetDraft = {
+    ...createDraft,
+    type: createDraft.category,
+    owner: ownerSelected ? String(createDraft.owner || '') : '未分配',
+    status: createDraft.condition === '维修中' ? '维修中' : ownerSelected ? '在用' : '空闲',
+    receiveDate: ownerSelected ? createDraft.receiveDate : ''
+  }
+  if (!String(payload.id || '').trim()) delete payload.id
   submitting.value = true
   try {
-    if (copySourceId.value) await copy(copySourceId.value, { ...createDraft })
-    else await create({ ...createDraft })
+    if (copySourceId.value) await copy(copySourceId.value, payload)
+    else await create(payload)
     createOpen.value = false
     ElMessage.success(copySourceId.value ? '资产已复制' : '资产已新增')
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '保存资产失败') }
   finally { submitting.value = false }
 }
 
-const actionForm = reactive<ActionForm>({ action: 'receive', assetIds: [], person: '', personSubject: '', location: '', date: new Date().toISOString().slice(0, 10), expectedReturnDate: '', note: '' })
+const actionForm = reactive<ActionForm>({
+  action: 'receive', assetIds: [], person: '', personSubject: '', company: '', department: '', operator: '',
+  handoverType: 'personal', location: '', date: new Date().toISOString().slice(0, 10), expectedReturnDate: '', expectedReturnDates: {}, note: ''
+})
 const actionLabels: Record<AssetCommand, string> = { receive: '领用', return: '退库', borrow: '借用', 'borrow-return': '归还', handover: '交接', delete: '删除', edit: '编辑', 'batch-edit': '批量修改', 'cancel-inbound': '撤销入库', 'repair-start': '报修', 'repair-complete': '完成维修', 'update-import': '更新导入', 'receive-import': '领用导入' }
 const actionLabel = (action: AssetCommand): string => actionLabels[action]
+const actionDialogTitle = computed(() => ({
+  receive: '新增领用单', return: '新增退库单', borrow: '新增借用单', 'borrow-return': '新增归还单', handover: '新增交接单',
+  'cancel-inbound': '取消入库'
+} as Partial<Record<AssetCommand, string>>)[actionForm.action] || `${actionLabel(actionForm.action)}资产`)
+const actionAssets = computed(() => actionForm.assetIds.map((id) => assets.value.find((item) => item.id === id)).filter((item): item is AssetRecord => Boolean(item)))
+const allActionAssetsSelected = computed(() => actionForm.assetIds.length > 0 && actionForm.assetIds.every((id) => actionSelectedIds.value.includes(id)))
+const needsPerson = computed(() => actionForm.action === 'receive' || actionForm.action === 'borrow' || (actionForm.action === 'handover' && actionForm.handoverType === 'personal'))
 const openActionForIds = (items: AssetRecord[], action: AssetCommand): void => {
   if (!items.length) { ElMessage.warning('请先选择资产'); return }
-  Object.assign(actionForm, { action, assetIds: items.map((item) => item.id), person: '', personSubject: '', location: items[0].location || '', date: new Date().toISOString().slice(0, 10), expectedReturnDate: '', note: '' })
+  Object.assign(actionForm, {
+    action, assetIds: items.map((item) => item.id), person: '', personSubject: '',
+    company: items[0].company || user.value?.company || '', department: items[0].department || user.value?.department || '',
+    operator: user.value?.name || '', handoverType: 'personal', location: items[0].location || '',
+    date: new Date().toISOString().slice(0, 10), expectedReturnDate: action === 'borrow' ? new Date().toISOString().slice(0, 10) : '',
+    expectedReturnDates: action === 'borrow' ? Object.fromEntries(items.map((item) => [item.id, new Date().toISOString().slice(0, 10)])) : {}, note: ''
+  })
+  actionSelectedIds.value = []
   actionOpen.value = true
 }
 const openAction = (item: AssetRecord, action: AssetCommand): void => openActionForIds([item], action)
-const needsPerson = computed(() => ['receive', 'borrow', 'handover'].includes(actionForm.action))
-const personSearch = async (keyword: string, callback: (values: Array<DirectoryPerson & { value: string }>) => void): Promise<void> => {
-  try { people.value = await searchDirectoryPeople(keyword); callback(people.value.map((item) => ({ ...item, value: `${item.name} · ${item.account || item.email}` }))) }
-  catch { callback([]) }
+const personSearch = directorySearch
+const selectPerson = (person: DirectoryPerson): void => {
+  actionForm.person = person.name
+  actionForm.personSubject = person.subject
+  actionForm.company = person.company || actionForm.company
+  actionForm.department = person.department || actionForm.department
 }
-const selectPerson = (person: DirectoryPerson): void => { actionForm.person = person.name; actionForm.personSubject = person.subject }
+const reopenActionPicker = (): void => {
+  pickerAction.value = actionForm.action
+  pickerSelection.value = [...actionAssets.value]
+  pickerOpen.value = true
+  void nextTick(() => {
+    pickerTableRef.value?.clearSelection()
+    actionAssets.value.forEach((item) => pickerTableRef.value?.toggleRowSelection(item, true))
+  })
+}
+const removeActionAssets = (): void => {
+  const removed = new Set(actionSelectedIds.value)
+  actionForm.assetIds = actionForm.assetIds.filter((id) => !removed.has(id))
+  actionSelectedIds.value = []
+}
+const toggleAllActionAssets = (checked: boolean): void => { actionSelectedIds.value = checked ? [...actionForm.assetIds] : [] }
 const submitAction = async (): Promise<void> => {
+  if (!actionForm.assetIds.length) { ElMessage.warning('请先选择资产'); return }
   if (needsPerson.value && !actionForm.personSubject) { ElMessage.warning('请搜索并选择 ECP 人员'); return }
-  if (actionForm.action === 'borrow' && !actionForm.expectedReturnDate) { ElMessage.warning('请选择预计归还日期'); return }
+  if (actionForm.action !== 'cancel-inbound' && !actionForm.location) { ElMessage.warning('请选择资产位置'); return }
+  if (actionForm.action === 'borrow' && actionForm.assetIds.some((id) => !actionForm.expectedReturnDates[id])) { ElMessage.warning('请填写资产明细中的预计归还日期'); return }
   submitting.value = true
   try {
-    const fields: Record<string, unknown> = { location: actionForm.location, date: actionForm.date, note: actionForm.note }
+    const fields: Record<string, unknown> = {
+      location: actionForm.location, date: actionForm.date, note: actionForm.note,
+      company: actionForm.company, department: actionForm.department, operator: actionForm.operator
+    }
     if (actionForm.action === 'receive') Object.assign(fields, { receiver: actionForm.person, receiverSubject: actionForm.personSubject })
-    if (actionForm.action === 'borrow') Object.assign(fields, { borrower: actionForm.person, borrowerSubject: actionForm.personSubject, expectedReturnDate: actionForm.expectedReturnDate })
-    if (actionForm.action === 'handover') Object.assign(fields, { receiver: actionForm.person, receiverSubject: actionForm.personSubject, handoverType: '员工交接' })
+    if (actionForm.action === 'borrow') Object.assign(fields, { borrower: actionForm.person, borrowerSubject: actionForm.personSubject, expectedReturnDate: actionForm.expectedReturnDate, expectedReturnDates: actionForm.expectedReturnDates })
+    if (actionForm.action === 'handover') Object.assign(fields, {
+      receiver: actionForm.handoverType === 'personal' ? actionForm.person : '公共区域',
+      receiverSubject: actionForm.handoverType === 'personal' ? actionForm.personSubject : '',
+      handoverType: actionForm.handoverType === 'personal' ? '员工交接' : '公共交接'
+    })
     await command(actionForm.action, actionForm.assetIds, fields)
     actionOpen.value = false
     selected.value = []
@@ -339,20 +515,40 @@ const submitAction = async (): Promise<void> => {
   finally { submitting.value = false }
 }
 
-const editForm = reactive<{ name: string; category: string; company: string; department: string; location: string; custodian: string; brand: string; model: string; supplier: string; price?: number; purchaseDate: string; purchaseMethod: string; orderNo: string; unit: string; rent?: number; note: string }>({ name: '', category: '', company: '', department: '', location: '', custodian: '', brand: '', model: '', supplier: '', price: undefined, purchaseDate: '', purchaseMethod: '', orderNo: '', unit: '', rent: undefined, note: '' })
+const emptyEditForm = (): EditForm => ({
+  name: '', category: '', company: '', department: '', ownerCompany: '', condition: '', location: '', custodian: '', brand: '', model: '',
+  price: undefined, purchaseDate: '', purchaseMethod: '', orderNo: '', unit: '', usageMonths: '', rent: undefined, note: ''
+})
+const editForm = reactive<EditForm>(emptyEditForm())
+const editSource = computed(() => assets.value.find((item) => item.id === editIds.value[0]))
 const openEdit = (items: AssetRecord[], batch = false): void => {
   if (!items.length) { ElMessage.warning('请先选择资产'); return }
   editAction.value = batch ? 'batch-edit' : 'edit'
   editIds.value = items.map((item) => item.id)
   const source = items[0]
-  Object.assign(editForm, batch ? { name: '', category: '', company: '', department: '', location: '', custodian: '', brand: '', model: '', supplier: '', price: undefined, purchaseDate: '', purchaseMethod: '', orderNo: '', unit: '', rent: undefined, note: '' } : source)
+  Object.assign(editForm, batch ? emptyEditForm() : {
+    ...emptyEditForm(), ...source, ownerCompany: source.ownerCompany || source.company || '', condition: source.condition || source.status || ''
+  })
   editOpen.value = true
 }
 const submitEdit = async (): Promise<void> => {
-  const entries = Object.entries(editForm).filter(([, value]) => editAction.value === 'edit' || value !== '' && value !== null)
+  const allowedBatchFields = new Set(['company', 'department', 'condition', 'location', 'purchaseMethod', 'note'])
+  const entries = Object.entries(editForm).filter(([key, value]) =>
+    (editAction.value === 'edit' ? key !== 'condition' : allowedBatchFields.has(key)) && (editAction.value === 'edit' || value !== '' && value !== null && value !== undefined)
+  )
+  if (editAction.value === 'edit' && (!editForm.name || !editForm.category || !editForm.custodian || !editForm.brand || !editForm.ownerCompany || !editForm.location || !editForm.purchaseDate || !editForm.purchaseMethod)) {
+    ElMessage.warning('请完整填写必填的资产信息')
+    return
+  }
   if (editAction.value === 'batch-edit' && !entries.length) { ElMessage.warning('请至少填写一个修改字段'); return }
   submitting.value = true
-  try { await command(editAction.value, editIds.value, Object.fromEntries(entries)); editOpen.value = false; selected.value = []; ElMessage.success(editAction.value === 'edit' ? '资产已更新' : '批量修改已完成') }
+  try {
+    const fields = Object.fromEntries(entries)
+    if (editAction.value === 'edit') fields.type = editForm.category
+    else fields.date = new Date().toISOString().slice(0, 10)
+    await command(editAction.value, editIds.value, fields)
+    editOpen.value = false; selected.value = []; ElMessage.success(editAction.value === 'edit' ? '资产已更新' : '批量修改已完成')
+  }
   catch (error) { ElMessage.error(error instanceof Error ? error.message : '修改资产失败') }
   finally { submitting.value = false }
 }
@@ -366,21 +562,74 @@ const removeAssets = async (items: AssetRecord[]): Promise<void> => {
 const validImportRows = computed(() => importRows.value.filter((row) => row.draft).map((row) => row.draft as AssetDraft))
 const invalidImportCount = computed(() => importRows.value.filter((row) => row.errors.length).length)
 const importTitle = computed(() => ({ asset: '资产导入', update: '更新导入', receive: '批量领用导入' })[importMode.value])
+const importTemplateName = computed(() => ({ asset: '资产导入模板.xlsx', update: '资产更新模板.xls', receive: '批量领用模板.xls' })[importMode.value])
+const escapeSpreadsheetXml = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+const downloadImportTemplate = async (): Promise<void> => {
+  if (importMode.value === 'asset') return
+  const columns = importMode.value === 'update'
+    ? ['资产编码*', '资产名称', '资产分类', '品牌', '型号', '金额', '购置方式', '租金', '管理员', '资产状况', '订单号', '计量单位', '所属/承租公司', '购置/起租日期', '领用日期', '所在位置', '使用公司', '使用部门', '使用人', 'ECP人员Subject', '备注']
+    : ['资产编码*', '领用人', 'ECP人员Subject*', '领用日期*', '领用后位置*', '领用备注']
+  const instructions = importMode.value === 'update'
+    ? ['必填项；按资产编码匹配，其余空白字段不修改', ...columns.slice(1).map(() => '')]
+    : ['必填项', '', '必填项；填写 ECP unionId subject', '必填项；YYYY-MM-DD', '必填项；填写位置完整路径', '']
+  const row = (values: string[]) => `<Row>${values.map((value) => `<Cell><Data ss:Type="String">${escapeSpreadsheetXml(value)}</Data></Cell>`).join('')}</Row>`
+  const xml = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="${importMode.value === 'update' ? '资产更新' : '批量领用'}"><Table>${row(columns)}${row(instructions)}</Table></Worksheet></Workbook>`
+  importTemplateUrl.value = URL.createObjectURL(new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' }))
+  await nextTick()
+  importTemplateLink.value?.click()
+  window.setTimeout(() => { URL.revokeObjectURL(importTemplateUrl.value); importTemplateUrl.value = '' }, 0)
+}
 const openImport = (mode: AssetImportMode): void => {
   importMode.value = mode
   importRows.value = []
   importFileName.value = ''
+  importFileSize.value = ''
   importOpen.value = true
 }
-const readImportFile = async (event: Event): Promise<void> => {
+const validateImportRows = async (rows: AssetImportRow[]): Promise<AssetImportRow[]> => {
+  const knownCategories = new Set(managedCategories.value.map((item) => item.value))
+  const knownLocations = new Set(managedLocations.value.map((item) => item.value))
+  const knownAssets = new Map(assets.value.map((item) => [item.id, item]))
+  const seen = new Set<string>()
+  const validated: AssetImportRow[] = []
+  for (const row of rows) {
+    if (!row.draft) { validated.push(row); continue }
+    const draft = row.draft
+    const errors = [...row.errors]
+    const id = String(draft.id || '').trim()
+    if (id && seen.has(id)) errors.push(`资产编码“${id}”重复`)
+    if (id) seen.add(id)
+    if (importMode.value === 'asset' && id && knownAssets.has(id)) errors.push(`资产编码“${id}”已存在`)
+    if (importMode.value !== 'asset' && !knownAssets.has(id)) errors.push(`资产编码“${id}”不存在或不在当前数据范围`)
+    if (draft.category && knownCategories.size && !knownCategories.has(draft.category)) errors.push(`资产分类“${draft.category}”不存在`)
+    if (draft.location && knownLocations.size && !knownLocations.has(draft.location)) errors.push(`所在位置“${draft.location}”不存在`)
+    if (importMode.value === 'receive' && id && knownAssets.has(id) && !['空闲', '闲置'].includes(knownAssets.get(id)?.status || '')) errors.push(`资产“${id}”当前状态不能领用`)
+    if (importMode.value === 'asset' && draft.owner && draft.owner !== '未分配' && !draft.ownerSubject) {
+      const matches = (await searchDirectoryPeople(String(draft.owner))).filter((person) => person.name === draft.owner)
+      if (matches.length !== 1) errors.push(`使用人“${draft.owner}”无法唯一匹配 ECP 账号目录`)
+      else Object.assign(draft, { ownerSubject: matches[0].subject, owner: matches[0].name, company: matches[0].company || draft.company, department: matches[0].department || draft.department })
+    }
+    validated.push(errors.length ? { ...row, draft: null, errors } : row)
+  }
+  return validated
+}
+const formatImportFileSize = (size: number): string => size < 1024 * 1024 ? `${Math.max(1, Math.round(size / 1024))} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`
+const handleImportFile = async (file?: File): Promise<void> => {
+  if (!file) return
+  parsing.value = true; importFileName.value = file.name; importFileSize.value = formatImportFileSize(file.size); importRows.value = []
+  try { importRows.value = await validateImportRows(await parseAssetWorkbook(file, importMode.value)) }
+  catch (error) { ElMessage.error(error instanceof Error ? error.message : '工作簿解析失败') }
+  finally { parsing.value = false }
+}
+const readImportFile = (event: Event): void => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (!file) return
-  parsing.value = true; importFileName.value = file.name; importRows.value = []
-  try { importRows.value = await parseAssetWorkbook(file, importMode.value) }
-  catch (error) { ElMessage.error(error instanceof Error ? error.message : '工作簿解析失败') }
-  finally { parsing.value = false }
+  void handleImportFile(file)
+}
+const dropImportFile = (event: DragEvent): void => {
+  importDragActive.value = false
+  void handleImportFile(event.dataTransfer?.files?.[0])
 }
 const submitImport = async (): Promise<void> => {
   if (!validImportRows.value.length) { ElMessage.warning('没有可导入的数据'); return }
@@ -632,60 +881,148 @@ onMounted(() => void load())
 
     <el-dialog v-model="pickerOpen" :title="`选择${actionLabel(pickerAction)}资产`" width="min(980px, 94vw)" append-to-body>
       <div class="asset-picker-toolbar"><span>共 {{ pickerCandidates.length }} 项可选资产</span></div>
-      <el-table :data="pickerCandidates" max-height="460" row-key="id" @selection-change="pickerSelection = $event">
+      <el-table ref="pickerTableRef" :data="pickerCandidates" max-height="460" row-key="id" @selection-change="pickerSelection = $event">
         <el-table-column type="selection" width="48" /><el-table-column prop="id" label="资产编码" min-width="130" /><el-table-column prop="name" label="资产名称" min-width="160" /><el-table-column prop="category" label="资产分类" min-width="120" /><el-table-column prop="status" label="状态" width="90" /><el-table-column prop="owner" label="使用人" width="110" /><el-table-column prop="location" label="所在位置" min-width="140" />
       </el-table>
       <template #footer><el-button @click="pickerOpen = false">取消</el-button><el-button type="primary" @click="confirmAssetPicker">下一步</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="createOpen" :title="copySourceId ? '复制资产' : '新增资产'" width="min(900px, 94vw)" destroy-on-close append-to-body>
-      <el-form ref="createFormRef" :model="createDraft" :rules="createRules" label-position="top" class="standard-form-grid">
-        <el-form-item label="资产名称" prop="name"><el-input v-model="createDraft.name" /></el-form-item><el-form-item label="资产分类" prop="category"><el-select v-model="createDraft.category" filterable allow-create><el-option v-for="item in categories" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-        <el-form-item label="所在位置" prop="location"><el-input v-model="createDraft.location" /></el-form-item><el-form-item label="使用公司"><el-input v-model="createDraft.company" /></el-form-item>
-        <el-form-item label="使用部门"><el-input v-model="createDraft.department" /></el-form-item><el-form-item label="资产管理员"><el-input v-model="createDraft.custodian" /></el-form-item>
-        <el-form-item label="品牌"><el-input v-model="createDraft.brand" /></el-form-item><el-form-item label="型号"><el-input v-model="createDraft.model" /></el-form-item>
-        <el-form-item label="序列号"><el-input v-model="createDraft.sn" /></el-form-item><el-form-item label="资产标签"><el-input v-model="createDraft.assetTag" /></el-form-item>
-        <el-form-item label="供应商"><el-input v-model="createDraft.supplier" /></el-form-item><el-form-item label="购置日期"><el-date-picker v-model="createDraft.purchaseDate" value-format="YYYY-MM-DD" /></el-form-item>
-        <el-form-item label="购置方式"><el-input v-model="createDraft.purchaseMethod" /></el-form-item><el-form-item label="订单号"><el-input v-model="createDraft.orderNo" /></el-form-item>
-        <el-form-item label="计量单位"><el-input v-model="createDraft.unit" /></el-form-item><el-form-item label="金额"><el-input-number v-model="createDraft.price" :min="0" :precision="2" /></el-form-item>
-        <el-form-item label="备注" class="standard-form-span"><el-input v-model="createDraft.note" type="textarea" :rows="3" /></el-form-item>
+    <el-dialog v-model="createOpen" :title="copySourceId ? '复制资产' : '新增资产'" width="min(1240px, 96vw)" class="legacy-asset-dialog legacy-asset-create-dialog" destroy-on-close append-to-body>
+      <el-form ref="createFormRef" :model="createDraft" :rules="createRules" label-position="left" class="asset-create-form" @submit.prevent="submitCreate">
+        <section class="asset-form-section">
+          <div class="asset-form-section-head"><h3>使用信息</h3></div>
+          <div class="asset-form-grid">
+            <el-form-item class="field" label="人员姓名">
+              <el-autocomplete v-model="createDraft.owner" clearable :fetch-suggestions="directorySearch" placeholder="搜索姓名、工号、邮箱或手机号" @input="clearCreatePersonIdentity" @select="selectCreatePerson">
+                <template #default="{ item }"><div class="standard-person-option"><strong>{{ item.name }}</strong><span>{{ item.account }} · {{ item.department }}</span></div></template>
+              </el-autocomplete>
+            </el-form-item>
+            <el-form-item class="field" label="使用公司" prop="company"><el-select v-model="createDraft.company" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field" label="使用部门"><el-select v-model="createDraft.department" filterable allow-create placement="bottom-start"><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field" label="领用/借用日期"><el-date-picker v-model="createDraft.receiveDate" value-format="YYYY-MM-DD" /></el-form-item>
+          </div>
+        </section>
+
+        <section class="asset-form-section">
+          <div class="asset-form-section-head"><h3>基本信息</h3><button type="button" class="asset-template-link">选择模板</button></div>
+          <div class="asset-form-grid">
+            <el-form-item class="field" label="资产编码"><el-input v-model="createDraft.id" placeholder="未填写按自动编码规则生成" /></el-form-item>
+            <el-form-item class="field" label="资产名称" prop="name"><el-input v-model="createDraft.name" placeholder="请输入" /></el-form-item>
+            <el-form-item class="field" label="资产分类" prop="category"><el-select v-model="createDraft.category" filterable placement="bottom-start" placeholder="资产分类" @change="applyCategoryDefaults($event, createDraft)"><el-option v-for="item in managedCategories" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+            <el-form-item class="field" label="管理员" prop="custodian"><el-select v-model="createDraft.custodian" filterable allow-create placement="bottom-start" placeholder="管理员"><el-option v-for="item in formAdministrators" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field" label="品牌" prop="brand"><el-input v-model="createDraft.brand" placeholder="请输入" /></el-form-item>
+            <el-form-item class="field" label="型号"><el-input v-model="createDraft.model" placeholder="请输入" /></el-form-item>
+            <el-form-item class="field" label="所属/承租公司" prop="ownerCompany"><el-select v-model="createDraft.ownerCompany" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field" label="资产状况" prop="condition"><el-select v-model="createDraft.condition" placement="bottom-start" placeholder="请选择"><el-option v-for="item in assetConditions" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field" label="所在位置" prop="location"><el-select v-model="createDraft.location" filterable placement="bottom-start" placeholder="所在位置"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+            <el-form-item class="field" label="使用期限"><el-input v-model="createDraft.usageMonths" type="number" min="0" placeholder="请输入"><template #append>月</template></el-input></el-form-item>
+            <el-form-item class="field" label="金额"><el-input-number v-model="createDraft.price" :min="0" :precision="2" controls-position="right" placeholder="请输入" /><span class="asset-form-suffix">元</span></el-form-item>
+            <el-form-item class="field" label="购置/起租日期" prop="purchaseDate"><el-date-picker v-model="createDraft.purchaseDate" value-format="YYYY-MM-DD" /></el-form-item>
+            <el-form-item class="field" label="订单号"><el-input v-model="createDraft.orderNo" placeholder="请输入" /></el-form-item>
+            <el-form-item class="field" label="计量单位"><el-input v-model="createDraft.unit" placeholder="请输入" /></el-form-item>
+            <el-form-item class="field" label="购置方式" prop="purchaseMethod"><el-select v-model="createDraft.purchaseMethod" placement="bottom-start" placeholder="请选择"><el-option v-for="item in purchaseMethods" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field wide" label="备注"><el-input v-model="createDraft.note" type="textarea" :rows="2" placeholder="请输入" /></el-form-item>
+            <el-form-item class="field" label="租金"><el-input-number v-model="createDraft.rent" :min="0" :precision="2" controls-position="right" placeholder="请输入" /><span class="asset-form-suffix">元</span></el-form-item>
+          </div>
+        </section>
       </el-form>
-      <template #footer><el-button @click="createOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitCreate">保存</el-button></template>
+      <template #footer><el-button @click="createOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitCreate">确定</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="editOpen" :title="editAction === 'edit' ? '修改资产' : `批量修改 ${editIds.length} 项资产`" width="min(820px, 94vw)" append-to-body>
-      <el-alert v-if="editAction === 'batch-edit'" title="只会更新已填写的字段，留空字段保持原值。" type="info" :closable="false" />
-      <el-form label-position="top" class="standard-form-grid standard-dialog-form">
-        <el-form-item label="资产名称"><el-input v-model="editForm.name" /></el-form-item><el-form-item label="资产分类"><el-input v-model="editForm.category" /></el-form-item>
-        <el-form-item label="使用公司"><el-input v-model="editForm.company" /></el-form-item><el-form-item label="使用部门"><el-input v-model="editForm.department" /></el-form-item>
-        <el-form-item label="所在位置"><el-input v-model="editForm.location" /></el-form-item><el-form-item label="资产管理员"><el-input v-model="editForm.custodian" /></el-form-item>
-        <el-form-item label="品牌"><el-input v-model="editForm.brand" /></el-form-item><el-form-item label="型号"><el-input v-model="editForm.model" /></el-form-item>
-        <el-form-item label="供应商"><el-input v-model="editForm.supplier" /></el-form-item><el-form-item label="购置日期"><el-date-picker v-model="editForm.purchaseDate" value-format="YYYY-MM-DD" /></el-form-item>
-        <el-form-item label="金额"><el-input-number v-model="editForm.price" :min="0" :precision="2" /></el-form-item><el-form-item label="备注"><el-input v-model="editForm.note" /></el-form-item>
+    <el-dialog v-model="editOpen" :title="editAction === 'edit' ? '编辑资产' : '批量修改资产'" width="min(1240px, 96vw)" class="legacy-asset-dialog legacy-asset-flow-dialog" append-to-body>
+      <el-form label-position="left" class="asset-create-form asset-edit-form">
+        <template v-if="editAction === 'edit'">
+          <section class="asset-form-section">
+            <div class="asset-form-section-head"><h3>使用信息</h3></div>
+            <div class="asset-form-grid">
+              <el-form-item class="field" label="人员姓名"><el-input :model-value="editSource?.owner === '未分配' ? '' : editSource?.owner" readonly /></el-form-item>
+              <el-form-item class="field" label="使用公司" required><el-select v-model="editForm.company" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+              <el-form-item class="field" label="使用部门"><el-select v-model="editForm.department" filterable allow-create placement="bottom-start"><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+              <el-form-item class="field" label="领用/借用日期"><el-input :model-value="editSource?.receiveDate || editSource?.borrowDate || ''" type="date" readonly /></el-form-item>
+            </div>
+          </section>
+          <section class="asset-form-section">
+            <div class="asset-form-section-head"><h3>基本信息</h3><button type="button" class="asset-template-link">选择模板</button></div>
+            <div class="asset-form-grid">
+              <el-form-item class="field" label="资产编码"><el-input :model-value="editSource?.id" readonly /></el-form-item>
+              <el-form-item class="field" label="资产名称" required><el-input v-model="editForm.name" placeholder="请输入" /></el-form-item>
+              <el-form-item class="field" label="资产分类" required><el-select v-model="editForm.category" filterable placement="bottom-start" @change="applyCategoryDefaults($event, editForm)"><el-option v-for="item in managedCategories" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+              <el-form-item class="field" label="管理员" required><el-select v-model="editForm.custodian" filterable allow-create placement="bottom-start"><el-option v-for="item in formAdministrators" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+              <el-form-item class="field" label="品牌" required><el-input v-model="editForm.brand" placeholder="请输入" /></el-form-item>
+              <el-form-item class="field" label="型号"><el-input v-model="editForm.model" placeholder="请输入" /></el-form-item>
+              <el-form-item class="field" label="所属/承租公司" required><el-select v-model="editForm.ownerCompany" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+              <el-form-item class="field" label="资产状况"><el-input v-model="editForm.condition" readonly /></el-form-item>
+              <el-form-item class="field" label="所在位置" required><el-select v-model="editForm.location" filterable placement="bottom-start"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+              <el-form-item class="field" label="使用期限"><el-input v-model="editForm.usageMonths" type="number" min="0" placeholder="请输入"><template #append>月</template></el-input></el-form-item>
+              <el-form-item class="field" label="金额"><el-input-number v-model="editForm.price" :min="0" :precision="2" controls-position="right" /><span class="asset-form-suffix">元</span></el-form-item>
+              <el-form-item class="field" label="购置/起租日期" required><el-date-picker v-model="editForm.purchaseDate" value-format="YYYY-MM-DD" /></el-form-item>
+              <el-form-item class="field" label="订单号"><el-input v-model="editForm.orderNo" placeholder="请输入" /></el-form-item>
+              <el-form-item class="field" label="计量单位"><el-input v-model="editForm.unit" placeholder="请输入" /></el-form-item>
+              <el-form-item class="field" label="购置方式" required><el-select v-model="editForm.purchaseMethod" placement="bottom-start"><el-option v-for="item in purchaseMethods" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+              <el-form-item class="field wide" label="备注"><el-input v-model="editForm.note" type="textarea" :rows="2" placeholder="请输入" /></el-form-item>
+              <el-form-item class="field" label="租金"><el-input-number v-model="editForm.rent" :min="0" :precision="2" controls-position="right" /><span class="asset-form-suffix">元</span></el-form-item>
+            </div>
+          </section>
+        </template>
+        <section v-else class="asset-form-section">
+          <div class="asset-form-section-head"><h3>批量修改</h3></div>
+          <div class="asset-form-grid">
+            <el-form-item class="field" label="使用公司"><el-select v-model="editForm.company" clearable filterable allow-create placement="bottom-start" placeholder="不修改"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field" label="使用部门"><el-select v-model="editForm.department" clearable filterable allow-create placement="bottom-start" placeholder="不修改"><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field" label="资产状况"><el-select v-model="editForm.condition" clearable placement="bottom-start" placeholder="不修改"><el-option v-for="item in assetConditions" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field" label="所在位置"><el-select v-model="editForm.location" clearable filterable placement="bottom-start" placeholder="不修改"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+            <el-form-item class="field" label="购置方式"><el-select v-model="editForm.purchaseMethod" clearable placement="bottom-start" placeholder="不修改"><el-option v-for="item in purchaseMethods" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field wide" label="备注"><el-input v-model="editForm.note" type="textarea" :rows="2" placeholder="不修改" /></el-form-item>
+          </div>
+        </section>
+        <section v-if="editAction === 'batch-edit'" class="asset-flow-section">
+          <div class="asset-flow-tabs"><span>资产详情</span></div>
+          <div class="asset-flow-table-wrap"><table class="asset-flow-table"><thead><tr><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌</th><th>型号</th><th>设备序列号</th><th>金额</th><th>所属/承租公司</th><th>使用公司</th><th>使用部门</th><th>所在位置</th><th>使用人</th><th>管理员</th><th>购置方式</th><th>备注</th></tr></thead><tbody><tr v-for="item in assets.filter((asset) => editIds.includes(asset.id))" :key="item.id"><td>{{ item.id }}</td><td>{{ item.category || '-' }}</td><td>{{ item.name }}</td><td>{{ item.brand || '-' }}</td><td>{{ item.model || '-' }}</td><td>{{ item.sn || '-' }}</td><td>{{ item.price || 0 }}</td><td>{{ item.ownerCompany || item.company || '-' }}</td><td>{{ item.company || '-' }}</td><td>{{ item.department || '-' }}</td><td>{{ item.location || '-' }}</td><td>{{ item.owner || '-' }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.purchaseMethod || '-' }}</td><td>{{ item.note || '-' }}</td></tr></tbody></table></div>
+        </section>
       </el-form>
-      <template #footer><el-button @click="editOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitEdit">保存</el-button></template>
+      <template #footer><el-button @click="editOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitEdit">确定</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="actionOpen" :title="`${actionLabel(actionForm.action)}资产`" width="min(620px, 94vw)" append-to-body>
-      <el-form label-position="top">
-        <el-alert v-if="actionForm.action === 'cancel-inbound'" title="撤销后对应资产将从资产列表移除，请确认尚未投入使用。" type="warning" :closable="false" />
-        <el-form-item v-if="needsPerson" label="关联 ECP 人员" required><el-autocomplete v-model="actionForm.person" :fetch-suggestions="personSearch" placeholder="搜索姓名、账号或邮箱" style="width: 100%" @select="selectPerson"><template #default="{ item }"><div class="standard-person-option"><strong>{{ item.name }}</strong><span>{{ item.account }} · {{ item.department }}</span></div></template></el-autocomplete></el-form-item>
-        <el-form-item v-if="actionForm.action !== 'cancel-inbound'" label="资产位置" required><el-input v-model="actionForm.location" /></el-form-item>
-        <el-form-item label="操作日期"><el-date-picker v-model="actionForm.date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
-        <el-form-item v-if="actionForm.action === 'borrow'" label="预计归还日期" required><el-date-picker v-model="actionForm.expectedReturnDate" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="actionForm.note" type="textarea" :rows="3" /></el-form-item>
+    <el-dialog v-model="actionOpen" :title="actionDialogTitle" :width="actionForm.action === 'cancel-inbound' ? 'min(620px, 94vw)' : 'min(1240px, 96vw)'" class="legacy-asset-dialog legacy-asset-flow-dialog" append-to-body>
+      <el-alert v-if="actionForm.action === 'cancel-inbound'" title="撤销后对应资产将从资产列表移除，请确认尚未投入使用。" type="warning" :closable="false" />
+      <el-form v-else label-position="left" class="asset-flow-form" :class="{ 'receive-flow-form': actionForm.action === 'receive', 'borrow-flow-form': actionForm.action === 'borrow', 'handover-flow-form': actionForm.action === 'handover' }">
+        <section class="asset-flow-section">
+          <div v-if="actionForm.action === 'handover'" class="handover-mode-row" role="radiogroup" aria-label="交接类型"><span class="handover-mode-label">交接类型：</span><el-radio-group v-model="actionForm.handoverType"><el-radio value="personal">员工交接</el-radio><el-radio value="public">公共交接</el-radio></el-radio-group></div>
+          <div class="asset-flow-grid">
+            <el-form-item v-if="needsPerson" class="field" :style="actionForm.action === 'handover' ? { order: 1 } : undefined" :label="actionForm.action === 'handover' ? '接收人：' : actionForm.action === 'borrow' ? '借用人：' : '领用人'" required><el-autocomplete v-model="actionForm.person" clearable :fetch-suggestions="personSearch" placeholder="搜索姓名、工号、邮箱或手机号" @input="actionForm.personSubject = ''" @select="selectPerson"><template #default="{ item }"><div class="standard-person-option"><strong>{{ item.name }}</strong><span>{{ item.account }} · {{ item.department }}</span></div></template></el-autocomplete></el-form-item>
+            <el-form-item v-if="actionForm.action === 'receive' || actionForm.action === 'borrow' || (actionForm.action === 'handover' && actionForm.handoverType === 'personal')" class="field" :style="actionForm.action === 'handover' ? { order: 2 } : undefined" :label="actionForm.action === 'handover' ? '接收公司：' : '所属公司'" required><el-input v-model="actionForm.company" readonly /></el-form-item>
+            <el-form-item v-if="actionForm.action === 'receive' || actionForm.action === 'borrow'" class="field" :label="actionForm.action === 'borrow' ? '所在部门：' : '所在部门'"><el-input v-model="actionForm.department" readonly /></el-form-item>
+            <el-form-item v-if="actionForm.action === 'return'" class="field" :style="{ order: 2 }" label="退库后使用公司" required><el-select v-model="actionForm.company" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item v-if="actionForm.action === 'return'" class="field" :style="{ order: 3 }" label="退库后使用部门"><el-select v-model="actionForm.department" filterable allow-create placement="bottom-start"><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item v-if="actionForm.action === 'handover'" class="field" :style="{ order: 3 }" label="接收部门："><el-select v-model="actionForm.department" filterable allow-create placement="bottom-start"><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field" :style="actionForm.action === 'return' ? { order: 1 } : actionForm.action === 'handover' ? { order: 5 } : undefined" :label="actionForm.action === 'return' ? '退库日期' : actionForm.action === 'borrow-return' ? '归还日期：' : actionForm.action === 'borrow' ? '借用日期：' : actionForm.action === 'handover' ? '交接日期：' : '领用日期'" required><el-date-picker v-model="actionForm.date" value-format="YYYY-MM-DD" /></el-form-item>
+            <el-form-item v-if="actionForm.action === 'borrow'" class="field" label="预计归还日期："><el-date-picker v-model="actionForm.expectedReturnDate" value-format="YYYY-MM-DD" /></el-form-item>
+            <el-form-item class="field" :style="actionForm.action === 'return' || actionForm.action === 'handover' ? { order: 4 } : undefined" :label="actionForm.action === 'return' ? '退库后位置' : actionForm.action === 'borrow-return' ? '归还后位置：' : actionForm.action === 'borrow' ? '借用后位置：' : actionForm.action === 'handover' ? '接收位置：' : '领用后位置'" required><el-select v-model="actionForm.location" filterable placement="bottom-start"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+            <el-form-item class="field" :style="actionForm.action === 'return' ? { order: 5 } : actionForm.action === 'handover' ? { order: 6 } : undefined" :label="actionForm.action === 'borrow' || actionForm.action === 'borrow-return' || actionForm.action === 'handover' ? '经办人：' : '经办人'" required><el-input v-model="actionForm.operator" :readonly="actionForm.action !== 'return'" /></el-form-item>
+            <el-form-item class="field full" :style="actionForm.action === 'return' ? { order: 6 } : actionForm.action === 'handover' ? { order: 7 } : undefined" :label="actionForm.action === 'return' ? '退库备注' : actionForm.action === 'borrow-return' ? '归还备注：' : actionForm.action === 'borrow' ? '借用备注：' : actionForm.action === 'handover' ? '交接备注：' : '领用备注'"><el-input v-model="actionForm.note" type="textarea" :rows="2" placeholder="请输入" /></el-form-item>
+          </div>
+        </section>
+        <section class="asset-flow-section">
+          <div class="asset-flow-tabs"><span>{{ actionForm.action === 'receive' || actionForm.action === 'borrow' ? '资产详情' : '资产明细' }}</span></div>
+          <div class="asset-flow-toolbar"><el-button type="primary" @click="reopenActionPicker">选择资产</el-button><el-button :disabled="!actionSelectedIds.length" @click="removeActionAssets">删除资产</el-button></div>
+          <div class="asset-flow-table-wrap"><table class="asset-flow-table"><thead><tr><th class="asset-flow-select-cell"><input type="checkbox" :checked="allActionAssetsSelected" aria-label="全选资产明细" @change="toggleAllActionAssets(($event.target as HTMLInputElement).checked)"></th><th v-if="actionForm.action === 'borrow'">预计归还日期</th><th>资产图片</th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌</th><th>型号</th><th>设备序列号</th><th>金额</th><th>所属/承租公司</th><th>使用公司</th><th>使用部门</th><th>所在位置</th><th>使用人</th><th>管理员</th><th>购置方式</th><th>订单号</th><th>供应商</th><th>备注</th></tr></thead><tbody><tr v-for="item in actionAssets" :key="item.id"><td class="asset-flow-select-cell"><input v-model="actionSelectedIds" type="checkbox" :value="item.id" :aria-label="`选择${item.id}`"></td><td v-if="actionForm.action === 'borrow'"><el-date-picker v-model="actionForm.expectedReturnDates[item.id]" class="asset-flow-date-input" value-format="YYYY-MM-DD" /></td><td><img v-if="item.image" class="asset-flow-image" :src="item.image" :alt="item.name"><span v-else>-</span></td><td>{{ item.id }}</td><td>{{ item.category || '-' }}</td><td>{{ item.name }}</td><td>{{ item.brand || '-' }}</td><td>{{ item.model || '-' }}</td><td>{{ item.sn || '-' }}</td><td>{{ item.price || 0 }}</td><td>{{ item.ownerCompany || item.company || '-' }}</td><td>{{ item.company || '-' }}</td><td>{{ item.department || '-' }}</td><td>{{ item.location || '-' }}</td><td>{{ item.owner || '-' }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.purchaseMethod || '-' }}</td><td>{{ item.orderNo || '-' }}</td><td>{{ item.supplier || '-' }}</td><td>{{ item.note || '-' }}</td></tr><tr v-if="!actionAssets.length" class="empty-row"><td :colspan="actionForm.action === 'borrow' ? 20 : 19">暂无已选择资产，请点击选择资产添加。</td></tr></tbody></table></div>
+        </section>
       </el-form>
-      <template #footer><el-button @click="actionOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitAction">确认{{ actionLabel(actionForm.action) }}</el-button></template>
+      <template #footer><el-button @click="actionOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitAction">{{ actionForm.action === 'cancel-inbound' ? '确认撤销' : '保存并提交' }}</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="importOpen" :title="importTitle" width="min(900px, 94vw)" append-to-body>
-      <div class="standard-import-panel">
-        <div class="standard-import-actions"><label class="el-button el-button--primary"><input type="file" accept=".xlsx" hidden @change="readImportFile">选择 Excel 文件</label><a class="el-button" href="/assets/asset-import-template.xlsx" download>下载导入模板</a><span>{{ importFileName || '仅支持 .xlsx 文件' }}</span></div>
-        <el-alert :title="importMode === 'asset' ? '导入前会校验资产名称、分类、位置和金额；错误行不会提交。' : importMode === 'update' ? '按资产编码更新已填写字段，空白字段保持原值。' : '按资产编码、ECP 人员和领用日期批量领用资产。'" type="info" :closable="false" />
-        <el-table v-loading="parsing" :data="importRows" height="360"><el-table-column prop="rowNumber" label="行号" width="70" /><el-table-column v-if="importMode !== 'asset'" label="资产编码" min-width="130"><template #default="scope">{{ scope.row.draft?.id || '-' }}</template></el-table-column><el-table-column label="资产名称" min-width="150"><template #default="scope">{{ scope.row.draft?.name || '-' }}</template></el-table-column><el-table-column v-if="importMode === 'asset'" label="资产分类" min-width="130"><template #default="scope">{{ scope.row.draft?.category || '-' }}</template></el-table-column><el-table-column label="所在位置" min-width="140"><template #default="scope">{{ scope.row.draft?.location || '-' }}</template></el-table-column><el-table-column v-if="importMode === 'receive'" label="领用人" min-width="120"><template #default="scope">{{ scope.row.draft?.owner || scope.row.draft?.ownerSubject || '-' }}</template></el-table-column><el-table-column label="校验结果" min-width="220"><template #default="scope"><el-tag v-if="!scope.row.errors.length" type="success">可导入</el-tag><span v-else class="standard-import-error">{{ scope.row.errors.join('；') }}</span></template></el-table-column></el-table>
-        <p v-if="importRows.length">可导入 {{ validImportRows.length }} 条，错误 {{ invalidImportCount }} 条</p>
+    <el-dialog v-model="importOpen" :title="importTitle" width="min(820px, 94vw)" class="legacy-asset-dialog legacy-asset-import-dialog" append-to-body>
+      <div class="asset-import-form">
+        <label class="asset-upload-drop" :class="{ 'drag-over': importDragActive }" tabindex="0" @keydown.enter.prevent="importFileInput?.click()" @keydown.space.prevent="importFileInput?.click()" @dragenter.prevent="importDragActive = true" @dragover.prevent="importDragActive = true" @dragleave.prevent="importDragActive = false" @drop.prevent="dropImportFile"><input ref="importFileInput" type="file" accept=".xls,.xlsx" hidden @change="readImportFile"><span class="upload-cloud" aria-hidden="true">☁</span><strong>{{ importFileName ? '已选择表格' : '上传表格' }}</strong><span data-asset-upload-hint>{{ importFileName ? '点击或拖拽可重新选择文件' : '也可直接拖拽到此处上传(支持格式: xls、xlsx)' }}</span><span v-if="importFileName" class="asset-upload-file">{{ importFileName }} · {{ importFileSize }}</span></label>
+        <a v-if="importMode === 'asset'" class="asset-template-download" href="/assets/asset-import-template.xlsx" :download="importTemplateName">⇩ {{ importTemplateName }}</a>
+        <button v-else type="button" class="asset-template-download" @click="downloadImportTemplate">⇩ {{ importTemplateName }}</button>
+        <a v-if="importTemplateUrl" ref="importTemplateLink" :href="importTemplateUrl" :download="importTemplateName" hidden>下载</a>
+        <div v-if="parsing" class="asset-import-status">正在校验导入文件……</div>
+        <div v-else-if="importRows.length" class="asset-import-status" :class="invalidImportCount ? 'error' : 'success'">可导入 {{ validImportRows.length }} 条，错误 {{ invalidImportCount }} 条。<span v-if="invalidImportCount">请修正错误后重新上传。</span></div>
+        <div class="asset-import-note"><p>{{ importMode === 'asset' ? '导入前会校验资产名称、分类、位置和金额，错误行不会提交。' : importMode === 'update' ? '按资产编码更新已填写字段，空白字段保持原值。' : '按资产编码、ECP 人员和领用日期批量领用资产。' }}</p><ol><li>最大数据行数不超过5000行；</li><li>请根据错误文件的错误说明，修改原文件错误后导入；</li><li>请勿在模板中添加批注导入。</li></ol></div>
+        <el-table v-if="importRows.length" :data="importRows" max-height="220"><el-table-column prop="rowNumber" label="行号" width="70" /><el-table-column label="资产编码" min-width="130"><template #default="scope">{{ scope.row.draft?.id || '-' }}</template></el-table-column><el-table-column label="资产名称" min-width="150"><template #default="scope">{{ scope.row.draft?.name || '-' }}</template></el-table-column><el-table-column label="校验结果" min-width="220"><template #default="scope"><el-tag v-if="!scope.row.errors.length" type="success">可导入</el-tag><span v-else class="standard-import-error">{{ scope.row.errors.join('；') }}</span></template></el-table-column></el-table>
       </div>
-      <template #footer><el-button @click="importOpen = false">取消</el-button><el-button type="primary" :disabled="!validImportRows.length" :loading="submitting" @click="submitImport">确认{{ importTitle }}</el-button></template>
+      <template #footer><el-button @click="importOpen = false">取消</el-button><el-button type="primary" :disabled="!validImportRows.length" :loading="submitting" @click="submitImport">确定</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="printOpen" title="资产标签打印预览" width="min(900px, 94vw)" append-to-body class="standard-print-dialog">

@@ -11497,6 +11497,96 @@ body.is-resizing-column * {
   padding-top: 8px;
 }
 
+.el-dialog.legacy-asset-dialog {
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.legacy-asset-dialog .el-dialog__header {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.legacy-asset-dialog .el-dialog__title {
+  color: #1f2937;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.legacy-asset-dialog .el-dialog__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 20px 24px;
+  overflow: auto;
+}
+
+.legacy-asset-dialog .el-dialog__footer {
+  flex: 0 0 auto;
+  padding: 14px 24px 16px;
+  border-top: 1px solid var(--line);
+  background: #ffffff;
+}
+
+.asset-form-grid .el-form-item.field,
+.asset-flow-grid .el-form-item.field {
+  margin: 0;
+}
+
+.asset-form-grid .el-form-item__label,
+.asset-flow-grid .el-form-item__label {
+  width: auto;
+  height: auto;
+  margin: 0;
+}
+
+.asset-form-grid .el-form-item__content,
+.asset-flow-grid .el-form-item__content {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.asset-create-form .el-input,
+.asset-create-form .el-select,
+.asset-create-form .el-autocomplete,
+.asset-create-form .el-date-editor,
+.asset-create-form .el-input-number,
+.asset-flow-form .el-input,
+.asset-flow-form .el-select,
+.asset-flow-form .el-autocomplete,
+.asset-flow-form .el-date-editor {
+  width: 100%;
+}
+
+.asset-create-form .el-input__wrapper,
+.asset-create-form .el-select__wrapper,
+.asset-flow-form .el-input__wrapper,
+.asset-flow-form .el-select__wrapper {
+  min-height: 38px;
+  border-radius: 7px;
+}
+
+.asset-form-suffix {
+  flex: 0 0 auto;
+  margin-left: 10px;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.asset-flow-image {
+  width: 28px;
+  height: 28px;
+  display: block;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
 .inline-select {
   display: grid;
   gap: 0;
@@ -11797,6 +11887,12 @@ body.is-resizing-column * {
 .asset-flow-grid textarea {
   min-height: 58px;
   padding-top: 8px;
+}
+
+.asset-flow-grid .el-input__wrapper,
+.asset-flow-grid .el-select__wrapper {
+  min-height: 32px;
+  border-radius: 4px;
 }
 
 .handover-flow-form .asset-flow-grid textarea {
@@ -12956,6 +13052,30 @@ body.is-resizing-column * {
     grid-column: 1 / -1;
     grid-template-columns: 1fr;
     gap: 7px;
+  }
+
+  .asset-flow-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-flow-grid .field,
+  .asset-flow-grid .field.full {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .handover-mode-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .legacy-asset-dialog .el-dialog__header,
+  .legacy-asset-dialog .el-dialog__body,
+  .legacy-asset-dialog .el-dialog__footer {
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
   .asset-detail-head {
