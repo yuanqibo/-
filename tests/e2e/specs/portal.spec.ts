@@ -18,14 +18,44 @@ const expectNoPageOverflow = async (page: Page): Promise<void> => {
   expect(metrics.bodyScrollWidth, JSON.stringify(metrics)).toBeLessThanOrEqual(metrics.viewport + 1)
 }
 
-const expectSingleControlFrames = async (dialog: ReturnType<Page['getByRole']>): Promise<void> => {
-  const wrappers = dialog.locator('.el-input__wrapper, .el-select__wrapper')
+const expectUnifiedControlFrames = async (dialog: ReturnType<Page['getByRole']>): Promise<void> => {
+  const wrappers = dialog.locator('.field .el-input__wrapper, .field .el-select__wrapper')
   await expect(wrappers.first()).toBeVisible()
-  const decorated = await wrappers.evaluateAll((elements) => elements.filter((element) => {
-    const style = getComputedStyle(element)
-    return style.boxShadow !== 'none' || parseFloat(style.borderTopWidth) > 0
-  }).length)
-  expect(decorated, '旧版表单只保留内部输入框，Element Plus 包装层不应再绘制外框').toBe(0)
+  const frames = await dialog.evaluate((element) => {
+    const visible = (node: Element): boolean => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0
+    const controls = Array.from(element.querySelectorAll('.field .el-input__wrapper, .field .el-select__wrapper')).filter(visible)
+    const internalInputs = Array.from(element.querySelectorAll('.field .el-input__inner, .field .el-select__input')).filter(visible)
+    const heights = controls.map((control) => Math.round(control.getBoundingClientRect().height))
+    const arrowsOutside = Array.from(element.querySelectorAll('.el-select__caret')).filter(visible).filter((arrow) => {
+      const parent = arrow.closest('.el-select__wrapper')?.getBoundingClientRect()
+      const rect = arrow.getBoundingClientRect()
+      return !parent || rect.left < parent.left || rect.right > parent.right || rect.top < parent.top || rect.bottom > parent.bottom
+    }).length
+    const unitsOutside = Array.from(element.querySelectorAll('.asset-unit-control__suffix')).filter(visible).filter((unit) => {
+      const parent = unit.closest('.asset-unit-control')?.getBoundingClientRect()
+      const rect = unit.getBoundingClientRect()
+      return !parent || rect.left < parent.left || rect.right > parent.right || rect.top < parent.top || rect.bottom > parent.bottom
+    }).length
+    return {
+      controls: controls.length,
+      framedControls: controls.filter((control) => {
+        const style = getComputedStyle(control)
+        return style.boxShadow !== 'none' || parseFloat(style.borderTopWidth) > 0
+      }).length,
+      framedInternalInputs: internalInputs.filter((input) => {
+        const style = getComputedStyle(input)
+        return style.boxShadow !== 'none' || parseFloat(style.borderTopWidth) > 0
+      }).length,
+      heightSpread: heights.length ? Math.max(...heights) - Math.min(...heights) : 0,
+      arrowsOutside,
+      unitsOutside
+    }
+  })
+  expect(frames.framedControls, JSON.stringify(frames)).toBe(frames.controls)
+  expect(frames.framedInternalInputs, JSON.stringify(frames)).toBe(0)
+  expect(frames.heightSpread, JSON.stringify(frames)).toBeLessThanOrEqual(1)
+  expect(frames.arrowsOutside, JSON.stringify(frames)).toBe(0)
+  expect(frames.unitsOutside, JSON.stringify(frames)).toBe(0)
 }
 
 test.describe('登录后门户质量回归', () => {
@@ -130,7 +160,7 @@ test.describe('登录后门户质量回归', () => {
     const dialog = page.getByRole('dialog', { name: '新增资产' })
     await expect(dialog.getByRole('heading', { name: '使用信息', exact: true })).toBeVisible()
     await expect(dialog.getByRole('heading', { name: '基本信息', exact: true })).toBeVisible()
-    await expectSingleControlFrames(dialog)
+    await expectUnifiedControlFrames(dialog)
     for (const label of ['人员姓名', '使用公司', '使用部门', '领用/借用日期', '资产编码', '所属/承租公司', '资产状况', '使用期限', '租金']) {
       await expect(dialog.locator('.el-form-item').filter({ hasText: label }).first()).toBeVisible()
     }
@@ -161,7 +191,7 @@ test.describe('登录后门户质量回归', () => {
     await expect(editDialog.getByRole('heading', { name: '使用信息', exact: true })).toBeVisible()
     await expect(editDialog.getByRole('heading', { name: '基本信息', exact: true })).toBeVisible()
     await expect(editDialog.locator('.el-form-item').filter({ hasText: '资产编码' }).locator('input')).toHaveValue('AST-0001')
-    await expectSingleControlFrames(editDialog)
+    await expectUnifiedControlFrames(editDialog)
     await editDialog.getByRole('button', { name: '取消', exact: true }).click()
 
     await page.getByRole('button', { name: '编辑', exact: true }).click()
@@ -169,7 +199,7 @@ test.describe('登录后门户质量回归', () => {
     const batchDialog = page.getByRole('dialog', { name: '批量修改资产' })
     await expect(batchDialog.getByRole('heading', { name: '批量修改', exact: true })).toBeVisible()
     await expect(batchDialog.getByText('AST-0001', { exact: true })).toBeVisible()
-    await expectSingleControlFrames(batchDialog)
+    await expectUnifiedControlFrames(batchDialog)
     await batchDialog.getByRole('button', { name: '取消', exact: true }).click()
 
     await page.getByRole('button', { name: '导入/导出', exact: true }).click()
@@ -190,7 +220,7 @@ test.describe('登录后门户质量回归', () => {
     const receiveDialog = page.getByRole('dialog', { name: '新增领用单' })
     for (const label of ['领用人', '所属公司', '所在部门', '领用日期', '领用后位置', '经办人', '领用备注']) await expect(receiveDialog.getByText(label, { exact: false }).first()).toBeVisible()
     await expect(receiveDialog.getByText('AST-0002', { exact: true })).toBeVisible()
-    await expectSingleControlFrames(receiveDialog)
+    await expectUnifiedControlFrames(receiveDialog)
     await receiveDialog.locator('.el-form-item').filter({ hasText: '领用人' }).locator('input').fill('张三')
     await page.locator('.el-autocomplete-suggestion li').filter({ hasText: '张三' }).first().click()
     await receiveDialog.getByRole('button', { name: '保存并提交', exact: true }).click()
@@ -206,7 +236,7 @@ test.describe('登录后门户质量回归', () => {
     const borrowDialog = page.getByRole('dialog', { name: '新增借用单' })
     await expect(borrowDialog.getByText('资产详情', { exact: true })).toBeVisible()
     await expect(borrowDialog.getByText('AST-0002', { exact: true })).toBeVisible()
-    await expectSingleControlFrames(borrowDialog)
+    await expectUnifiedControlFrames(borrowDialog)
     await expect(borrowDialog.locator('.asset-flow-table .el-date-editor')).toHaveCount(1)
   })
 
@@ -282,7 +312,7 @@ test.describe('登录后门户质量回归', () => {
     await page.getByRole('button', { name: '新建盘点', exact: true }).click()
     const stocktakeDialog = page.getByRole('dialog', { name: '新建盘点' })
     await expect(stocktakeDialog.locator('.legacy-business-form')).toHaveCSS('grid-template-columns', /.+ .+/)
-    await expectSingleControlFrames(stocktakeDialog)
+    await expectUnifiedControlFrames(stocktakeDialog)
     for (const label of ['任务名称', '盘点范围', '负责人', '应盘数量', '计划日期']) {
       await expect(stocktakeDialog.locator('.el-form-item').filter({ hasText: label })).toHaveCount(1)
     }

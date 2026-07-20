@@ -916,13 +916,13 @@ onMounted(() => void load())
             <el-form-item class="field" label="资产状况" prop="condition"><el-select v-model="createDraft.condition" placement="bottom-start" placeholder="请选择"><el-option v-for="item in assetConditions" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item class="field" label="所在位置" prop="location"><el-select v-model="createDraft.location" filterable placement="bottom-start" placeholder="所在位置"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
             <el-form-item class="field" label="使用期限"><el-input v-model="createDraft.usageMonths" type="number" min="0" placeholder="请输入"><template #append>月</template></el-input></el-form-item>
-            <el-form-item class="field" label="金额"><el-input-number v-model="createDraft.price" :min="0" :precision="2" controls-position="right" placeholder="请输入" /><span class="asset-form-suffix">元</span></el-form-item>
+            <el-form-item class="field" label="金额"><div class="asset-unit-control"><el-input-number v-model="createDraft.price" :min="0" :precision="2" controls-position="right" placeholder="请输入" /><span class="asset-unit-control__suffix">元</span></div></el-form-item>
             <el-form-item class="field" label="购置/起租日期" prop="purchaseDate"><el-date-picker v-model="createDraft.purchaseDate" value-format="YYYY-MM-DD" /></el-form-item>
             <el-form-item class="field" label="订单号"><el-input v-model="createDraft.orderNo" placeholder="请输入" /></el-form-item>
             <el-form-item class="field" label="计量单位"><el-input v-model="createDraft.unit" placeholder="请输入" /></el-form-item>
             <el-form-item class="field" label="购置方式" prop="purchaseMethod"><el-select v-model="createDraft.purchaseMethod" placement="bottom-start" placeholder="请选择"><el-option v-for="item in purchaseMethods" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item class="field wide" label="备注"><el-input v-model="createDraft.note" type="textarea" :rows="2" placeholder="请输入" /></el-form-item>
-            <el-form-item class="field" label="租金"><el-input-number v-model="createDraft.rent" :min="0" :precision="2" controls-position="right" placeholder="请输入" /><span class="asset-form-suffix">元</span></el-form-item>
+            <el-form-item class="field" label="租金"><div class="asset-unit-control"><el-input-number v-model="createDraft.rent" :min="0" :precision="2" controls-position="right" placeholder="请输入" /><span class="asset-unit-control__suffix">元</span></div></el-form-item>
           </div>
         </section>
       </el-form>
@@ -954,13 +954,13 @@ onMounted(() => void load())
               <el-form-item class="field" label="资产状况"><el-input v-model="editForm.condition" readonly /></el-form-item>
               <el-form-item class="field" label="所在位置" required><el-select v-model="editForm.location" filterable placement="bottom-start"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
               <el-form-item class="field" label="使用期限"><el-input v-model="editForm.usageMonths" type="number" min="0" placeholder="请输入"><template #append>月</template></el-input></el-form-item>
-              <el-form-item class="field" label="金额"><el-input-number v-model="editForm.price" :min="0" :precision="2" controls-position="right" /><span class="asset-form-suffix">元</span></el-form-item>
+              <el-form-item class="field" label="金额"><div class="asset-unit-control"><el-input-number v-model="editForm.price" :min="0" :precision="2" controls-position="right" /><span class="asset-unit-control__suffix">元</span></div></el-form-item>
               <el-form-item class="field" label="购置/起租日期" required><el-date-picker v-model="editForm.purchaseDate" value-format="YYYY-MM-DD" /></el-form-item>
               <el-form-item class="field" label="订单号"><el-input v-model="editForm.orderNo" placeholder="请输入" /></el-form-item>
               <el-form-item class="field" label="计量单位"><el-input v-model="editForm.unit" placeholder="请输入" /></el-form-item>
               <el-form-item class="field" label="购置方式" required><el-select v-model="editForm.purchaseMethod" placement="bottom-start"><el-option v-for="item in purchaseMethods" :key="item" :label="item" :value="item" /></el-select></el-form-item>
               <el-form-item class="field wide" label="备注"><el-input v-model="editForm.note" type="textarea" :rows="2" placeholder="请输入" /></el-form-item>
-              <el-form-item class="field" label="租金"><el-input-number v-model="editForm.rent" :min="0" :precision="2" controls-position="right" /><span class="asset-form-suffix">元</span></el-form-item>
+              <el-form-item class="field" label="租金"><div class="asset-unit-control"><el-input-number v-model="editForm.rent" :min="0" :precision="2" controls-position="right" /><span class="asset-unit-control__suffix">元</span></div></el-form-item>
             </div>
           </section>
         </template>
