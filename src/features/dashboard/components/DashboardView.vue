@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { usePortalSession } from '../../../core/auth/portal-session'
+import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { useDashboard } from '../composables/useDashboard'
 import type { AssetRecord } from '../../assets/types/assets'
 
@@ -8,12 +11,17 @@ type CategoryMetricMode = 'count' | 'amount'
 type ChartRow = { key: string; label: string; title: string; count: number; amount: number }
 
 const { state, assets, requests } = useDashboard()
+const { user } = usePortalSession()
+const { isEmployeeTerminal } = useTerminalMode()
+const router = useRouter()
 const distributionMode = ref<DistributionMode>('organization')
 const categoryMetricMode = ref<CategoryMetricMode>('count')
 
 const totalValue = computed(() => assets.value.reduce((sum, item) => sum + Number(item.price || 0), 0))
 const activeCount = computed(() => assets.value.filter((item) => item.status === '在用').length)
 const pendingCount = computed(() => requests.value.filter((item) => item.status !== '已完成').length)
+const primaryEmployeeAsset = computed(() => assets.value.find((item) => item.owner === user.value?.name) || assets.value[0] || null)
+const openEmployeeAssets = (): void => { void router.push('/assets') }
 
 const statusRows = computed(() => {
   const receiveCount = assets.value.filter((item) => item.status === '在用').length
@@ -84,6 +92,22 @@ const metricLabel = (value: number, mode: CategoryMetricMode = 'count'): string 
 
 <template>
   <el-alert v-if="state.errorMessage" :title="state.errorMessage" type="error" show-icon :closable="false" />
+  <template v-if="isEmployeeTerminal">
+    <section class="hero employee-home-hero"><h1>你好，{{ user?.name }}</h1></section>
+    <section v-loading="state.loading" class="panel device-overview-strip">
+      <div class="device-overview-heading"><h2 class="panel-title">我的设备概览</h2><div class="panel-subtitle">如果设备异常，可从资产详情发起归还或报修。</div></div>
+      <div v-if="primaryEmployeeAsset" class="device-overview-body">
+        <div class="device-overview-main"><strong>{{ primaryEmployeeAsset.name }}</strong><div class="panel-subtitle">{{ primaryEmployeeAsset.model || '-' }} / {{ primaryEmployeeAsset.assetTag || '-' }}</div></div>
+        <div class="device-overview-meta"><span>当前状态</span><span class="tag" :class="primaryEmployeeAsset.status === '在用' ? 'green' : 'blue'">{{ primaryEmployeeAsset.status }}</span></div>
+        <div class="device-overview-meta"><span>存放位置</span><strong>{{ primaryEmployeeAsset.location || '-' }}</strong></div>
+        <div class="device-overview-meta"><span>资产风险</span><strong>{{ primaryEmployeeAsset.risk || '正常' }}</strong></div>
+        <div class="device-overview-meta"><span>保修截止</span><strong>{{ primaryEmployeeAsset.warrantyDate || '-' }}</strong></div>
+        <button class="btn" type="button" @click="openEmployeeAssets">查看详情</button>
+      </div>
+      <div v-else class="device-overview-empty">当前还没有分配到你的设备，建议先发起领用申请。</div>
+    </section>
+  </template>
+  <template v-else>
   <section v-loading="state.loading" class="grid stats-grid">
     <article class="stat-card" data-watermark="ZC"><div class="stat-top"><span>资产总数</span><span class="tag blue">当前范围</span></div><div class="stat-value">{{ assets.length }}</div><div class="stat-note">账号范围内全部资产</div></article>
     <article class="stat-card" data-watermark="ZY"><div class="stat-top"><span>在用资产</span><span class="tag green">在用</span></div><div class="stat-value">{{ activeCount }}</div><div class="stat-note">已分配给员工或部门</div></article>
@@ -126,4 +150,5 @@ const metricLabel = (value: number, mode: CategoryMetricMode = 'count'): string 
       </div>
     </article>
   </section>
+  </template>
 </template>

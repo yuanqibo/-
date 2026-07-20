@@ -110,10 +110,24 @@ test.describe('登录后门户质量回归', () => {
 
   test('资产导航保留迁移前的选中样式与展开交互', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '导航视觉和点击状态在桌面项目执行')
-    await openApp(page, '/assets/settings/locations')
+    await openApp(page, '/assets/borrow-return')
 
     await expect(page.getByRole('button', { name: '资产', exact: true }).locator('.nav-asset-icon')).toBeVisible()
     const parent = page.locator('.asset-subnav-parent')
+    const children = page.locator('.asset-subnav-children')
+    await expect(parent).toHaveAttribute('aria-expanded', 'false')
+    await expect(children).toBeHidden()
+    await parent.click()
+    await expect(parent).toHaveAttribute('aria-expanded', 'true')
+    await expect(children).toBeVisible()
+    const expansion = await page.locator('.asset-subnav-group').evaluate((element) => {
+      const parentRect = element.querySelector('.asset-subnav-parent')?.getBoundingClientRect()
+      const childRect = element.querySelector('.asset-subnav-child')?.getBoundingClientRect()
+      return { parentBottom: Math.round(parentRect?.bottom || 0), childTop: Math.round(childRect?.top || 0) }
+    })
+    expect(expansion.childTop, JSON.stringify(expansion)).toBeGreaterThanOrEqual(expansion.parentBottom)
+
+    await page.goto('/assets/settings/locations')
     const activeChild = page.locator('.asset-subnav-child.active')
     await expect(parent).toHaveAttribute('aria-expanded', 'true')
     await expect(parent).toHaveCSS('color', 'rgb(18, 150, 219)')
@@ -131,6 +145,26 @@ test.describe('登录后门户质量回归', () => {
     await page.getByRole('button', { name: '资产分类', exact: true }).click()
     await expect(page).toHaveURL('/assets/settings/categories')
     await expect(page.locator('.asset-subnav-child.active')).toHaveText('资产分类')
+  })
+
+  test('管理员保留员工端切换与员工视图', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '端模式导航在桌面项目执行')
+    await openApp(page, '/')
+    await page.getByRole('button', { name: '测试管理员', exact: true }).click()
+    await expect(page.getByRole('menuitem', { name: '切换员工端', exact: true })).toBeVisible()
+    await page.getByRole('menuitem', { name: '切换员工端', exact: true }).click()
+
+    await expect(page.locator('body')).toHaveClass(/employee-terminal-view/)
+    await expect(page.getByRole('button', { name: '申请', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '系统', exact: true })).toHaveCount(0)
+    await expect(page.getByText('我的设备概览', { exact: true })).toBeVisible()
+    await expect(page.getByText('资产总数', { exact: true })).toHaveCount(0)
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('assetPortalTerminalMode'))).toBe('employee')
+
+    await page.getByRole('button', { name: '测试管理员', exact: true }).click()
+    await page.getByRole('menuitem', { name: '切换管理端', exact: true }).click()
+    await expect(page.getByRole('button', { name: '系统', exact: true })).toBeVisible()
+    await expect(page.getByText('资产总数', { exact: true })).toBeVisible()
   })
 
   test('首页保留迁移前的统计与仪表盘板块', async ({ page, isMobile }) => {
@@ -519,6 +553,21 @@ test.describe('登录后门户质量回归', () => {
     await expect(categoryDialog).toBeHidden()
     const categoryRequest = [...state.requests].reverse().find((item) => item.method === 'PUT' && item.path === '/api/config/catalog/categories')
     expect(categoryRequest?.body).toMatchObject({ value: [{ id: 'cat-it', children: [{ name: '笔记本电脑', code: '0101', usefulLife: '48', unit: '台' }] }] })
+
+    await page.goto('/assets/settings/label-templates')
+    const labelPage = page.locator('.asset-label-template-page')
+    await expect(labelPage.locator('.asset-label-template-left')).toBeVisible()
+    await expect(labelPage.locator('.asset-label-template-right')).toBeVisible()
+    await expect(labelPage.locator('.asset-label-template-card')).toHaveCount(4)
+    await expect(labelPage.getByText('40*30mm', { exact: true })).toBeVisible()
+    await expect(labelPage.getByText('标准资产标签', { exact: true })).toBeVisible()
+    await expect(labelPage.getByText('配置1', { exact: false })).toBeVisible()
+    for (const section of ['标签logo设置', '标签尺寸', '位置调整', '字段', '打印排列', '扫码展示字段']) {
+      await expect(labelPage.getByText(section, { exact: true })).toBeVisible()
+    }
+    await expect(page.locator('.asset-subnav-parent')).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.locator('.asset-subnav-child.active')).toHaveText('标签模板设置')
+    await expectNoPageOverflow(page)
   })
 
   test('员工搜索、组织筛选、分页与详情抽屉可用', async ({ page, isMobile }) => {

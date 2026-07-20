@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { usePortalSession } from '../auth/portal-session'
+import { useTerminalMode, type PortalTerminalMode } from '../auth/terminal-mode'
 import type { PortalMenuItem } from '../auth/portal-context'
 import { MEMBER_AUTHORIZATION_PORTAL_PATH } from '../routing/standard-routes'
 import PortalNavIcon from './PortalNavIcon.vue'
@@ -17,9 +18,11 @@ const props = withDefaults(defineProps<{ pageTitle?: string; section?: LayoutSec
 const route = useRoute()
 const router = useRouter()
 const { ready, loading, errorMessage, user, menuItems } = usePortalSession()
-const openAssetGroups = ref(new Set<string>(['assetSettings']))
+const { isEmployeeTerminal, canSwitchTerminal, setTerminalMode } = useTerminalMode()
+const openAssetGroups = ref(new Set<string>())
 
 const resolvedSection = computed<Exclude<LayoutSection, 'auto'>>(() => {
+  if (ready.value && isEmployeeTerminal.value && (props.section === 'assets' || route.path.startsWith('/assets'))) return 'none'
   if (props.section !== 'auto') return props.section
   if (route.path.startsWith('/assets')) return 'assets'
   if (route.path.startsWith('/system')) return 'system'
@@ -29,7 +32,8 @@ const resolvedSection = computed<Exclude<LayoutSection, 'auto'>>(() => {
 const primaryMenuIds = ['home', 'assets', 'requests', 'settings']
 const primaryMenus = computed(() => primaryMenuIds
   .map((id) => menuItems.value.find((item) => item.id === id))
-  .filter((item): item is PortalMenuItem => Boolean(item)))
+  .filter((item): item is PortalMenuItem => Boolean(item))
+  .filter((item) => !isEmployeeTerminal.value || ['home', 'assets', 'requests'].includes(item.id)))
 const systemMenus = computed(() => menuItems.value
   .filter((item) => item.parentId === 'settings')
   .sort((left, right) => left.order - right.order))
@@ -58,6 +62,11 @@ const navigate = (item: PortalMenuItem): void => {
 const logout = (): void => { void window.__ASSET_PORTAL_ECP_CONTEXT__?.logout() }
 const handleAccountCommand = (command: string | number | object): void => {
   if (command === 'logout') logout()
+  if (command === 'management' || command === 'employee') switchTerminal(command)
+}
+const switchTerminal = (mode: PortalTerminalMode): void => {
+  if (!setTerminalMode(mode)) return
+  if (mode === 'employee' && !['/', '/assets', '/requests'].includes(route.path)) void router.push('/')
 }
 const reload = (): void => window.location.reload()
 const avatarText = computed(() => String(user.value?.name || user.value?.account || '用').trim().slice(0, 1))
@@ -73,21 +82,30 @@ const toggleAssetGroup = (id: string): void => {
   openAssetGroups.value = next
 }
 
-watch(() => route.path, () => {
+watch([() => route.path, assetMenus], () => {
   const parent = assetMenus.value.find((item) => hasActiveAssetChild(item))
   if (parent) openAssetGroups.value = new Set([...openAssetGroups.value, parent.id])
-})
+}, { immediate: true })
+
+watch([ready, isEmployeeTerminal, () => route.path], ([sessionReady, employee, path]) => {
+  if (sessionReady && employee && !['/', '/assets', '/requests'].includes(path)) void router.replace('/')
+}, { immediate: true })
 
 onMounted(() => {
   document.body.classList.remove('auth-view', 'has-secondary-nav', 'self-service-view')
   document.body.classList.add('standard-vue-route')
+  document.body.classList.toggle('employee-terminal-view', ready.value && isEmployeeTerminal.value)
   document.title = `资产云管家 - ${documentTitle.value}`
 })
 
 watch(documentTitle, (title) => { document.title = `资产云管家 - ${title}` })
+watch([ready, isEmployeeTerminal], ([sessionReady, employee]) => {
+  document.body.classList.toggle('employee-terminal-view', sessionReady && employee)
+})
 
 onUnmounted(() => {
   document.body.classList.remove('standard-vue-route')
+  document.body.classList.remove('employee-terminal-view')
 })
 </script>
 
@@ -104,12 +122,13 @@ onUnmounted(() => {
     <aside class="sidebar">
       <div class="sidebar-account-host">
         <el-dropdown trigger="click" @command="handleAccountCommand">
-          <button class="standard-account-entry" type="button" :title="user?.name || '账号管理'">
+          <button class="standard-account-entry" type="button" :title="user?.name || '账号管理'" :aria-label="user?.name || '账号管理'">
             <el-avatar :size="42" :src="user?.avatar">{{ avatarText }}</el-avatar>
           </button>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item disabled>{{ user?.name }} · {{ user?.roleName }}</el-dropdown-item>
+              <el-dropdown-item v-if="canSwitchTerminal" :command="isEmployeeTerminal ? 'management' : 'employee'">{{ isEmployeeTerminal ? '切换管理端' : '切换员工端' }}</el-dropdown-item>
               <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -120,10 +139,10 @@ onUnmounted(() => {
         <div class="nav-content"><div class="nav-section">
           <div v-for="item in primaryMenus" :key="item.id" class="nav-group" :class="{ 'has-children': item.id === 'assets' }">
             <button class="nav-item" :class="{ active: primaryActive(item) }" type="button"
-              :title="item.id === 'requests' ? '审批' : item.title"
+              :title="item.id === 'requests' ? (isEmployeeTerminal ? '申请' : '审批') : item.title"
               :aria-current="primaryActive(item) ? 'page' : undefined" @click="navigate(item)">
               <span class="nav-icon"><PortalNavIcon :kind="item.id" /></span>
-              <span class="nav-label">{{ item.id === 'requests' ? '审批' : item.title }}</span>
+              <span class="nav-label">{{ item.id === 'requests' ? (isEmployeeTerminal ? '申请' : '审批') : item.title }}</span>
             </button>
           </div>
         </div></div>

@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { usePortalSession } from '../../../core/auth/portal-session'
+import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { useApprovals } from '../composables/useApprovals'
 import { useAssets } from '../../assets/composables/useAssets'
 import type { ApprovalDecision, ApprovalRecord } from '../types/approval'
@@ -9,6 +10,7 @@ import type { ApprovalDecision, ApprovalRecord } from '../types/approval'
 const { state, rows, load, decide, create } = useApprovals()
 const { assets, load: loadAssets } = useAssets()
 const { user } = usePortalSession()
+const { isEmployeeTerminal } = useTerminalMode()
 const query = ref('')
 const tab = ref('全部')
 const detail = ref<ApprovalRecord | null>(null)
@@ -18,7 +20,7 @@ const submitting = ref(false)
 const decisionForm = reactive<{ decision: ApprovalDecision; reason: string }>({ decision: 'approve', reason: '' })
 const requestForm = reactive({ type: '资产领用', assetIds: [] as string[], location: '', date: new Date().toISOString().slice(0, 10), expectedReturnDate: '', receiverSubject: '', reason: '' })
 const permissions = computed(() => new Set(user.value?.permissionCodes || []))
-const canReview = computed(() => permissions.value.has('asset:request:review'))
+const canReview = computed(() => !isEmployeeTerminal.value && permissions.value.has('asset:request:review'))
 const tabs = ['全部', '待处理', '已完成', '已拒绝']
 const filtered = computed(() => rows.value.filter((item) => {
   const keyword = query.value.trim().toLowerCase()

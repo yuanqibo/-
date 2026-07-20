@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type TableInstance } from 'element-plus'
 import { usePortalSession } from '../../../core/auth/portal-session'
+import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { searchDirectoryPeople } from '../api/assets.api'
 import { parseAssetWorkbook, type AssetImportMode } from '../composables/parseAssetWorkbook'
 import { useAssets } from '../composables/useAssets'
@@ -53,8 +55,10 @@ type EditForm = {
 type ManagedOption = { value: string; label: string; unit?: string; usefulLife?: string }
 
 const props = withDefaults(defineProps<{ mode?: Mode }>(), { mode: 'list' })
+const router = useRouter()
 const { state, assets, operations, business, store, load, create, copy, importMany, command } = useAssets()
 const { user } = usePortalSession()
+const { isEmployeeTerminal } = useTerminalMode()
 const query = ref('')
 const status = ref('全部')
 const category = ref('全部')
@@ -103,7 +107,10 @@ const viewClass = computed(() => {
   return 'asset-list-page receive-return-ledger asset-directory-view'
 })
 const permissions = computed(() => new Set(user.value?.permissionCodes || []))
-const can = (code: string): boolean => permissions.value.has(code)
+const employeeTerminalPermissions = new Set(['asset:item:view', 'asset:item:advancedSearch', 'asset:item:columnSettings'])
+const can = (code: string): boolean => permissions.value.has(code) && (!isEmployeeTerminal.value || employeeTerminalPermissions.has(code))
+const canCreateRequest = computed(() => permissions.value.has('asset:request:create'))
+const openEmployeeRequest = (): void => { void router.push('/requests') }
 
 const columnOptions: Array<{ key: ColumnKey; label: string }> = [
   { key: 'id', label: '资产编码' }, { key: 'name', label: '资产名称' }, { key: 'category', label: '资产分类' },
@@ -762,6 +769,8 @@ onMounted(() => void load())
     <template v-if="mode === 'list'">
       <div class="asset-list-toolbar">
         <div class="asset-list-actions">
+          <button v-if="isEmployeeTerminal && canCreateRequest" class="table-action primary" type="button" @click="openEmployeeRequest">发起领用申请</button>
+          <template v-else>
           <button v-if="can('asset:item:create')" class="table-action primary" type="button" @click="openCreate()">＋ 新增</button>
           <el-dropdown placement="bottom-start" trigger="click">
             <button class="table-action has-caret" type="button">操作<span class="action-caret" aria-hidden="true"></span></button>
@@ -793,6 +802,7 @@ onMounted(() => void load())
           </el-dropdown>
           <button v-if="can('asset:item:printLabel')" class="table-action" type="button" @click="openPrint()">打印标签</button>
           <a v-if="exportUrl" ref="exportLink" :href="exportUrl" :download="`资产列表_${new Date().toISOString().slice(0, 10)}.csv`" hidden>下载</a>
+          </template>
         </div>
         <div class="asset-list-search">
           <input v-model="query" class="local-search" type="search" placeholder="搜索" autocomplete="off" aria-label="搜索资产">
