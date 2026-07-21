@@ -1,2 +1,10 @@
-<script setup lang="ts">import StandardPortalLayout from '../core/layout/StandardPortalLayout.vue'; import AssetSettingsView from '../features/assets/components/AssetSettingsView.vue'</script>
-<template><StandardPortalLayout page-title="位置管理" section="assets"><AssetSettingsView /></StandardPortalLayout></template>
+<script setup lang="ts">
+import StandardPortalLayout from '../core/layout/StandardPortalLayout.vue'
+import AssetSettingsView from '../features/assets/components/AssetSettingsView.vue'
+</script>
+
+<template>
+  <StandardPortalLayout page-title="位置管理" section="assets">
+    <AssetSettingsView />
+  </StandardPortalLayout>
+</template>

@@ -13,7 +13,7 @@ import AssetOrderPrintPreview, { type AssetOrderPrintKind } from './AssetOrderPr
 
 type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
-type LegacyColumnKey = 'status' | 'code' | 'name' | 'category' | 'phone' | 'email' | 'date' | 'location' | 'price' | 'purchase' | 'rent' | 'supplier' | 'owner' | 'usage'
+type ListColumnKey = 'status' | 'code' | 'name' | 'category' | 'phone' | 'email' | 'date' | 'location' | 'price' | 'purchase' | 'rent' | 'supplier' | 'owner' | 'usage'
 type TableDensity = 'compact' | 'standard' | 'roomy'
 type ReceiveReturnTab = 'receive' | 'return' | 'employee' | 'handover'
 type BorrowReturnTab = 'borrow' | 'return'
@@ -131,7 +131,7 @@ const visibleColumns = ref<ColumnKey[]>(parseStoredColumns())
 const hasColumn = (key: ColumnKey): boolean => visibleColumns.value.includes(key)
 watch(visibleColumns, (value) => localStorage.setItem(`asset-table-columns:${props.mode}`, JSON.stringify(value)), { deep: true })
 
-const legacyColumns: Array<{ key: LegacyColumnKey; label: string; width: number }> = [
+const listColumns: Array<{ key: ListColumnKey; label: string; width: number }> = [
   { key: 'status', label: '资产状态', width: 86 }, { key: 'code', label: '资产编码', width: 112 },
   { key: 'name', label: '资产名称', width: 118 }, { key: 'category', label: '资产分类', width: 92 },
   { key: 'phone', label: '手机号', width: 92 }, { key: 'email', label: '电子邮箱', width: 118 },
@@ -140,36 +140,36 @@ const legacyColumns: Array<{ key: LegacyColumnKey; label: string; width: number 
   { key: 'rent', label: '租金', width: 56 }, { key: 'supplier', label: '供应商', width: 104 },
   { key: 'owner', label: '使用人', width: 78 }, { key: 'usage', label: '使用信息', width: 110 }
 ]
-const legacyColumnKeys = legacyColumns.map((item) => item.key)
-const parseLegacySettings = (): { columns: LegacyColumnKey[]; density: TableDensity } => {
+const listColumnKeys = listColumns.map((item) => item.key)
+const parseListSettings = (): { columns: ListColumnKey[]; density: TableDensity } => {
   try {
     const value = JSON.parse(localStorage.getItem('assetListSettings') || '{}') as { visibleColumns?: unknown; density?: unknown }
     const columns = Array.isArray(value.visibleColumns)
-      ? value.visibleColumns.filter((item): item is LegacyColumnKey => legacyColumnKeys.includes(item as LegacyColumnKey))
-      : legacyColumnKeys
+      ? value.visibleColumns.filter((item): item is ListColumnKey => listColumnKeys.includes(item as ListColumnKey))
+      : listColumnKeys
     const density = ['compact', 'standard', 'roomy'].includes(String(value.density)) ? value.density as TableDensity : 'compact'
-    return { columns: columns.length ? columns : legacyColumnKeys, density }
-  } catch { return { columns: legacyColumnKeys, density: 'compact' } }
+    return { columns: columns.length ? columns : listColumnKeys, density }
+  } catch { return { columns: listColumnKeys, density: 'compact' } }
 }
-const legacySettings = parseLegacySettings()
-const legacyVisibleColumns = ref<LegacyColumnKey[]>(legacySettings.columns)
-const legacyDensity = ref<TableDensity>(legacySettings.density)
-const legacyDisplayedColumns = computed(() => legacyColumns.filter((item) => legacyVisibleColumns.value.includes(item.key)))
-const legacyTableMinWidth = computed(() => 36 + legacyDisplayedColumns.value.reduce((sum, item) => sum + item.width, 0))
-const saveLegacySettings = (): void => localStorage.setItem('assetListSettings', JSON.stringify({
-  visibleColumns: legacyVisibleColumns.value,
-  density: legacyDensity.value,
+const listSettings = parseListSettings()
+const listVisibleColumns = ref<ListColumnKey[]>(listSettings.columns)
+const listDensity = ref<TableDensity>(listSettings.density)
+const listDisplayedColumns = computed(() => listColumns.filter((item) => listVisibleColumns.value.includes(item.key)))
+const listTableMinWidth = computed(() => 36 + listDisplayedColumns.value.reduce((sum, item) => sum + item.width, 0))
+const saveListSettings = (): void => localStorage.setItem('assetListSettings', JSON.stringify({
+  visibleColumns: listVisibleColumns.value,
+  density: listDensity.value,
   columnLayoutVersion: 'compact-v2',
   columnWidths: {}
 }))
-watch([legacyVisibleColumns, legacyDensity], saveLegacySettings, { deep: true })
-const toggleLegacyColumn = (key: LegacyColumnKey, checked: boolean): void => {
-  const columns = new Set(legacyVisibleColumns.value)
+watch([listVisibleColumns, listDensity], saveListSettings, { deep: true })
+const toggleListColumn = (key: ListColumnKey, checked: boolean): void => {
+  const columns = new Set(listVisibleColumns.value)
   if (checked) columns.add(key)
   else if (columns.size > 1) columns.delete(key)
-  legacyVisibleColumns.value = legacyColumnKeys.filter((item) => columns.has(item))
+  listVisibleColumns.value = listColumnKeys.filter((item) => columns.has(item))
 }
-const resetLegacySettings = (): void => { legacyVisibleColumns.value = [...legacyColumnKeys]; legacyDensity.value = 'compact' }
+const resetListSettings = (): void => { listVisibleColumns.value = [...listColumnKeys]; listDensity.value = 'compact' }
 
 const categories = computed(() => Array.from(new Set(assets.value.map((item) => item.category).filter(Boolean))).sort())
 const flattenCatalog = (nodes: CatalogNode[], parentPath: string[] = [], leafOnly = false): ManagedOption[] => nodes.flatMap((node) => {
@@ -333,7 +333,7 @@ const goToJumpPage = (): void => {
   jumpPage.value = undefined
 }
 
-const legacyCellValue = (item: AssetRecord, key: LegacyColumnKey): string | number => {
+const listCellValue = (item: AssetRecord, key: ListColumnKey): string | number => {
   if (key === 'code') return item.id || '-'
   if (key === 'date') return String(item.receiveDate || '-')
   if (key === 'purchase') return String(item.purchaseMethod || '-')
@@ -342,7 +342,7 @@ const legacyCellValue = (item: AssetRecord, key: LegacyColumnKey): string | numb
   const value = item[key]
   return value === undefined || value === null || value === '' ? '-' : String(value)
 }
-const legacyStatusClass = (value: string): string => {
+const assetStatusClass = (value: string): string => {
   if (value.includes('审批')) return 'green'
   if (value === '空闲' || value === '闲置') return 'blue'
   if (value === '交接待签字') return 'red'
@@ -709,8 +709,8 @@ const csvCell = (value: unknown): string => `"${String(value ?? '').replace(/"/g
 const exportAssets = async (): Promise<void> => {
   const rows = selected.value.length ? selected.value : filteredAssets.value
   if (!rows.length) { ElMessage.warning('没有可导出的资产'); return }
-  const columns = props.mode === 'list' ? legacyDisplayedColumns.value : columnOptions.filter((item) => hasColumn(item.key))
-  const csv = `\uFEFF${columns.map((item) => csvCell(item.label)).join(',')}\n${rows.map((row) => columns.map((item) => csvCell(props.mode === 'list' ? legacyCellValue(row, item.key as LegacyColumnKey) : row[item.key])).join(',')).join('\n')}`
+  const columns = props.mode === 'list' ? listDisplayedColumns.value : columnOptions.filter((item) => hasColumn(item.key))
+  const csv = `\uFEFF${columns.map((item) => csvCell(item.label)).join(',')}\n${rows.map((row) => columns.map((item) => csvCell(props.mode === 'list' ? listCellValue(row, item.key as ListColumnKey) : row[item.key])).join(',')).join('\n')}`
   exportUrl.value = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
   await nextTick(); exportLink.value?.click(); window.setTimeout(() => { URL.revokeObjectURL(exportUrl.value); exportUrl.value = '' }, 0)
   ElMessage.success(`已导出 ${rows.length} 条资产`)
@@ -811,33 +811,33 @@ onMounted(() => void load())
       </div>
 
       <el-alert v-if="state.errorMessage" :title="state.errorMessage" type="error" show-icon :closable="false" />
-      <div v-loading="state.loading" class="asset-table-shell" :class="`density-${legacyDensity}`">
+      <div v-loading="state.loading" class="asset-table-shell" :class="`density-${listDensity}`">
         <div class="asset-table-actions">
           <button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="advancedOpen = true">高级搜索</button>
           <el-popover v-if="can('asset:item:columnSettings')" placement="bottom-end" :width="300" trigger="click">
             <template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template>
-            <div class="standard-column-settings legacy-column-settings">
-              <div class="legacy-column-settings__head"><strong>显示字段</strong><button type="button" @click="resetLegacySettings">重置</button></div>
-              <div class="legacy-column-settings__grid"><el-checkbox v-for="item in legacyColumns" :key="item.key" :model-value="legacyVisibleColumns.includes(item.key)" @change="toggleLegacyColumn(item.key, $event === true)">{{ item.label }}</el-checkbox></div>
+            <div class="standard-column-settings asset-column-settings">
+              <div class="asset-column-settings__head"><strong>显示字段</strong><button type="button" @click="resetListSettings">重置</button></div>
+              <div class="asset-column-settings__grid"><el-checkbox v-for="item in listColumns" :key="item.key" :model-value="listVisibleColumns.includes(item.key)" @change="toggleListColumn(item.key, $event === true)">{{ item.label }}</el-checkbox></div>
               <strong>表格密度</strong>
-              <el-radio-group v-model="legacyDensity" size="small"><el-radio-button value="compact">紧凑</el-radio-button><el-radio-button value="standard">标准</el-radio-button><el-radio-button value="roomy">宽松</el-radio-button></el-radio-group>
+              <el-radio-group v-model="listDensity" size="small"><el-radio-button value="compact">紧凑</el-radio-button><el-radio-button value="standard">标准</el-radio-button><el-radio-button value="roomy">宽松</el-radio-button></el-radio-group>
             </div>
           </el-popover>
         </div>
         <div class="asset-table-scroll">
-          <table class="asset-list-table" :style="{ minWidth: `${legacyTableMinWidth}px` }">
-            <colgroup><col style="width: 36px"><col v-for="column in legacyDisplayedColumns" :key="column.key" :style="{ width: `${column.width}px` }"></colgroup>
-            <thead><tr><th class="asset-list-select-cell"><input type="checkbox" aria-label="全选" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th v-for="column in legacyDisplayedColumns" :key="column.key" :data-column-key="column.key">{{ column.label }}</th></tr></thead>
+          <table class="asset-list-table" :style="{ minWidth: `${listTableMinWidth}px` }">
+            <colgroup><col style="width: 36px"><col v-for="column in listDisplayedColumns" :key="column.key" :style="{ width: `${column.width}px` }"></colgroup>
+            <thead><tr><th class="asset-list-select-cell"><input type="checkbox" aria-label="全选" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th v-for="column in listDisplayedColumns" :key="column.key" :data-column-key="column.key">{{ column.label }}</th></tr></thead>
             <tbody>
               <tr v-for="item in displayedRows" :key="item.id">
                 <td class="asset-list-select-cell"><input type="checkbox" :aria-label="`选择${item.id}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td>
-                <td v-for="column in legacyDisplayedColumns" :key="column.key">
-                  <span v-if="column.key === 'status'" class="asset-status-pill" :class="legacyStatusClass(item.status)">{{ item.status || '-' }}</span>
+                <td v-for="column in listDisplayedColumns" :key="column.key">
+                  <span v-if="column.key === 'status'" class="asset-status-pill" :class="assetStatusClass(item.status)">{{ item.status || '-' }}</span>
                   <button v-else-if="column.key === 'code'" class="link" type="button" @click="detail = item">{{ item.id }}</button>
-                  <template v-else>{{ legacyCellValue(item, column.key) }}</template>
+                  <template v-else>{{ listCellValue(item, column.key) }}</template>
                 </td>
               </tr>
-              <tr v-if="!displayedRows.length" class="empty-row"><td :colspan="legacyDisplayedColumns.length + 1">{{ query ? '没有匹配的资产结果。' : '当前账号下暂无资产。' }}</td></tr>
+              <tr v-if="!displayedRows.length" class="empty-row"><td :colspan="listDisplayedColumns.length + 1">{{ query ? '没有匹配的资产结果。' : '当前账号下暂无资产。' }}</td></tr>
             </tbody>
           </table>
         </div>
@@ -865,7 +865,7 @@ onMounted(() => void load())
       <div v-loading="state.loading" class="asset-table-shell inbound-table-shell">
         <div class="asset-table-actions inbound-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="advancedOpen = true">高级搜索</button><el-popover placement="bottom-end" :width="260" trigger="click"><template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template><div>入库状态、入库单号、入库类型、入库日期、入库人、采购人、创建日期、所属公司、入库备注、操作</div></el-popover></div>
         <div class="asset-table-scroll inbound-table-scroll"><table class="asset-list-table inbound-order-table" style="min-width: 1080px"><thead><tr><th class="inbound-select-cell"><input type="checkbox" aria-label="全选入库单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>入库状态</th><th>入库单号</th><th>入库类型</th><th>入库日期</th><th>入库人</th><th>采购人</th><th>创建日期</th><th>所属公司</th><th>入库备注</th><th>操作</th></tr></thead><tbody>
-          <tr v-for="item in displayedRows" :key="operationId(item, 'RK')"><td class="inbound-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'RK')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="inbound-status-pill" :class="legacyStatusClass(item.status)">{{ item.status || '已入库' }}</span></td><td><button class="link inbound-order-link" type="button" @click="detail = item">{{ operationId(item, 'RK') }}</button></td><td>{{ item.purchaseMethod || '新增资产' }}</td><td>{{ operationDate(item) }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.purchaser || '-' }}</td><td>{{ item.createdDate || operationDate(item) }}</td><td>{{ item.ownerCompany || item.company || '-' }}</td><td>{{ item.note || '-' }}</td><td><button v-if="can('asset:inbound:cancel') && item.status !== '已取消'" class="link inbound-cancel-link" type="button" @click="openAction(item, 'cancel-inbound')">取消入库</button><span v-else class="muted-text">已取消</span></td></tr>
+          <tr v-for="item in displayedRows" :key="operationId(item, 'RK')"><td class="inbound-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'RK')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="inbound-status-pill" :class="assetStatusClass(item.status)">{{ item.status || '已入库' }}</span></td><td><button class="link inbound-order-link" type="button" @click="detail = item">{{ operationId(item, 'RK') }}</button></td><td>{{ item.purchaseMethod || '新增资产' }}</td><td>{{ operationDate(item) }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.purchaser || '-' }}</td><td>{{ item.createdDate || operationDate(item) }}</td><td>{{ item.ownerCompany || item.company || '-' }}</td><td>{{ item.note || '-' }}</td><td><button v-if="can('asset:inbound:cancel') && item.status !== '已取消'" class="link inbound-cancel-link" type="button" @click="openAction(item, 'cancel-inbound')">取消入库</button><span v-else class="muted-text">已取消</span></td></tr>
           <tr v-if="!displayedRows.length" class="empty-row"><td colspan="11">{{ query ? '没有匹配的入库单。' : '暂无入库单，点击新增录入资产。' }}</td></tr>
         </tbody></table></div>
       </div>
@@ -875,7 +875,7 @@ onMounted(() => void load())
       <div class="receive-return-tabs"><button v-for="tab in ([['receive','领用'],['return','退库'],['employee','员工申领'],['handover','交接']] as const)" :key="tab[0]" class="receive-return-tab" :class="{ active: receiveReturnTab === tab[0] }" type="button" @click="receiveReturnTab = tab[0]">{{ tab[1] }}</button></div>
       <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button class="table-action primary" type="button" @click="openBlankAction(receiveAction)">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openOrderPrint(flowOrderPrintKind)">打印{{ receiveReturnTab === 'handover' ? '交接单' : receiveReturnTab === 'employee' ? '员工申领单' : receiveReturnTab === 'return' ? '领用退库单' : '领用单' }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
       <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="advancedOpen = true">高级搜索</button><el-popover placement="bottom-end" :width="260" trigger="click"><template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template><div>{{ receiveReturnTab === 'handover' ? '交接状态、交接单号、经办人、接收人、接收公司、接收部门、操作' : '状态、单号、日期、经办人、领用人、工号、位置、所属公司、资产编码、操作' }}</div></el-popover></div><div class="asset-table-scroll receive-return-table-scroll"><table class="asset-list-table receive-return-table" style="min-width: 1040px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选领用退库单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>{{ receiveReturnTab === 'handover' ? '交接状态' : receiveReturnTab === 'employee' ? '申领状态' : receiveReturnTab === 'return' ? '退库状态' : '领用状态' }}</th><th>{{ receiveReturnTab === 'handover' ? '交接单号' : receiveReturnTab === 'employee' ? '申领单号' : receiveReturnTab === 'return' ? '退库单号' : '领用单号' }}</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领日期' : receiveReturnTab === 'return' ? '退库日期' : '领用日期' }}</th><th>经办人</th><th>{{ receiveReturnTab === 'handover' ? '接收人' : receiveReturnTab === 'employee' ? '申领人' : '领用人' }}</th><th v-if="receiveReturnTab !== 'handover'">工号</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领后位置' : receiveReturnTab === 'return' ? '退库后位置' : '领用后位置' }}</th><th>{{ receiveReturnTab === 'handover' ? '接收公司' : '所属公司' }}</th><th v-if="receiveReturnTab === 'handover'">接收部门</th><th v-else>资产编码</th><th>操作</th></tr></thead><tbody>
-        <tr v-for="item in displayedRows" :key="operationId(item, 'FLOW')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'FLOW')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="legacyStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, receiveReturnTab === 'handover' ? 'JJ' : receiveReturnTab === 'return' ? 'TK' : 'LY') }}</button></td><td v-if="receiveReturnTab !== 'handover'">{{ operationDate(item) }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.employeeCode || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.location || '-' }}</td><td>{{ item.company || item.ownerCompany || '-' }}</td><td v-if="receiveReturnTab === 'handover'">{{ item.department || '-' }}</td><td v-else>{{ item.id }}</td><td><button class="link receive-return-action-link" type="button" @click="detail = item">{{ receiveReturnTab === 'handover' && item.canSign ? '签字' : '查看' }}</button></td></tr>
+        <tr v-for="item in displayedRows" :key="operationId(item, 'FLOW')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'FLOW')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="assetStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, receiveReturnTab === 'handover' ? 'JJ' : receiveReturnTab === 'return' ? 'TK' : 'LY') }}</button></td><td v-if="receiveReturnTab !== 'handover'">{{ operationDate(item) }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.employeeCode || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.location || '-' }}</td><td>{{ item.company || item.ownerCompany || '-' }}</td><td v-if="receiveReturnTab === 'handover'">{{ item.department || '-' }}</td><td v-else>{{ item.id }}</td><td><button class="link receive-return-action-link" type="button" @click="detail = item">{{ receiveReturnTab === 'handover' && item.canSign ? '签字' : '查看' }}</button></td></tr>
         <tr v-if="!displayedRows.length" class="empty-row"><td :colspan="receiveReturnTab === 'handover' ? 9 : 11">{{ query ? '没有匹配的领用退库记录。' : '暂无领用退库记录。' }}</td></tr>
       </tbody></table></div></div>
     </template>
@@ -884,7 +884,7 @@ onMounted(() => void load())
       <div class="receive-return-tabs"><button class="receive-return-tab" :class="{ active: borrowReturnTab === 'borrow' }" type="button" @click="borrowReturnTab = 'borrow'">借用</button><button class="receive-return-tab" :class="{ active: borrowReturnTab === 'return' }" type="button" @click="borrowReturnTab = 'return'">归还</button></div>
       <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button class="table-action primary" type="button" @click="openBlankAction('borrow')">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="notifyBorrowPrint">打印借用归还单</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
       <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="advancedOpen = true">高级搜索</button><el-popover placement="bottom-end" :width="300" trigger="click"><template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template><div>借用状态、借用单号、经办人、借用人、借用日期、借用人公司、借用人部门、工号、手机号、邮箱、借用后位置、签字人、签字图片、借用备注、资产信息、操作</div></el-popover></div><div class="asset-table-scroll receive-return-table-scroll"><table class="asset-list-table receive-return-table borrow-return-table" style="min-width: 1900px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选借用归还单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>借用状态</th><th>借用单号</th><th>经办人</th><th>借用人</th><th>借用日期</th><th>借用人公司</th><th>借用人部门</th><th>工号</th><th>手机号</th><th>邮箱</th><th>借用后位置</th><th>签字人</th><th>签字图片</th><th>借用备注</th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌</th><th>型号</th><th>设备序列号</th><th>操作</th></tr></thead><tbody>
-        <tr v-for="item in displayedRows" :key="operationId(item, 'JY')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'JY')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="legacyStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, 'JY') }}</button></td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td>{{ operationDate(item) }}</td><td>{{ item.company || '-' }}</td><td>{{ item.department || '-' }}</td><td>{{ item.employeeCode || '-' }}</td><td>{{ item.phone || '-' }}</td><td>{{ item.email || '-' }}</td><td>{{ item.location || '-' }}</td><td>{{ item.owner || '-' }}</td><td>-</td><td>{{ item.note || '-' }}</td><td>{{ item.id }}</td><td>{{ item.category || '-' }}</td><td>{{ item.name || '-' }}</td><td>{{ item.brand || '-' }}</td><td>{{ item.model || '-' }}</td><td>{{ item.sn || '-' }}</td><td><template v-if="borrowReturnTab === 'return' && item.operationType === 'BORROW'"><button class="link receive-return-action-link" type="button" @click="openAction(item, 'borrow-return')">归还</button><button class="link receive-return-action-link" type="button" @click="openAction(item, 'borrow')">延期</button></template><button v-else class="link receive-return-action-link" type="button" @click="detail = item">查看</button></td></tr>
+        <tr v-for="item in displayedRows" :key="operationId(item, 'JY')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'JY')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="assetStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, 'JY') }}</button></td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td>{{ operationDate(item) }}</td><td>{{ item.company || '-' }}</td><td>{{ item.department || '-' }}</td><td>{{ item.employeeCode || '-' }}</td><td>{{ item.phone || '-' }}</td><td>{{ item.email || '-' }}</td><td>{{ item.location || '-' }}</td><td>{{ item.owner || '-' }}</td><td>-</td><td>{{ item.note || '-' }}</td><td>{{ item.id }}</td><td>{{ item.category || '-' }}</td><td>{{ item.name || '-' }}</td><td>{{ item.brand || '-' }}</td><td>{{ item.model || '-' }}</td><td>{{ item.sn || '-' }}</td><td><template v-if="borrowReturnTab === 'return' && item.operationType === 'BORROW'"><button class="link receive-return-action-link" type="button" @click="openAction(item, 'borrow-return')">归还</button><button class="link receive-return-action-link" type="button" @click="openAction(item, 'borrow')">延期</button></template><button v-else class="link receive-return-action-link" type="button" @click="detail = item">查看</button></td></tr>
         <tr v-if="!displayedRows.length" class="empty-row"><td colspan="22">{{ query ? (borrowReturnTab === 'return' ? '没有匹配的归还记录。' : '没有匹配的借用记录。') : (borrowReturnTab === 'return' ? '暂无可归还记录。' : '暂无借用记录。') }}</td></tr>
       </tbody></table></div></div>
     </template>
@@ -943,7 +943,7 @@ onMounted(() => void load())
       <template #footer><el-button @click="pickerOpen = false">取消</el-button><el-button type="primary" @click="confirmAssetPicker">下一步</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="createOpen" :title="copySourceId ? '复制资产' : '新增资产'" width="min(1240px, 96vw)" class="legacy-asset-dialog legacy-asset-create-dialog" destroy-on-close append-to-body>
+    <el-dialog v-model="createOpen" :title="copySourceId ? '复制资产' : '新增资产'" width="min(1240px, 96vw)" class="asset-dialog asset-create-dialog" destroy-on-close append-to-body>
       <el-form ref="createFormRef" :model="createDraft" :rules="createRules" label-position="left" class="asset-create-form" @submit.prevent="submitCreate">
         <section class="asset-form-section">
           <div class="asset-form-section-head"><h3>使用信息</h3></div>
@@ -985,7 +985,7 @@ onMounted(() => void load())
       <template #footer><el-button @click="createOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitCreate">确定</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="editOpen" :title="editAction === 'edit' ? '编辑资产' : '批量修改资产'" width="min(1240px, 96vw)" class="legacy-asset-dialog legacy-asset-flow-dialog" append-to-body>
+    <el-dialog v-model="editOpen" :title="editAction === 'edit' ? '编辑资产' : '批量修改资产'" width="min(1240px, 96vw)" class="asset-dialog asset-flow-dialog" append-to-body>
       <el-form label-position="left" class="asset-create-form asset-edit-form">
         <template v-if="editAction === 'edit'">
           <section class="asset-form-section">
@@ -1039,7 +1039,7 @@ onMounted(() => void load())
       <template #footer><el-button @click="editOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitEdit">确定</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="actionOpen" :title="actionDialogTitle" :width="actionForm.action === 'cancel-inbound' ? 'min(620px, 94vw)' : 'min(1240px, 96vw)'" class="legacy-asset-dialog legacy-asset-flow-dialog" append-to-body>
+    <el-dialog v-model="actionOpen" :title="actionDialogTitle" :width="actionForm.action === 'cancel-inbound' ? 'min(620px, 94vw)' : 'min(1240px, 96vw)'" class="asset-dialog asset-flow-dialog" append-to-body>
       <el-alert v-if="actionForm.action === 'cancel-inbound'" title="撤销后对应资产将从资产列表移除，请确认尚未投入使用。" type="warning" :closable="false" />
       <el-form v-else label-position="left" class="asset-flow-form" :class="{ 'receive-flow-form': actionForm.action === 'receive', 'borrow-flow-form': actionForm.action === 'borrow', 'handover-flow-form': actionForm.action === 'handover' }">
         <section class="asset-flow-section">
@@ -1067,7 +1067,7 @@ onMounted(() => void load())
       <template #footer><el-button @click="actionOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitAction">{{ actionForm.action === 'cancel-inbound' ? '确认撤销' : '保存并提交' }}</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="importOpen" :title="importTitle" width="min(820px, 94vw)" class="legacy-asset-dialog legacy-asset-import-dialog" append-to-body>
+    <el-dialog v-model="importOpen" :title="importTitle" width="min(820px, 94vw)" class="asset-dialog asset-import-dialog" append-to-body>
       <div class="asset-import-form">
         <label class="asset-upload-drop" :class="{ 'drag-over': importDragActive }" tabindex="0" @keydown.enter.prevent="importFileInput?.click()" @keydown.space.prevent="importFileInput?.click()" @dragenter.prevent="importDragActive = true" @dragover.prevent="importDragActive = true" @dragleave.prevent="importDragActive = false" @drop.prevent="dropImportFile"><input ref="importFileInput" type="file" accept=".xls,.xlsx" hidden @change="readImportFile"><span class="upload-cloud" aria-hidden="true">☁</span><strong>{{ importFileName ? '已选择表格' : '上传表格' }}</strong><span data-asset-upload-hint>{{ importFileName ? '点击或拖拽可重新选择文件' : '也可直接拖拽到此处上传(支持格式: xls、xlsx)' }}</span><span v-if="importFileName" class="asset-upload-file">{{ importFileName }} · {{ importFileSize }}</span></label>
         <a v-if="importMode === 'asset'" class="asset-template-download" href="/assets/asset-import-template.xlsx" :download="importTemplateName">⇩ {{ importTemplateName }}</a>
@@ -1081,11 +1081,11 @@ onMounted(() => void load())
       <template #footer><el-button @click="importOpen = false">取消</el-button><el-button type="primary" :disabled="!validImportRows.length" :loading="submitting" @click="submitImport">确定</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="printOpen" :title="labelPrintTitle" width="min(760px, calc(100vw - 48px))" append-to-body class="standard-print-dialog legacy-asset-label-print-dialog">
+    <el-dialog v-model="printOpen" :title="labelPrintTitle" width="min(760px, calc(100vw - 48px))" append-to-body class="standard-print-dialog asset-label-print-dialog">
       <AssetLabelPrintPreview :assets="labelPrintRows" :settings="printSettings" :custom-templates="printTemplates" @print="printNow" />
     </el-dialog>
 
-    <el-dialog v-model="orderPrintOpen" :title="orderPrintTitle" width="min(1080px, 94vw)" append-to-body class="standard-print-dialog legacy-order-print-dialog">
+    <el-dialog v-model="orderPrintOpen" :title="orderPrintTitle" width="min(1080px, 94vw)" append-to-body class="standard-print-dialog order-print-dialog">
       <AssetOrderPrintPreview :kind="orderPrintKind" :rows="orderPrintRows" :current-user="user?.name" />
       <template #footer><el-button @click="orderPrintOpen = false">取消</el-button><el-button type="primary" @click="printOrderNow">打印</el-button></template>
     </el-dialog>

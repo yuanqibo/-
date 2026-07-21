@@ -446,7 +446,7 @@ test.describe('登录后门户质量回归', () => {
     const qr = dialog.locator('svg.asset-label-qr')
     await expect(qr).toHaveCount(1)
     await expect(qr.locator('path')).toHaveAttribute('d', /M\d/)
-    const panel = dialog.locator('.el-dialog.legacy-asset-label-print-dialog')
+    const panel = dialog.locator('.el-dialog.asset-label-print-dialog')
     await expect(panel).toHaveCount(1)
     await expect(panel).toHaveCSS('background-color', 'rgb(17, 17, 17)')
   })
@@ -522,7 +522,7 @@ test.describe('登录后门户质量回归', () => {
 
     await page.getByRole('button', { name: '新建盘点', exact: true }).click()
     const stocktakeDialog = page.getByRole('dialog', { name: '新建盘点' })
-    await expect(stocktakeDialog.locator('.legacy-business-form')).toHaveCSS('grid-template-columns', /.+ .+/)
+    await expect(stocktakeDialog.locator('.business-form')).toHaveCSS('grid-template-columns', /.+ .+/)
     await expectUnifiedControlFrames(stocktakeDialog)
     for (const label of ['任务名称', '盘点范围', '负责人', '应盘数量', '计划日期']) {
       await expect(stocktakeDialog.locator('.el-form-item').filter({ hasText: label })).toHaveCount(1)
@@ -683,7 +683,7 @@ test.describe('登录后门户质量回归', () => {
     await openApp(page, '/assets/stocktake')
     await page.getByRole('button', { name: '新建盘点', exact: true }).click()
     let dialog = page.getByRole('dialog', { name: '新建盘点' })
-    await expect(dialog.locator('.legacy-business-form .field')).toHaveCount(5)
+    await expect(dialog.locator('.business-form .field')).toHaveCount(5)
     await expect(dialog.getByRole('button', { name: '确定', exact: true })).toBeVisible()
     await dialog.getByRole('button', { name: '取消', exact: true }).click()
 

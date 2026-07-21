@@ -1123,8 +1123,8 @@ button {
   padding: 16px 40px;
 }
 
-.el-dialog.legacy-catalog-dialog,
-.el-dialog.legacy-business-dialog {
+.el-dialog.catalog-dialog,
+.el-dialog.business-dialog {
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
@@ -1133,46 +1133,46 @@ button {
   overflow: hidden;
 }
 
-.legacy-catalog-dialog .el-dialog__header,
-.legacy-business-dialog .el-dialog__header {
+.catalog-dialog .el-dialog__header,
+.business-dialog .el-dialog__header {
   flex: 0 0 auto;
   margin: 0;
   padding: 18px 24px;
   border-bottom: 1px solid var(--line);
 }
 
-.legacy-catalog-dialog .el-dialog__body {
+.catalog-dialog .el-dialog__body {
   min-height: 0;
   flex: 1 1 auto;
   padding: 0;
   overflow: auto;
 }
 
-.legacy-business-dialog .el-dialog__body {
+.business-dialog .el-dialog__body {
   min-height: 0;
   flex: 1 1 auto;
   padding: 24px;
   overflow: auto;
 }
 
-.legacy-business-dialog .el-dialog__footer {
+.business-dialog .el-dialog__footer {
   flex: 0 0 auto;
   padding: 14px 24px 16px;
   border-top: 1px solid var(--line);
 }
 
-.legacy-business-form .el-form-item.field {
+.business-form .el-form-item.field {
   margin: 0;
 }
 
-.legacy-business-form .el-form-item__label {
+.business-form .el-form-item__label {
   width: auto;
   height: auto;
   margin: 0;
 }
 
-.legacy-business-form .el-form-item__content,
-.legacy-business-form .el-input-number {
+.business-form .el-form-item__content,
+.business-form .el-input-number {
   width: 100%;
 }
 
@@ -1199,10 +1199,10 @@ button {
     padding: 18px 22px;
   }
 
-  .legacy-catalog-dialog .el-dialog__header,
-  .legacy-business-dialog .el-dialog__header,
-  .legacy-business-dialog .el-dialog__body,
-  .legacy-business-dialog .el-dialog__footer {
+  .catalog-dialog .el-dialog__header,
+  .business-dialog .el-dialog__header,
+  .business-dialog .el-dialog__body,
+  .business-dialog .el-dialog__footer {
     padding-left: 14px;
     padding-right: 14px;
   }
@@ -10187,7 +10187,7 @@ body.is-resizing-column * {
   padding: 0;
 }
 
-.el-dialog.legacy-asset-label-print-dialog {
+.el-dialog.asset-label-print-dialog {
   max-height: calc(100vh - 24px);
   margin-top: 12px;
   margin-bottom: 12px;
@@ -10195,12 +10195,12 @@ body.is-resizing-column * {
   background: #111111;
 }
 
-.legacy-asset-label-print-dialog .el-dialog__header,
-.legacy-asset-label-print-dialog .el-dialog__footer {
+.asset-label-print-dialog .el-dialog__header,
+.asset-label-print-dialog .el-dialog__footer {
   display: none;
 }
 
-.legacy-asset-label-print-dialog .el-dialog__body {
+.asset-label-print-dialog .el-dialog__body {
   max-height: calc(100vh - 24px);
   overflow: auto;
   padding: 0;
@@ -11376,7 +11376,7 @@ body.is-resizing-column * {
   padding-top: 8px;
 }
 
-.el-dialog.legacy-asset-dialog {
+.el-dialog.asset-dialog {
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
@@ -11385,27 +11385,27 @@ body.is-resizing-column * {
   overflow: hidden;
 }
 
-.legacy-asset-dialog .el-dialog__header {
+.asset-dialog .el-dialog__header {
   flex: 0 0 auto;
   margin: 0;
   padding: 18px 24px;
   border-bottom: 1px solid var(--line);
 }
 
-.legacy-asset-dialog .el-dialog__title {
+.asset-dialog .el-dialog__title {
   color: #1f2937;
   font-size: 20px;
   font-weight: 500;
 }
 
-.legacy-asset-dialog .el-dialog__body {
+.asset-dialog .el-dialog__body {
   min-height: 0;
   flex: 1 1 auto;
   padding: 20px 24px;
   overflow: auto;
 }
 
-.legacy-asset-dialog .el-dialog__footer {
+.asset-dialog .el-dialog__footer {
   flex: 0 0 auto;
   padding: 14px 24px 16px;
   border-top: 1px solid var(--line);
@@ -11455,8 +11455,8 @@ body.is-resizing-column * {
 .asset-create-form .el-select__wrapper,
 .asset-flow-form .el-input__wrapper,
 .asset-flow-form .el-select__wrapper,
-.legacy-business-form .el-input__wrapper,
-.legacy-business-form .el-select__wrapper {
+.business-form .el-input__wrapper,
+.business-form .el-select__wrapper {
   min-height: 38px;
   border-radius: 7px;
 }
@@ -11481,8 +11481,8 @@ body.is-resizing-column * {
 .asset-create-form .el-select__input,
 .asset-flow-form .el-input__inner,
 .asset-flow-form .el-select__input,
-.legacy-business-form .el-input__inner,
-.legacy-business-form .el-select__input {
+.business-form .el-input__inner,
+.business-form .el-select__input {
   height: 100%;
   min-height: 0;
   border: 0;
@@ -12837,9 +12837,9 @@ body.is-resizing-column * {
     gap: 8px;
   }
 
-  .legacy-asset-dialog .el-dialog__header,
-  .legacy-asset-dialog .el-dialog__body,
-  .legacy-asset-dialog .el-dialog__footer {
+  .asset-dialog .el-dialog__header,
+  .asset-dialog .el-dialog__body,
+  .asset-dialog .el-dialog__footer {
     padding-left: 14px;
     padding-right: 14px;
   }

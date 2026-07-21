@@ -428,7 +428,7 @@ onMounted(async () => { await load(); syncFromStore() })
       </div>
     </section>
 
-    <el-dialog v-model="catalogDialog" :title="catalogDialogTitle" width="min(680px, 94vw)" class="legacy-catalog-dialog" append-to-body>
+    <el-dialog v-model="catalogDialog" :title="catalogDialogTitle" width="min(680px, 94vw)" class="catalog-dialog" append-to-body>
       <form class="location-form" :class="{ 'asset-category-form': kind === 'categories' }" @submit.prevent="saveCatalogNode">
         <div class="location-form-body">
           <label v-if="kind === 'categories'" class="location-form-row"><span><em>*</em> 分类编码：</span><input v-model="catalogForm.code" required placeholder="请输入" autocomplete="off"></label>

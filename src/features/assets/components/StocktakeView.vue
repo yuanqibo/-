@@ -49,8 +49,8 @@ onMounted(() => void load())
       <template v-if="detail"><div class="detail-grid"><div v-for="field in [['任务编号', detail.id], ['盘点范围', detail.scope], ['负责人', detail.owner], ['应盘数量', detail.total || 0], ['已盘数量', detail.checked || 0], ['差异数量', detail.diff || 0], ['计划日期', detail.date || '-']]" :key="String(field[0])" class="detail-item"><span class="detail-label">{{ field[0] }}</span><strong class="detail-value">{{ field[1] }}</strong></div><div class="detail-item"><span class="detail-label">状态</span><strong class="detail-value"><span class="tag blue">{{ detail.progress || '未开始' }}</span></strong></div></div><h3>差异处理</h3><div class="timeline"><div class="timeline-item"><div class="timeline-date">盘亏</div><div><div class="timeline-title">{{ detail.diff || 0 }} 项差异待核查</div><div class="timeline-desc">建议发起资产核查或报废流程。</div></div></div><div class="timeline-item"><div class="timeline-date">照片</div><div><div class="timeline-title">盘点照片待审核</div><div class="timeline-desc">移动端上传照片带时间和位置水印。</div></div></div></div></template>
     </el-drawer>
 
-    <el-dialog v-model="createOpen" title="新建盘点" width="min(720px, 94vw)" class="legacy-business-dialog" append-to-body>
-      <el-form class="form-grid legacy-business-form" label-position="top" @submit.prevent="submitCreate">
+    <el-dialog v-model="createOpen" title="新建盘点" width="min(720px, 94vw)" class="business-dialog" append-to-body>
+      <el-form class="form-grid business-form" label-position="top" @submit.prevent="submitCreate">
         <el-form-item class="field" label="任务名称" required><el-input v-model="createForm.name" /></el-form-item>
         <el-form-item class="field" label="盘点范围" required><el-input v-model="createForm.scope" /></el-form-item>
         <el-form-item class="field" label="负责人" required><el-input v-model="createForm.owner" /></el-form-item>
