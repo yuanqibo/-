@@ -6,7 +6,8 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: './ecp', replacement: new URL('./tests/e2e/mocks/ecp.ts', import.meta.url).pathname },
-      { find: '../../ecp', replacement: new URL('./tests/e2e/mocks/ecp.ts', import.meta.url).pathname }
+      { find: '../../ecp', replacement: new URL('./tests/e2e/mocks/ecp.ts', import.meta.url).pathname },
+      { find: '@acg/ecp-auth-vue/workspace/vue', replacement: new URL('./tests/e2e/mocks/AuthzWorkspaceHost.vue', import.meta.url).pathname }
     ]
   },
   server: {

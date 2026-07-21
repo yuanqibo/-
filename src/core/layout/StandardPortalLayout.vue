@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { usePortalSession } from '../auth/portal-session'
 import { useTerminalMode, type PortalTerminalMode } from '../auth/terminal-mode'
 import type { PortalMenuItem } from '../auth/portal-context'
+import { MEMBER_AUTHORIZATION_PORTAL_PATH } from '../routing/standard-routes'
 import PortalNavIcon from './PortalNavIcon.vue'
 import { subnavScrollState } from './subnav-scroll-state'
 
@@ -22,6 +23,9 @@ const { isEmployeeTerminal, canSwitchTerminal, setTerminalMode } = useTerminalMo
 const openAssetGroups = ref(new Set<string>())
 const assetSubnav = ref<HTMLElement>()
 const systemSubnav = ref<HTMLElement>()
+const layoutActive = ref(true)
+const routePreloads = new Map<string, Promise<void>>()
+let idlePreloadScheduled = false
 
 const resolvedSection = computed<Exclude<LayoutSection, 'auto'>>(() => {
   if (ready.value && isEmployeeTerminal.value && (props.section === 'assets' || route.path.startsWith('/assets'))) return 'none'
@@ -54,7 +58,29 @@ const primaryActive = (item: PortalMenuItem): boolean => {
   return route.path === item.path
 }
 
-const routePathForMenu = (item: PortalMenuItem): string => item.path
+const routePathForMenu = (item: PortalMenuItem): string =>
+  item.id === 'authz.workspace' ? MEMBER_AUTHORIZATION_PORTAL_PATH : item.path
+
+const preloadPath = (path: string): Promise<void> => {
+  const existing = routePreloads.get(path)
+  if (existing) return existing
+  const loaders = router.resolve(path).matched.flatMap((record) => Object.values(record.components || {}))
+    .filter((component): component is () => Promise<unknown> => typeof component === 'function')
+  const preload = Promise.all(loaders.map((loader) => Promise.resolve(loader()))).then(() => undefined).catch(() => {
+    routePreloads.delete(path)
+  })
+  routePreloads.set(path, preload)
+  return preload
+}
+const preloadMenuRoute = (item: PortalMenuItem): void => { void preloadPath(routePathForMenu(item)) }
+const scheduleRoutePreload = (): void => {
+  if (idlePreloadScheduled) return
+  idlePreloadScheduled = true
+  const preload = () => menuItems.value.forEach(preloadMenuRoute)
+  const idleWindow = window as Window & { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number }
+  if (idleWindow.requestIdleCallback) idleWindow.requestIdleCallback(preload, { timeout: 1200 })
+  else window.setTimeout(preload, 180)
+}
 
 const rememberSubnavScroll = (force = false): void => {
   if (subnavScrollState.navigationPending && !force) return
@@ -70,9 +96,11 @@ const restoreSubnavScroll = async (): Promise<void> => {
 }
 
 const navigate = (item: PortalMenuItem): void => {
+  const target = routePathForMenu(item)
+  if (target === route.path) return
   rememberSubnavScroll(true)
   subnavScrollState.navigationPending = true
-  void router.push(routePathForMenu(item)).finally(async () => {
+  void router.push(target).finally(async () => {
     await restoreSubnavScroll()
     subnavScrollState.navigationPending = false
   })
@@ -89,7 +117,14 @@ const switchTerminal = (mode: PortalTerminalMode): void => {
 }
 const reload = (): void => window.location.reload()
 const avatarText = computed(() => String(user.value?.name || user.value?.account || '用').trim().slice(0, 1))
-const documentTitle = computed(() => props.pageTitle || route.meta.title as string || '资产云管家')
+const documentTitle = computed(() => route.meta.title as string || props.pageTitle || '资产云管家')
+const syncActiveLayout = (): void => {
+  document.body.classList.remove('auth-view', 'has-secondary-nav', 'self-service-view')
+  document.body.classList.add('standard-vue-route')
+  document.body.classList.toggle('employee-terminal-view', ready.value && isEmployeeTerminal.value)
+  document.title = `资产云管家 - ${documentTitle.value}`
+  void restoreSubnavScroll()
+}
 
 const hasActiveAssetChild = (item: PortalMenuItem): boolean =>
   assetChildren(item.id).some((child) => route.path === child.path)
@@ -113,21 +148,28 @@ watch([ready, isEmployeeTerminal, () => route.path], ([sessionReady, employee, p
 }, { immediate: true })
 
 onMounted(() => {
-  document.body.classList.remove('auth-view', 'has-secondary-nav', 'self-service-view')
-  document.body.classList.add('standard-vue-route')
-  document.body.classList.toggle('employee-terminal-view', ready.value && isEmployeeTerminal.value)
-  document.title = `资产云管家 - ${documentTitle.value}`
-  void restoreSubnavScroll()
+  syncActiveLayout()
+  scheduleRoutePreload()
 })
 
-watch(documentTitle, (title) => { document.title = `资产云管家 - ${title}` })
+onActivated(() => {
+  layoutActive.value = true
+  syncActiveLayout()
+})
+onDeactivated(() => {
+  layoutActive.value = false
+  document.body.classList.remove('standard-vue-route', 'employee-terminal-view')
+})
+
+watch(documentTitle, (title) => { if (layoutActive.value) document.title = `资产云管家 - ${title}` })
 watch([ready, isEmployeeTerminal], ([sessionReady, employee]) => {
-  document.body.classList.toggle('employee-terminal-view', sessionReady && employee)
+  if (layoutActive.value) document.body.classList.toggle('employee-terminal-view', sessionReady && employee)
 })
 
-onBeforeUnmount(rememberSubnavScroll)
+onBeforeUnmount(() => { if (layoutActive.value) rememberSubnavScroll() })
 
 onUnmounted(() => {
+  if (!layoutActive.value) return
   document.body.classList.remove('standard-vue-route')
   document.body.classList.remove('employee-terminal-view')
 })
@@ -164,7 +206,7 @@ onUnmounted(() => {
           <div v-for="item in primaryMenus" :key="item.id" class="nav-group" :class="{ 'has-children': item.id === 'assets' }">
             <button class="nav-item" :class="{ active: primaryActive(item) }" type="button"
               :title="item.id === 'requests' ? (isEmployeeTerminal ? '申请' : '审批') : item.title"
-              :aria-current="primaryActive(item) ? 'page' : undefined" @click="navigate(item)">
+              :aria-current="primaryActive(item) ? 'page' : undefined" @pointerenter="preloadMenuRoute(item)" @focus="preloadMenuRoute(item)" @click="navigate(item)">
               <span class="nav-icon"><PortalNavIcon :kind="item.id" /></span>
               <span class="nav-label">{{ item.id === 'requests' ? (isEmployeeTerminal ? '申请' : '审批') : item.title }}</span>
             </button>
@@ -191,9 +233,9 @@ onUnmounted(() => {
               <div class="asset-subnav-list">
                 <button v-for="item in systemMenus" :key="item.id" class="asset-subnav-item"
                   :class="{ active: route.path === routePathForMenu(item) }" type="button"
-                  :aria-current="route.path === routePathForMenu(item) ? 'page' : undefined" @click="navigate(item)">
+                  :aria-current="route.path === routePathForMenu(item) ? 'page' : undefined" @pointerenter="preloadMenuRoute(item)" @focus="preloadMenuRoute(item)" @click="navigate(item)">
                   <span class="asset-subnav-dot" aria-hidden="true"></span>
-                  <span class="asset-subnav-label">{{ item.title }}</span>
+                  <span class="asset-subnav-label">{{ item.id === 'authz.workspace' ? '成员授权' : item.title }}</span>
                 </button>
               </div>
             </div>
@@ -207,22 +249,24 @@ onUnmounted(() => {
               <div class="asset-subnav-heading"><span class="asset-subnav-accent" aria-hidden="true"></span><h2>资产</h2></div>
               <div class="asset-subnav-rule" aria-hidden="true"></div>
               <div class="asset-subnav-list">
-                <button v-if="assetRootMenu" class="asset-subnav-item" :class="{ active: route.path === assetRootMenu.path }" type="button" @click="navigate(assetRootMenu)">
+                <button v-if="assetRootMenu" class="asset-subnav-item" :class="{ active: route.path === assetRootMenu.path }" type="button" @pointerenter="preloadMenuRoute(assetRootMenu)" @focus="preloadMenuRoute(assetRootMenu)" @click="navigate(assetRootMenu)">
                   <span class="asset-subnav-dot" aria-hidden="true"></span><span class="asset-subnav-label">资产列表</span>
                 </button>
                 <template v-for="item in assetMenus" :key="item.id">
                   <div v-if="assetChildren(item.id).length" class="asset-subnav-group" :class="{ open: openAssetGroups.has(item.id) }">
                     <button class="asset-subnav-item asset-subnav-parent" :class="{ active: route.path === item.path || hasActiveAssetChild(item) }"
-                      type="button" :aria-expanded="openAssetGroups.has(item.id)" @click="toggleAssetGroup(item.id)">
+                      type="button" :aria-expanded="openAssetGroups.has(item.id)" @pointerenter="preloadMenuRoute(item)" @focus="preloadMenuRoute(item)" @click="toggleAssetGroup(item.id)">
                       <span class="asset-subnav-dot" aria-hidden="true"></span><span class="asset-subnav-label">{{ item.title }}</span>
                       <span class="asset-subnav-caret" aria-hidden="true"></span>
                     </button>
-                    <div v-show="openAssetGroups.has(item.id)" class="asset-subnav-children" :aria-hidden="!openAssetGroups.has(item.id)">
-                      <button v-for="child in assetChildren(item.id)" :key="child.id" class="asset-subnav-child"
-                        :class="{ active: route.path === child.path }" type="button" @click="navigate(child)">{{ child.title }}</button>
+                    <div class="asset-subnav-children" :aria-hidden="!openAssetGroups.has(item.id)" :inert="!openAssetGroups.has(item.id)">
+                      <div class="asset-subnav-children-inner">
+                        <button v-for="child in assetChildren(item.id)" :key="child.id" class="asset-subnav-child"
+                          :class="{ active: route.path === child.path }" type="button" @pointerenter="preloadMenuRoute(child)" @focus="preloadMenuRoute(child)" @click="navigate(child)">{{ child.title }}</button>
+                      </div>
                     </div>
                   </div>
-                  <button v-else class="asset-subnav-item" :class="{ active: route.path === item.path }" type="button" @click="navigate(item)">
+                  <button v-else class="asset-subnav-item" :class="{ active: route.path === item.path }" type="button" @pointerenter="preloadMenuRoute(item)" @focus="preloadMenuRoute(item)" @click="navigate(item)">
                     <span class="asset-subnav-dot" aria-hidden="true"></span><span class="asset-subnav-label">{{ item.title }}</span>
                   </button>
                 </template>

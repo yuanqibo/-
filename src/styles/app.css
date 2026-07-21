@@ -26,12 +26,7 @@ body:has(.authz-workspace-host) #app {
   box-sizing: border-box !important;
 }
 
-/*
- * ECP 账号管理工作台由 SDK 在 /workspace 独立路由中渲染；这里用 SDK
- * 暴露的严格作用域做窄范围覆盖。
- * 目标是保持「左侧账号/部门树 + 右侧账号表」的横向布局，避免 1200px
- * 以下被 SDK 默认媒体查询折叠成上下结构。
- */
+/* Keep the SDK workspace dense and contained inside the system content area. */
 .authz-workspace-host .workspace-account-management {
   display: flex !important;
   flex-direction: column !important;
@@ -47,15 +42,15 @@ body:has(.authz-workspace-host) #app {
 .authz-workspace-host .target-workspace {
   height: 100% !important;
   min-height: 0 !important;
-  max-height: 100vh !important;
+  max-height: none !important;
   overflow: hidden !important;
 }
 
 .authz-workspace-host {
-  position: fixed !important;
-  inset: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .authz-workspace-host .target-workspace {

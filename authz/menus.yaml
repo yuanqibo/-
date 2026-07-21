@@ -176,7 +176,7 @@ menus:
       - PORTAL_SETTINGS
   - id: authz.workspace
     parentId: settings
-    title: 账号管理
+    title: 成员授权
     icon: Lock
     path: /workspace
     pageKey: authz.workspace

@@ -99,13 +99,41 @@ test.describe('登录后门户质量回归', () => {
       ['/assets/settings', '资产设置'], ['/assets/settings/locations', '位置管理'], ['/assets/settings/categories', '资产分类'],
       ['/assets/settings/code-rules', '资产编码规则'], ['/assets/settings/label-templates', '标签模板设置'], ['/requests', '审批'],
       ['/system/employees', '员工信息'], ['/system/departments', '组织架构'], ['/system/self-service', '员工自助'],
-      ['/workspace', '账号管理'], ['/system/integrations', '系统对接'], ['/system/forms', '表单管理']
+      ['/system/member-authorization', '成员授权'], ['/system/integrations', '系统对接'], ['/system/forms', '表单管理']
     ] as const
     for (const [path, text] of routes) {
       await page.goto(path)
       await expect(page.getByText(text, { exact: true }).first()).toBeVisible()
       await expectNoPageOverflow(page)
     }
+  })
+
+  test('成员授权保持在系统目录内且不再使用全屏 iframe', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '成员授权工作区布局在桌面项目执行')
+    await openApp(page, '/system/member-authorization')
+
+    const activeMenu = page.locator('.system-menu .asset-subnav-item.active')
+    await expect(activeMenu).toHaveText('成员授权')
+    await expect(page.locator('.member-authorization-view iframe')).toHaveCount(0)
+    await expect(page.getByText('应用角色', { exact: true }).first()).toBeVisible()
+
+    const geometry = await page.locator('.member-authorization-workspace').evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const content = element.closest('.standard-system-content')?.getBoundingClientRect()
+      return {
+        position: getComputedStyle(element).position,
+        left: rect.left,
+        right: rect.right,
+        contentLeft: content?.left || 0,
+        contentRight: content?.right || 0
+      }
+    })
+    expect(geometry.position).not.toBe('fixed')
+    expect(geometry.left).toBeGreaterThanOrEqual(geometry.contentLeft)
+    expect(geometry.right).toBeLessThanOrEqual(geometry.contentRight)
+
+    await page.goto('/workspace')
+    await expect(page).toHaveURL('/system/member-authorization')
   })
 
   test('资产导航保留迁移前的选中样式与展开交互', async ({ page, isMobile }) => {
@@ -119,6 +147,12 @@ test.describe('登录后门户质量回归', () => {
     await expect(children).toBeHidden()
     await parent.click()
     await expect(parent).toHaveAttribute('aria-expanded', 'true')
+    await page.waitForTimeout(80)
+    const expandingHeight = await children.evaluate((element) => element.getBoundingClientRect().height)
+    await page.waitForTimeout(360)
+    const expandedHeight = await children.evaluate((element) => element.getBoundingClientRect().height)
+    expect(expandingHeight).toBeGreaterThan(0)
+    expect(expandingHeight).toBeLessThan(expandedHeight)
     await expect(children).toBeVisible()
     const expansion = await page.locator('.asset-subnav-group').evaluate((element) => {
       const parentRect = element.querySelector('.asset-subnav-parent')?.getBoundingClientRect()
@@ -134,6 +168,8 @@ test.describe('登录后门户质量回归', () => {
     await expect(parent).toHaveCSS('background-color', 'rgb(238, 249, 255)')
     await expect(activeChild).toHaveText('位置管理')
     await expect(activeChild).toHaveCSS('color', 'rgb(255, 255, 255)')
+    await activeChild.hover()
+    await expect.poll(() => activeChild.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m41)).toBeGreaterThan(2)
 
     await parent.click()
     await expect(parent).toHaveAttribute('aria-expanded', 'false')
@@ -154,6 +190,28 @@ test.describe('登录后门户质量回归', () => {
     await page.getByRole('button', { name: '标签模板设置', exact: true }).click()
     await expect(page).toHaveURL('/assets/settings/label-templates')
     await expect.poll(() => page.locator('.standard-assets-page .asset-subnav').evaluate((element) => element.scrollTop)).toBeGreaterThanOrEqual(scrollTopBeforeNavigation - 2)
+  })
+
+  test('模块切换复用已打开页面并保留现场', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '模块缓存与桌面侧栏切换在桌面项目执行')
+    await openApp(page, '/assets')
+    const listView = page.locator('.asset-directory-view')
+    await listView.evaluate((element) => { element.setAttribute('data-cache-probe', 'kept') })
+    await page.getByPlaceholder('搜索', { exact: true }).fill('测试笔记本')
+
+    await page.getByRole('button', { name: '资产入库', exact: true }).click()
+    await expect(page).toHaveURL('/assets/inbound')
+    await page.getByRole('button', { name: '资产列表', exact: true }).click()
+    await expect(page).toHaveURL('/assets')
+    await expect(page.locator('.asset-directory-view')).toHaveAttribute('data-cache-probe', 'kept')
+    await expect(page.getByPlaceholder('搜索', { exact: true })).toHaveValue('测试笔记本')
+
+    await page.getByRole('button', { name: '系统', exact: true }).click()
+    await expect(page).toHaveURL('/system/employees')
+    await page.getByRole('button', { name: '资产', exact: true }).click()
+    await expect(page).toHaveURL('/assets')
+    await page.getByRole('button', { name: '系统', exact: true }).click()
+    await expect(page).toHaveURL('/system/employees')
   })
 
   test('管理员保留员工端切换与员工视图', async ({ page, isMobile }) => {
@@ -184,6 +242,20 @@ test.describe('登录后门户质量回归', () => {
     }
     await expect(page.getByText('最近资产', { exact: true })).toHaveCount(0)
     await expect(page.getByText('最近审批', { exact: true })).toHaveCount(0)
+    const bars = page.locator('.asset-distribution-bar:has(strong)')
+    await expect(bars).toHaveCount(5)
+    const barLayout = await bars.evaluateAll((elements) => elements.map((element) => {
+      const fill = element.querySelector('span')
+      const value = element.querySelector('strong')
+      return {
+        heightVariable: getComputedStyle(element).getPropertyValue('--bar-height').trim(),
+        fillHeight: fill?.getBoundingClientRect().height || 0,
+        valueBottom: value ? getComputedStyle(value).bottom : 'auto'
+      }
+    }))
+    expect(barLayout.every((item) => item.heightVariable.endsWith('%')), JSON.stringify(barLayout)).toBe(true)
+    expect(barLayout.every((item) => item.fillHeight > 0), JSON.stringify(barLayout)).toBe(true)
+    expect(barLayout.every((item) => item.valueBottom !== 'auto'), JSON.stringify(barLayout)).toBe(true)
   })
 
   test('资产搜索、分页、详情和高级筛选可用', async ({ page, isMobile }) => {
@@ -210,7 +282,42 @@ test.describe('登录后门户质量回归', () => {
     await expect(drawer).toBeHidden()
 
     await page.getByRole('button', { name: '高级搜索', exact: true }).click()
-    await expect(page.getByRole('heading', { name: '高级筛选', exact: true })).toBeVisible()
+    const advancedDrawer = page.getByRole('dialog', { name: '高级筛选' })
+    await expect(advancedDrawer).toBeVisible()
+    for (const label of ['资产编码', '资产名称', '品牌/类型', '型号', '设备序列号', '使用人', '所属部门', '所在位置', '供应商', '风险状态', '资产标签']) {
+      await expect(advancedDrawer.getByText(label, { exact: true })).toBeVisible()
+    }
+    const brandType = advancedDrawer.locator('.el-form-item').filter({ hasText: '品牌/类型' }).locator('input')
+    await brandType.fill('不存在的品牌')
+    await expect(page.getByText('测试笔记本', { exact: true })).toBeVisible()
+    await advancedDrawer.getByRole('button', { name: '查询', exact: true }).click()
+    await expect(page.getByText('测试笔记本', { exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: '高级搜索', exact: true }).click()
+    await advancedDrawer.getByRole('button', { name: '重置', exact: true }).click()
+    await expect(page.getByText('测试笔记本', { exact: true })).toBeVisible()
+  })
+
+  test('各资产单据板块使用各自的高级搜索字段', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '密集单据筛选在桌面项目执行')
+    const cases = [
+      { path: '/assets/inbound', labels: ['入库状态', '入库单号', '入库类型', '入库日期', '入库人', '采购人', '所属公司'] },
+      { path: '/assets/receive-return', labels: ['领用状态', '领用单号', '领用日期', '经办人', '领用人', '领用后使用公司', '领用后使用部门', '领用后所在位置', '领用备注', '资产编码', '资产名称', '品牌', '型号', '设备序列号', '管理员', '所属/承租公司'] },
+      { path: '/assets/borrow-return', labels: ['借用状态', '借用单号', '经办人', '借用人', '借用日期', '预计归还', '资产编码', '设备序列号', '借用人公司', '借用人部门', '工号', '手机号', '邮箱', '借用后位置'] }
+    ]
+    await installApiMocks(page)
+    for (const item of cases) {
+      await page.goto(item.path)
+      await page.getByRole('button', { name: '高级搜索', exact: true }).click()
+      const drawer = page.getByRole('dialog', { name: '高级筛选' })
+      for (const label of item.labels) await expect(drawer.getByText(label, { exact: true })).toBeVisible()
+      await drawer.locator('.el-form-item').filter({ hasText: item.labels[1] }).locator('input').fill('NO-MATCH')
+      await drawer.getByRole('button', { name: '查询', exact: true }).click()
+      await expect(page.locator('.asset-list-table .empty-row')).toBeVisible()
+      await page.getByRole('button', { name: '高级搜索', exact: true }).click()
+      await drawer.getByRole('button', { name: '重置', exact: true }).click()
+      await expect(page.locator('.asset-list-table .empty-row')).toHaveCount(0)
+      await page.keyboard.press('Escape')
+    }
   })
 
   test('新增资产表单提交到既有 API', async ({ page, isMobile }) => {

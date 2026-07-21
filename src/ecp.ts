@@ -74,6 +74,20 @@ export const ecp = createEcpSdk({
 
 let ecpReadyPromise: Promise<void> = Promise.resolve()
 let localDoctorReport: DoctorReport | null = null
+let workspacePreloadPromise: Promise<void> | null = null
+
+export const preloadMemberAuthorizationWorkspace = (): Promise<void> => {
+  if (!workspacePreloadPromise) {
+    workspacePreloadPromise = Promise.all([
+      import('@acg/ecp-auth-vue/workspace/loader').then((module) => module.registerAuthzWorkspaceElement()),
+      import('@acg/ecp-auth-vue/workspace/style.strict.css')
+    ]).then(() => undefined).catch((error) => {
+      workspacePreloadPromise = null
+      console.warn('[asset-portal] member authorization preload failed', error)
+    })
+  }
+  return workspacePreloadPromise
+}
 
 export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
   ecpReadyPromise = ecp.setup({
@@ -90,6 +104,7 @@ export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
           .join('; ')
         throw new Error(`ECP local doctor failed${failures ? `: ${failures}` : ''}`)
       }
+      void preloadMemberAuthorizationWorkspace()
     })
     .catch((error) => {
       console.error('[asset-portal] ECP setup failed', error)
