@@ -7,6 +7,11 @@ export default defineConfig({
     environment: 'happy-dom',
     include: ['tests/unit/**/*.spec.ts'],
     setupFiles: ['tests/unit/setup.ts'],
+    server: {
+      deps: {
+        inline: [/@acg\/ecp-/, /element-plus/, /@element-plus/]
+      }
+    },
     clearMocks: true,
     restoreMocks: true
   }

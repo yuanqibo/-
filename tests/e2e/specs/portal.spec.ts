@@ -99,7 +99,7 @@ test.describe('登录后门户质量回归', () => {
       ['/assets/settings', '资产设置'], ['/assets/settings/locations', '位置管理'], ['/assets/settings/categories', '资产分类'],
       ['/assets/settings/code-rules', '资产编码规则'], ['/assets/settings/label-templates', '标签模板设置'], ['/requests', '审批'],
       ['/system/employees', '员工信息'], ['/system/departments', '组织架构'], ['/system/self-service', '员工自助'],
-      ['/system/member-authorization', '成员授权'], ['/system/integrations', '系统对接'], ['/system/forms', '表单管理']
+      ['/workspace', '账号管理'], ['/system/integrations', '系统对接'], ['/system/forms', '表单管理']
     ] as const
     for (const [path, text] of routes) {
       await page.goto(path)

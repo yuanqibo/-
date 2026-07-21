@@ -28,10 +28,10 @@ src/
 当前实现状态：
 
 - 所有 19 个菜单项均由 Vue SFC 或 ECP SDK 原生工作台承载，业务菜单不再指向通用旧入口。
-- 业务域位于 `src/features/assets`、`approvals`、`dashboard`、`employees`、`organization`、`member-authorization` 和 `system-settings`。
+- 业务域位于 `src/features/assets`、`approvals`、`dashboard`、`employees`、`organization` 和 `system-settings`。
 - `src/portal/app.ts`、`PortalView`、`PortalShell` 及临时挂载桥已经删除。
 - API 请求统一经过 `src/shared/api/http.ts`，ECP Bearer 会话在该层注入。
-- ECP 成员授权工作台保留 SDK 的 `/workspace` 路由；资产系统的 `/system/member-authorization` Vue 页面负责嵌入和抽屉视口联动。
+- ECP 账号管理 workspace 由 SDK 直接注册 `/workspace` 路由并作为完整页面渲染，不再经过本地页面壳或 iframe 桥接。
 - `vue-tsc --noEmit` 同时校验 TypeScript 与 Vue 模板类型。
 
 ## 后端分层
@@ -41,9 +41,12 @@ backend/src/main/java/team/acg/access/assets/
   <domain>/Controller    HTTP 参数、响应和权限入口
   <domain>/Service       业务规则与事务边界
   <domain>/Repository    Spring JDBC 和 MySQL 持久化
+  approval/              ECP 审批发起、决策、回调幂等和状态校准
 ```
 
 Controller 不直接实现持久化逻辑；Repository 不处理页面展示状态。所有写操作必须经过 Java 权限守卫、输入校验和领域服务。生产数据使用 MySQL，H2 只用于自动化测试。
+
+审批域保持现有前端 API 契约：Java 以业务请求 `id` 作为 `bizNo`，调用 ECP `startByTemplate` 后保存 `approvalNo`；持有 `approvalNo` 的审批决策按该编号提交，启用集成前产生的存量单据继续按原流程完成。ECP 回调是状态同步触发器，不直接信任回调中的审批结果，而是持久化事件后重新查询平台详情。`APPROVED` 只在事务内执行一次现有资产命令，定时校准负责补偿遗漏回调。
 
 ## API 约定
 

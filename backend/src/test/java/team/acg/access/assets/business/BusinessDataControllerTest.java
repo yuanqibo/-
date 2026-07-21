@@ -10,8 +10,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import team.acg.access.assets.approval.ApprovalIntegrationService;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -26,9 +28,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BusinessDataControllerTest {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
+    @MockitoBean ApprovalIntegrationService approvalIntegration;
 
     @BeforeEach
     void clearBusinessData() {
+        org.mockito.Mockito.reset(approvalIntegration);
         jdbc.update("DELETE FROM business_snapshot");
         jdbc.update("DELETE FROM asset_operation_record");
         jdbc.update("DELETE FROM asset_record");
@@ -75,6 +79,23 @@ class BusinessDataControllerTest {
         mvc.perform(post("/api/business-data/requests/" + id + "/decision").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"decision\":\"approve\",\"operator\":\"管理员\"}"))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void keepsLegacyRequestsDecidableAfterExternalApprovalIsEnabled() throws Exception {
+        String response = mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"管理员补录\",\"applicant\":\"管理员\",\"asset\":\"历史资产\"}"))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String id = new ObjectMapper().readTree(response).path("item").path("id").asText();
+        org.mockito.Mockito.when(approvalIntegration.enabled()).thenReturn(true);
+
+        mvc.perform(post("/api/business-data/requests/" + id + "/decision").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"decision\":\"reject\",\"operator\":\"管理员\",\"reason\":\"历史流程关闭\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("已拒绝"));
+        org.mockito.Mockito.verify(approvalIntegration, org.mockito.Mockito.never())
+            .decide(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test

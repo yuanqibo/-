@@ -82,7 +82,7 @@ export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
       locale: 'zh-CN'
     })
     .then(async () => {
-      localDoctorReport = await ecp.auth?.doctor.run() ?? null
+      localDoctorReport = await ecp.auth?.doctor.run({ bundleAppCodeMismatchLevel: 'fail' }) ?? null
       if (!localDoctorReport?.ok) {
         const failures = localDoctorReport?.checks
           .filter((check) => check.status === 'FAIL')

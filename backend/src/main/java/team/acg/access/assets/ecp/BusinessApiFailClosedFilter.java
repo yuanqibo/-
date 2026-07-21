@@ -37,7 +37,8 @@ public class BusinessApiFailClosedFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         boolean apiPath = path.equals("/api") || path.startsWith("/api/");
         boolean ecpProxyPath = path.equals("/api/v1") || path.startsWith("/api/v1/");
-        return !apiPath || ecpProxyPath;
+        boolean approvalCallbackPath = path.equals("/api/ecp/approval/callback");
+        return !apiPath || ecpProxyPath || approvalCallbackPath;
     }
 
     @Override

@@ -67,6 +67,11 @@ npm run test:backend
 ```text
 ECP_SDK_ENABLED=true
 ECP_APP_SECRET=...
+APPROVAL_INTEGRATION_ENABLED=true
+APPROVAL_TEMPLATE_CODE=...
+PUBLIC_BASE_URL=https://assets.example.com
+# 可选；不配置时使用 PUBLIC_BASE_URL + /api/ecp/approval/callback
+APPROVAL_CALLBACK_URL=
 ECP_SDK_PERMISSION_ENABLED=false
 ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY=...
 DATABASE_URL=jdbc:mysql://127.0.0.1:3306/asset_portal?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
@@ -77,6 +82,8 @@ DATABASE_PASSWORD=...
 `ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY` 用于 Java 后端加密系统对接凭据，必须是 Base64 编码的 32 字节随机值。首次部署可用 `openssl rand -base64 32` 生成，后续必须保持不变并通过密钥管理系统注入，不能提交到 Git。
 
 `ECP_TENANT_ID` 是可选租户白名单；配置后 Java 会拒绝其他租户的有效令牌，不配置则按 ECP 会话本身解析用户与权限。`ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET` 只在显式开启 `ECP_SDK_PERMISSION_ENABLED=true`、需要 SDK 签名快照权限切面时提供。默认生产模式使用 Java 后端基于 ECP session context 的 Bearer 权限守卫。
+
+审批接入启用后，Vue 仍调用原有 `/api/business-data` 接口，Java 使用 ECP SDK 发起和处理审批。`APPROVAL_TEMPLATE_CODE` 必须对应已发布模板，模板主表编码默认是 `MAIN`，可通过 `APPROVAL_MAIN_TABLE_CODE` 修改；模板字段编码应使用业务请求 JSON 字段名，例如 `type`、`applicant`、`asset`、`reason`、`assetIds` 和各类日期、位置字段。回调地址必须能被 ECP 访问；回调先按 `eventId` 持久化去重，再以 `approvalNo` 查询平台详情校准状态，审批通过后才执行资产领域命令。
 
 直接启动：
 
@@ -113,9 +120,9 @@ scripts/                 SDK 安装、部署和更新脚本
 
 前端按 `core/shared/features/views` 分层，所有业务路由由 Vue Router / ECP 菜单直接加载 Vue SFC。业务域请求集中在各自 `features/<domain>/api`，并统一经过 `src/shared/api/http.ts`；页面状态由 Composition API composable 管理。详细边界与 API 约定见 [项目架构规范](docs/architecture.md)。
 
-Vue 标准化迁移已完成。首页、资产、入库、领用退库、借用归还、盘点、资产设置、审批、员工信息、组织架构、成员授权、员工自助、系统对接和表单管理均已迁移到 Vue SFC。资产导入、目录工作簿、批量操作、打印、盘点更新和员工自助签字配置也由 Vue/Element Plus 承载。历史 `src/portal/app.ts`、`PortalView`、`PortalShell` 和临时挂载桥已删除，不再保留原生 DOM 业务实现。
+Vue 标准化迁移已完成。首页、资产、入库、领用退库、借用归还、盘点、资产设置、审批、员工信息、组织架构、员工自助、系统对接和表单管理均已迁移到 Vue SFC，账号管理由 ECP SDK 原生 workspace 承载。资产导入、目录工作簿、批量操作、打印、盘点更新和员工自助签字配置也由 Vue/Element Plus 承载。历史 `src/portal/app.ts`、`PortalView`、`PortalShell` 和临时挂载桥已删除，不再保留原生 DOM 业务实现。
 
-生产构建按 Vue、Element Plus、ECP SDK 和业务路由拆分。ECP 成员授权工作台自带的预构建 Web Component 仅在 `/workspace` 被访问时延迟加载，不进入普通业务页面的首屏包。
+生产构建按 Vue、Element Plus、ECP SDK 和业务路由拆分。ECP 账号管理 workspace 自带的预构建 Web Component 仅在 `/workspace` 被访问时延迟加载，不进入普通业务页面的首屏包。
 
 ## 权限边界
 

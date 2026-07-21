@@ -8,8 +8,10 @@ import com.idanchuang.ecp.sdk.spring.annotation.PermissionSpec;
 import com.idanchuang.ecp.sdk.spring.annotation.RequireAnyPermission;
 import com.idanchuang.ecp.sdk.spring.annotation.RequirePermission;
 import jakarta.servlet.http.HttpServletRequest;
+import team.acg.access.assets.approval.ApprovalIntegrationService;
+import team.acg.access.assets.approval.ApprovalRequestStateService;
+import team.acg.access.assets.approval.ApprovedAssetRequestExecutor;
 import team.acg.access.assets.auth.RequestIdentityService;
-import team.acg.access.assets.asset.AssetPartyResolver;
 import team.acg.access.assets.asset.AssetService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
@@ -22,7 +24,6 @@ import java.util.function.Function;
 import java.util.Map;
 import java.util.Set;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,8 +33,6 @@ public class BusinessDataController {
     private static final int MAX_BUSINESS_ITEMS = 10_000;
     private static final int MAX_BUSINESS_SNAPSHOT_BYTES = 10 * 1024 * 1024;
     private static final int MAX_REQUEST_DETAILS_BYTES = 256 * 1024;
-    private static final Set<String> EXECUTABLE_ASSET_REQUEST_TYPES = Set.of(
-        "资产领用", "资产借用", "资产归还", "资产退还", "资产交接");
     private static final Set<String> TYPES = Set.of("requests", "stocktakes", "consumables", "repairs", "contracts");
     private static final Map<String, String> VIEW_PERMISSIONS = Map.of(
         "requests", "asset:request:view",
@@ -46,19 +45,22 @@ public class BusinessDataController {
     private final RequestIdentityService identityService;
     private final SelfServiceRequestPolicy selfServiceRequestPolicy;
     private final AssetService assetService;
-    private final AssetPartyResolver assetPartyResolver;
+    private final ApprovalIntegrationService approvalIntegration;
+    private final ApprovalRequestStateService approvalState;
 
     public BusinessDataController(BusinessDataRepository repository, ObjectMapper mapper,
                                   RequestIdentityService identityService,
                                   SelfServiceRequestPolicy selfServiceRequestPolicy,
                                   AssetService assetService,
-                                  AssetPartyResolver assetPartyResolver) {
+                                  ApprovalIntegrationService approvalIntegration,
+                                  ApprovalRequestStateService approvalState) {
         this.repository = repository;
         this.mapper = mapper;
         this.identityService = identityService;
         this.selfServiceRequestPolicy = selfServiceRequestPolicy;
         this.assetService = assetService;
-        this.assetPartyResolver = assetPartyResolver;
+        this.approvalIntegration = approvalIntegration;
+        this.approvalState = approvalState;
     }
 
     @GetMapping
@@ -113,16 +115,18 @@ public class BusinessDataController {
         requireText(command.asset(), 4_000, "Request asset is required");
         requireOptionalText(command.reason(), 4_000, "Request reason is too long");
         validateRequestDetails(command.details());
-        identityService.current(request).ifPresent(identity ->
-            selfServiceRequestPolicy.enforce(command.type(), command.reason(), command.details(), identity));
+        var identity = identityService.current(request);
+        identity.ifPresent(value ->
+            selfServiceRequestPolicy.enforce(command.type(), command.reason(), command.details(), value));
         String applicant = identityService.trustedName(request, command.applicant());
         ObjectNode item = mapper.createObjectNode();
         item.put("id", id("REQ"));
         item.put("type", command.type().trim());
         item.put("applicant", applicant);
-        identityService.current(request).ifPresent(identity -> {
-            item.put("applicantSubject", identity.subject());
-            item.put("applicantDirectorySubject", identity.directorySubject());
+        identity.ifPresent(value -> {
+            item.put("applicantSubject", value.subject());
+            item.put("applicantDirectorySubject", value.directorySubject());
+            item.put("department", value.department());
         });
         item.put("asset", command.asset().trim());
         item.put("reason", command.reason() == null ? "" : command.reason().trim());
@@ -138,6 +142,19 @@ public class BusinessDataController {
                     JsonNode value = command.details().get(field);
                     if (value != null) item.set(field, value);
                 });
+        }
+        item.put("bizNo", item.path("id").asText());
+        if (approvalIntegration.enabled()) {
+            RequestIdentityService.Identity initiator = identity.orElseThrow(() ->
+                new IllegalStateException("ECP identity is required to start an approval"));
+            ApprovalIntegrationService.StartResult started = approvalIntegration.start(item, initiator);
+            item.put("approvalNo", started.approvalNo());
+            item.put("bizNo", started.bizNo());
+            item.put("templateCode", started.templateCode());
+            item.put("approvalStatus", started.status().isBlank() ? "PENDING" : started.status());
+            item.put("currentNodeKey", started.currentNodeKey());
+            item.put("currentNode", started.currentNodeName().isBlank() ? "审批中" : started.currentNodeName());
+            item.put("approvalCreatedAt", started.createdAt());
         }
 
         for (int attempt = 0; attempt < 3; attempt++) {
@@ -165,43 +182,32 @@ public class BusinessDataController {
 
     @PostMapping("/requests/{id}/decision")
     @RequirePermission(permissions = "asset:request:review")
-    @Transactional
     public ResponseEntity<?> decideRequest(@PathVariable String id, @RequestBody RequestDecision command,
                                            HttpServletRequest request) {
         if (!Set.of("approve", "reject", "cancel").contains(command.decision())) throw new IllegalArgumentException("Unsupported request decision");
+        var identity = identityService.current(request);
         String operator = identityService.trustedName(request, command.operator());
-        if ("approve".equals(command.decision())) {
-            BusinessDataRepository.Snapshot snapshot = repository.findForUpdate("requests")
-                .orElseThrow(() -> new IllegalArgumentException("Business item not found: " + id));
-            if (!snapshot.document().isArray()) throw new IllegalStateException("Business request snapshot is invalid");
-            ArrayNode items = (ArrayNode) snapshot.document().deepCopy();
-            ObjectNode target = findRequest(items, id);
-            String current = target.path("status").asText();
-            if (!Set.of("审批中", "待执行").contains(current)) {
+        RequestIdentityService.Identity currentIdentity = identity.orElse(null);
+        ApprovedAssetRequestExecutor.Operator actor = new ApprovedAssetRequestExecutor.Operator(operator,
+            currentIdentity == null ? "" : currentIdentity.account(),
+            currentIdentity == null ? "" : currentIdentity.directorySubject(),
+            currentIdentity == null ? "" : currentIdentity.subject());
+        JsonNode document = repository.find("requests").map(BusinessDataRepository.Snapshot::document)
+            .orElseThrow(() -> new IllegalArgumentException("Business item not found: " + id));
+        if (!document.isArray()) throw new IllegalStateException("Business request snapshot is invalid");
+        ObjectNode target = findRequest((ArrayNode) document, id);
+        if (approvalIntegration.enabled() && !target.path("approvalNo").asText("").isBlank()) {
+            if (currentIdentity == null) throw new IllegalStateException("ECP identity is required to decide an approval");
+            if (!Set.of("审批中", "待执行").contains(target.path("status").asText())) {
                 throw new IllegalArgumentException("Request is already finalized");
             }
-            if (EXECUTABLE_ASSET_REQUEST_TYPES.contains(target.path("type").asText())) {
-                executeApprovedAssetRequest(target, request);
-                target.put("status", "已完成");
-                target.put("currentNode", "已归档");
-            } else {
-                target.put("status", "待执行");
-                target.put("currentNode", "普通管理员执行");
-            }
-            recordDecision(target, operator, command.reason(), request);
-            BusinessDataRepository.Snapshot saved = repository.update("requests", items, snapshot.version())
-                .orElseThrow(() -> new IllegalStateException("Business request changed while it was locked"));
-            return ResponseEntity.ok(Map.of("items", saved.document(), "version", saved.version()));
+            approvalIntegration.decide(target.path("approvalNo").asText(), command.decision(),
+                currentIdentity.directorySubject(), command.reason());
+            JsonNode items = approvalState.markExternalDecisionSubmitted(id, command.decision(), actor, command.reason());
+            return ResponseEntity.ok(Map.of("items", items));
         }
-        return updateItem("requests", id, item -> {
-            String current = item.path("status").asText();
-            if (!Set.of("审批中", "待执行").contains(current)) throw new IllegalArgumentException("Request is already finalized");
-            String status = "reject".equals(command.decision()) ? "已拒绝" : "已取消";
-            item.put("status", status);
-            item.put("currentNode", "已归档");
-            recordDecision(item, operator, command.reason(), request);
-            return item;
-        });
+        return ResponseEntity.ok(Map.of("items",
+            approvalState.decideLocally(id, command.decision(), actor, command.reason())));
     }
 
     private ObjectNode findRequest(ArrayNode items, String id) {
@@ -209,96 +215,6 @@ public class BusinessDataController {
             if (item.isObject() && id.equals(item.path("id").asText())) return (ObjectNode) item;
         }
         throw new IllegalArgumentException("Business item not found: " + id);
-    }
-
-    private void executeApprovedAssetRequest(ObjectNode item, HttpServletRequest request) {
-        String type = item.path("type").asText();
-        String action = switch (type) {
-            case "资产领用" -> "receive";
-            case "资产借用" -> "borrow";
-            case "资产归还" -> "borrow-return";
-            case "资产退还" -> "return";
-            case "资产交接" -> "handover";
-            default -> throw new IllegalArgumentException("Unsupported executable request type: " + type);
-        };
-        ObjectNode fields = mapper.createObjectNode();
-        List<String> assetIds = requestAssetIds(item);
-        identityService.current(request).ifPresent(identity -> {
-            fields.put("operator", identity.name());
-            fields.put("operatorAccount", identity.account());
-            fields.put("operatorSubject", identity.directorySubject());
-        });
-        fields.put("note", item.path("reason").asText(""));
-        fields.put("company", item.path("company").asText(""));
-        fields.put("department", item.path("department").asText(""));
-        switch (action) {
-            case "receive" -> {
-                fields.put("receiver", item.path("applicant").asText());
-                fields.put("receiverSubject", requiredRequestField(item, "applicantDirectorySubject"));
-                fields.put("location", requiredRequestField(item, "receiveLocation"));
-                fields.put("date", requestDate(item, "receiveDate"));
-            }
-            case "borrow" -> {
-                fields.put("borrower", item.path("applicant").asText());
-                fields.put("borrowerSubject", requiredRequestField(item, "applicantDirectorySubject"));
-                fields.put("location", requiredRequestField(item, "borrowLocation"));
-                fields.put("date", requestDate(item, "borrowDate"));
-                fields.put("expectedReturnDate", requiredRequestField(item, "expectedReturnDate"));
-            }
-            case "borrow-return", "return" -> {
-                assetService.requireOwnedForApprovedRequest(assetIds,
-                    requiredRequestField(item, "applicantDirectorySubject"),
-                    "borrow-return".equals(action) ? Set.of("借用中") : Set.of("在用"));
-                fields.put("location", requiredRequestField(item, "returnLocation"));
-                fields.put("date", requestDate(item, "returnDate"));
-            }
-            case "handover" -> {
-                assetService.requireOwnedForApprovedRequest(assetIds,
-                    requiredRequestField(item, "applicantDirectorySubject"), Set.of("在用", "借用中"));
-                String handoverType = item.path("handoverType").asText("员工交接");
-                if (!"公共交接".equals(handoverType)) {
-                    fields.put("receiverSubject", requiredRequestField(item, "receiverSubject"));
-                }
-                fields.put("location", requiredRequestField(item, "handoverLocation"));
-                fields.put("date", requestDate(item, "handoverDate"));
-                fields.put("handoverType", handoverType);
-            }
-            default -> throw new IllegalStateException("Unsupported asset action: " + action);
-        }
-        assetPartyResolver.normalizeCommand(action, fields);
-        assetService.execute(action, assetIds, fields);
-    }
-
-    private List<String> requestAssetIds(JsonNode item) {
-        JsonNode values = item.path("assetIds");
-        if (!values.isArray() || values.isEmpty() || values.size() > 100) {
-            throw new IllegalArgumentException("Executable request must contain between 1 and 100 asset ids");
-        }
-        List<String> ids = new ArrayList<>();
-        values.forEach(value -> {
-            String id = value.asText("").trim();
-            if (id.isEmpty() || ids.contains(id)) throw new IllegalArgumentException("Executable request contains invalid asset ids");
-            ids.add(id);
-        });
-        return List.copyOf(ids);
-    }
-
-    private String requiredRequestField(JsonNode item, String field) {
-        String value = item.path(field).asText("").trim();
-        if (value.isEmpty()) throw new IllegalArgumentException("Executable request field is required: " + field);
-        return value;
-    }
-
-    private String requestDate(JsonNode item, String field) {
-        String value = item.path(field).asText("").trim();
-        return value.isEmpty() ? java.time.LocalDate.now().toString() : java.time.LocalDate.parse(value).toString();
-    }
-
-    private void recordDecision(ObjectNode item, String operator, String reason, HttpServletRequest request) {
-        item.put("decisionOperator", operator);
-        identityService.current(request).ifPresent(identity -> item.put("decisionOperatorSubject", identity.subject()));
-        item.put("decisionReason", reason == null ? "" : reason.trim());
-        item.put("decisionAt", java.time.Instant.now().toString());
     }
 
     @PostMapping("/stocktakes")

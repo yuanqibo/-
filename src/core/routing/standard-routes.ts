@@ -1,3 +1,0 @@
-export const MEMBER_AUTHORIZATION_PORTAL_PATH = '/system/member-authorization'
-export const MEMBER_AUTHORIZATION_WORKSPACE_PATH = '/workspace'
-export const MEMBER_AUTHORIZATION_EMBED_PATH = `${MEMBER_AUTHORIZATION_WORKSPACE_PATH}?embedded=1`

@@ -21,27 +21,14 @@ body:has(.authz-workspace-host) #app {
   overflow: hidden !important;
 }
 
-body.authz-workspace-portal-overlay-active {
-  background: transparent !important;
-}
-
-body.authz-workspace-portal-overlay-active #app {
-  visibility: hidden !important;
-  background: transparent !important;
-}
-
-body.authz-workspace-portal-overlay-active .el-overlay.is-drawer {
-  visibility: visible !important;
-}
-
 .authz-workspace-host,
 .authz-workspace-host * {
   box-sizing: border-box !important;
 }
 
 /*
- * ECP 账号管理工作台在 iframe /workspace 独立路由中渲染，不一定会加载
- * 门户业务样式；这里用 SDK 暴露的严格作用域做窄范围覆盖。
+ * ECP 账号管理工作台由 SDK 在 /workspace 独立路由中渲染；这里用 SDK
+ * 暴露的严格作用域做窄范围覆盖。
  * 目标是保持「左侧账号/部门树 + 右侧账号表」的横向布局，避免 1200px
  * 以下被 SDK 默认媒体查询折叠成上下结构。
  */

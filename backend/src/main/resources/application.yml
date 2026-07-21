@@ -35,6 +35,14 @@ management:
 asset-portal:
   public-base-url: ${PUBLIC_BASE_URL:http://localhost:${PORT:5387}}
   ecp-api-base-url: ${ECP_API_BASE_URL:https://access.acg.team/api/v1}
+  approval:
+    enabled: ${APPROVAL_INTEGRATION_ENABLED:false}
+    template-code: ${APPROVAL_TEMPLATE_CODE:}
+    main-table-code: ${APPROVAL_MAIN_TABLE_CODE:MAIN}
+    callback-url: ${APPROVAL_CALLBACK_URL:}
+    callback-processing-delay-ms: ${APPROVAL_CALLBACK_PROCESSING_DELAY_MS:2000}
+    reconciliation-delay-ms: ${APPROVAL_RECONCILIATION_DELAY_MS:30000}
+    reconciliation-interval-ms: ${APPROVAL_RECONCILIATION_INTERVAL_MS:60000}
   system-config:
     encryption-key: ${ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY:}
   security:

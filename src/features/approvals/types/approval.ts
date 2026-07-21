@@ -11,6 +11,11 @@ export type ApprovalRecord = {
   system: string
   date: string
   currentNode: string
+  approvalNo?: string
+  bizNo?: string
+  templateCode?: string
+  approvalStatus?: string
+  approvalSyncedAt?: string
   decisionReason?: string
   decisionOperator?: string
   [key: string]: unknown

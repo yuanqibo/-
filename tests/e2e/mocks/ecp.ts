@@ -1,4 +1,4 @@
-import type { App as VueApp } from 'vue'
+import { defineComponent, h, type App as VueApp } from 'vue'
 import type { RouteRecordRaw, Router } from 'vue-router'
 import type { AuthzSessionContext } from '@acg/ecp-sdk'
 
@@ -18,6 +18,14 @@ const allPermissions = [
 ]
 const allFeatures = ['PORTAL_HOME', 'PORTAL_ASSETS', 'PORTAL_REQUESTS', 'PORTAL_SETTINGS', 'APP_WORKSPACE']
 
+const WorkspaceMock = defineComponent({
+  name: 'E2eSdkWorkspace',
+  setup: () => () => h('main', { class: 'authz-workspace-host' }, [
+    h('h1', '账号管理'),
+    h('div', { class: 'workspace-account-management' }, 'SDK workspace')
+  ])
+})
+
 const routes: Array<RouteRecordRaw & { path: string }> = [
   { path: '/', name: 'e2e-home', component: () => import('../../../src/views/HomePage.vue') },
   { path: '/assets', name: 'e2e-assets', component: () => import('../../../src/views/AssetListPage.vue') },
@@ -34,6 +42,7 @@ const routes: Array<RouteRecordRaw & { path: string }> = [
   { path: '/system', name: 'e2e-system', component: () => import('../../../src/views/SystemIndexView.vue') },
   { path: '/system/employees', name: 'e2e-employees', component: () => import('../../../src/views/EmployeeDirectoryPage.vue') },
   { path: '/system/departments', name: 'e2e-departments', component: () => import('../../../src/views/OrganizationDirectoryPage.vue') },
+  { path: '/workspace', name: 'e2e-authz-workspace', component: WorkspaceMock },
   { path: '/system/self-service', name: 'e2e-self-service', component: () => import('../../../src/views/SelfServiceSettingsPage.vue') },
   { path: '/system/integrations', name: 'e2e-integrations', component: () => import('../../../src/views/SystemIntegrationsPage.vue') },
   { path: '/system/forms', name: 'e2e-forms', component: () => import('../../../src/views/SystemFormsPage.vue') }
@@ -58,6 +67,7 @@ const menuTree: TestMenu[] = [
   { id: 'settings', title: '系统', path: '/system', pageKey: 'asset.portal.system', order: 50, permissionMode: 'ANY', permissionCodes: ['asset:employee:view', 'asset:department:view', 'asset:self_service:view', 'asset:integration:view', 'asset:form:view'], featureCodes: ['PORTAL_SETTINGS'], children: [
     { id: 'settingsEmployee', parentId: 'settings', title: '员工信息', path: '/system/employees', pageKey: 'asset.portal.system.employees', order: 51, permissionCodes: ['asset:employee:view'], featureCodes: ['PORTAL_SETTINGS'] },
     { id: 'settingsDepartment', parentId: 'settings', title: '组织架构', path: '/system/departments', pageKey: 'asset.portal.system.departments', order: 52, permissionCodes: ['asset:department:view'], featureCodes: ['PORTAL_SETTINGS'] },
+    { id: 'authz.workspace', parentId: 'settings', title: '账号管理', path: '/workspace', pageKey: 'authz.workspace', order: 53, permissionCodes: ['authz:application:view', 'authz:model:view', 'authz:app_role:view'], featureCodes: ['APP_WORKSPACE'] },
     { id: 'settingsSelfService', parentId: 'settings', title: '员工自助', path: '/system/self-service', pageKey: 'asset.portal.system.self-service', order: 54, permissionCodes: ['asset:self_service:view'], featureCodes: ['PORTAL_SETTINGS'] },
     { id: 'settingsIntegration', parentId: 'settings', title: '系统对接', path: '/system/integrations', pageKey: 'asset.portal.system.integrations', order: 55, permissionCodes: ['asset:integration:view'], featureCodes: ['PORTAL_SETTINGS'] },
     { id: 'settingsForm', parentId: 'settings', title: '表单管理', path: '/system/forms', pageKey: 'asset.portal.system.forms', order: 56, permissionCodes: ['asset:form:view'], featureCodes: ['PORTAL_SETTINGS'] }

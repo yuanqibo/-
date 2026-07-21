@@ -5,7 +5,6 @@ import { QuestionFilled } from '@element-plus/icons-vue'
 import { usePortalSession } from '../auth/portal-session'
 import { useTerminalMode, type PortalTerminalMode } from '../auth/terminal-mode'
 import type { PortalMenuItem } from '../auth/portal-context'
-import { MEMBER_AUTHORIZATION_PORTAL_PATH } from '../routing/standard-routes'
 import PortalNavIcon from './PortalNavIcon.vue'
 import { subnavScrollState } from './subnav-scroll-state'
 
@@ -55,8 +54,7 @@ const primaryActive = (item: PortalMenuItem): boolean => {
   return route.path === item.path
 }
 
-const routePathForMenu = (item: PortalMenuItem): string =>
-  item.id === 'authz.workspace' ? MEMBER_AUTHORIZATION_PORTAL_PATH : item.path
+const routePathForMenu = (item: PortalMenuItem): string => item.path
 
 const rememberSubnavScroll = (force = false): void => {
   if (subnavScrollState.navigationPending && !force) return
@@ -195,7 +193,7 @@ onUnmounted(() => {
                   :class="{ active: route.path === routePathForMenu(item) }" type="button"
                   :aria-current="route.path === routePathForMenu(item) ? 'page' : undefined" @click="navigate(item)">
                   <span class="asset-subnav-dot" aria-hidden="true"></span>
-                  <span class="asset-subnav-label">{{ item.id === 'authz.workspace' ? '成员授权' : item.title }}</span>
+                  <span class="asset-subnav-label">{{ item.title }}</span>
                 </button>
               </div>
             </div>
