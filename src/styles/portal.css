@@ -1812,8 +1812,17 @@ button.asset-code-rule-field-name {
   margin: 8px 0 0;
 }
 
+.asset-label-settings-view {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .asset-label-template-page {
   width: min(100%, 960px);
+  height: 100%;
+  min-height: 0;
   margin: 0;
   display: grid;
   grid-template-columns: 280px minmax(0, 566px);
@@ -1824,6 +1833,8 @@ button.asset-code-rule-field-name {
 .asset-label-template-left,
 .asset-label-template-right {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   background: #ffffff;
@@ -1831,11 +1842,17 @@ button.asset-code-rule-field-name {
 }
 
 .asset-label-template-left {
+  display: flex;
+  flex-direction: column;
   padding: 10px;
+  overflow: hidden;
 }
 
 .asset-label-template-right {
   padding: 0 28px 28px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .asset-label-template-right .default-label-editor-form {
@@ -1862,7 +1879,11 @@ button.asset-code-rule-field-name {
 
 .asset-label-template-list {
   display: grid;
+  min-height: 0;
   gap: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .asset-label-template-card {
@@ -2808,8 +2829,24 @@ button.asset-code-rule-field-name {
 }
 
 @media (max-width: 1180px) {
+  .asset-label-settings-view {
+    height: auto;
+    overflow: visible;
+  }
+
   .asset-label-template-page {
     grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .asset-label-template-left,
+  .asset-label-template-right {
+    height: auto;
+  }
+
+  .asset-label-template-list,
+  .asset-label-template-right {
+    overflow-y: visible;
   }
 }
 

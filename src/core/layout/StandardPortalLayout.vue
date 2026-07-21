@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { usePortalSession } from '../auth/portal-session'
@@ -7,6 +7,7 @@ import { useTerminalMode, type PortalTerminalMode } from '../auth/terminal-mode'
 import type { PortalMenuItem } from '../auth/portal-context'
 import { MEMBER_AUTHORIZATION_PORTAL_PATH } from '../routing/standard-routes'
 import PortalNavIcon from './PortalNavIcon.vue'
+import { subnavScrollState } from './subnav-scroll-state'
 
 type LayoutSection = 'auto' | 'assets' | 'system' | 'none'
 
@@ -20,6 +21,8 @@ const router = useRouter()
 const { ready, loading, errorMessage, user, menuItems } = usePortalSession()
 const { isEmployeeTerminal, canSwitchTerminal, setTerminalMode } = useTerminalMode()
 const openAssetGroups = ref(new Set<string>())
+const assetSubnav = ref<HTMLElement>()
+const systemSubnav = ref<HTMLElement>()
 
 const resolvedSection = computed<Exclude<LayoutSection, 'auto'>>(() => {
   if (ready.value && isEmployeeTerminal.value && (props.section === 'assets' || route.path.startsWith('/assets'))) return 'none'
@@ -55,8 +58,26 @@ const primaryActive = (item: PortalMenuItem): boolean => {
 const routePathForMenu = (item: PortalMenuItem): string =>
   item.id === 'authz.workspace' ? MEMBER_AUTHORIZATION_PORTAL_PATH : item.path
 
+const rememberSubnavScroll = (force = false): void => {
+  if (subnavScrollState.navigationPending && !force) return
+  if (assetSubnav.value) subnavScrollState.asset = assetSubnav.value.scrollTop
+  if (systemSubnav.value) subnavScrollState.system = systemSubnav.value.scrollTop
+}
+const handleSubnavScroll = (): void => rememberSubnavScroll()
+
+const restoreSubnavScroll = async (): Promise<void> => {
+  await nextTick()
+  if (assetSubnav.value) assetSubnav.value.scrollTop = subnavScrollState.asset
+  if (systemSubnav.value) systemSubnav.value.scrollTop = subnavScrollState.system
+}
+
 const navigate = (item: PortalMenuItem): void => {
-  void router.push(routePathForMenu(item))
+  rememberSubnavScroll(true)
+  subnavScrollState.navigationPending = true
+  void router.push(routePathForMenu(item)).finally(async () => {
+    await restoreSubnavScroll()
+    subnavScrollState.navigationPending = false
+  })
 }
 
 const logout = (): void => { void window.__ASSET_PORTAL_ECP_CONTEXT__?.logout() }
@@ -87,6 +108,8 @@ watch([() => route.path, assetMenus], () => {
   if (parent) openAssetGroups.value = new Set([...openAssetGroups.value, parent.id])
 }, { immediate: true })
 
+watch([() => route.path, openAssetGroups], () => { void restoreSubnavScroll() }, { flush: 'post' })
+
 watch([ready, isEmployeeTerminal, () => route.path], ([sessionReady, employee, path]) => {
   if (sessionReady && employee && !['/', '/assets', '/requests'].includes(path)) void router.replace('/')
 }, { immediate: true })
@@ -96,12 +119,15 @@ onMounted(() => {
   document.body.classList.add('standard-vue-route')
   document.body.classList.toggle('employee-terminal-view', ready.value && isEmployeeTerminal.value)
   document.title = `资产云管家 - ${documentTitle.value}`
+  void restoreSubnavScroll()
 })
 
 watch(documentTitle, (title) => { document.title = `资产云管家 - ${title}` })
 watch([ready, isEmployeeTerminal], ([sessionReady, employee]) => {
   document.body.classList.toggle('employee-terminal-view', sessionReady && employee)
 })
+
+onBeforeUnmount(rememberSubnavScroll)
 
 onUnmounted(() => {
   document.body.classList.remove('standard-vue-route')
@@ -161,7 +187,7 @@ onUnmounted(() => {
       <section class="page">
         <section v-if="resolvedSection === 'system'" class="system-page">
           <aside class="system-menu-shell">
-            <div class="asset-subnav system-menu">
+            <div ref="systemSubnav" class="asset-subnav system-menu" @scroll="handleSubnavScroll">
               <div class="asset-subnav-heading"><span class="asset-subnav-accent" aria-hidden="true"></span><h2>系统</h2></div>
               <div class="asset-subnav-rule" aria-hidden="true"></div>
               <div class="asset-subnav-list">
@@ -179,7 +205,7 @@ onUnmounted(() => {
 
         <section v-else-if="resolvedSection === 'assets'" class="system-page standard-assets-page">
           <aside class="system-menu-shell">
-            <div class="asset-subnav">
+            <div ref="assetSubnav" class="asset-subnav" @scroll="handleSubnavScroll">
               <div class="asset-subnav-heading"><span class="asset-subnav-accent" aria-hidden="true"></span><h2>资产</h2></div>
               <div class="asset-subnav-rule" aria-hidden="true"></div>
               <div class="asset-subnav-list">
