@@ -214,6 +214,29 @@ test.describe('登录后门户质量回归', () => {
     await expect(page).toHaveURL('/system/employees')
   })
 
+  test('当前一级模块锁定且重复点击不会跳转', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '一级侧栏导航在桌面项目执行')
+    const cases = [
+      { path: '/', label: '首页' },
+      { path: '/assets', label: '资产' },
+      { path: '/assets/settings/categories', label: '资产' },
+      { path: '/requests', label: '审批' },
+      { path: '/system/employees', label: '系统' },
+      { path: '/system/member-authorization', label: '系统' }
+    ] as const
+
+    await installApiMocks(page)
+    for (const item of cases) {
+      await page.goto(item.path)
+      await expect(page.locator('.standard-portal-shell')).toBeVisible()
+      const activePrimary = page.getByRole('button', { name: item.label, exact: true }).first()
+      await expect(activePrimary).toHaveAttribute('aria-current', 'page')
+      await expect(activePrimary).toBeDisabled()
+      await activePrimary.evaluate((element) => (element as HTMLButtonElement).click())
+      await expect(page).toHaveURL(item.path)
+    }
+  })
+
   test('管理员保留员工端切换与员工视图', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '端模式导航在桌面项目执行')
     await openApp(page, '/')

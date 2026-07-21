@@ -106,6 +106,11 @@ const navigate = (item: PortalMenuItem): void => {
   })
 }
 
+const navigatePrimary = (item: PortalMenuItem): void => {
+  if (primaryActive(item)) return
+  navigate(item)
+}
+
 const logout = (): void => { void window.__ASSET_PORTAL_ECP_CONTEXT__?.logout() }
 const handleAccountCommand = (command: string | number | object): void => {
   if (command === 'logout') logout()
@@ -206,7 +211,8 @@ onUnmounted(() => {
           <div v-for="item in primaryMenus" :key="item.id" class="nav-group" :class="{ 'has-children': item.id === 'assets' }">
             <button class="nav-item" :class="{ active: primaryActive(item) }" type="button"
               :title="item.id === 'requests' ? (isEmployeeTerminal ? '申请' : '审批') : item.title"
-              :aria-current="primaryActive(item) ? 'page' : undefined" @pointerenter="preloadMenuRoute(item)" @focus="preloadMenuRoute(item)" @click="navigate(item)">
+              :aria-current="primaryActive(item) ? 'page' : undefined" :disabled="primaryActive(item)"
+              @pointerenter="preloadMenuRoute(item)" @focus="preloadMenuRoute(item)" @click="navigatePrimary(item)">
               <span class="nav-icon"><PortalNavIcon :kind="item.id" /></span>
               <span class="nav-label">{{ item.id === 'requests' ? (isEmployeeTerminal ? '申请' : '审批') : item.title }}</span>
             </button>

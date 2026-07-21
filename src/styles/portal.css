@@ -365,6 +365,7 @@ button {
 .nav-item.active {
   color: #1296db;
   background: #f4f8ff;
+  cursor: default;
 }
 
 .nav-group.has-children .nav-item {
