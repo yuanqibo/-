@@ -13,6 +13,7 @@ import team.acg.access.assets.approval.ApprovalRequestStateService;
 import team.acg.access.assets.approval.ApprovedAssetRequestExecutor;
 import team.acg.access.assets.auth.RequestIdentityService;
 import team.acg.access.assets.asset.AssetService;
+import team.acg.access.assets.store.PortalReferenceCatalog;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -40,6 +41,12 @@ public class BusinessDataController {
         "consumables", "asset:consumable:view",
         "repairs", "asset:repair:view",
         "contracts", "asset:contract:view");
+    private static final Map<String, String> REQUEST_LOCATION_FIELDS = Map.of(
+        "资产领用", "receiveLocation",
+        "资产借用", "borrowLocation",
+        "资产归还", "returnLocation",
+        "资产退还", "returnLocation",
+        "资产交接", "handoverLocation");
     private final BusinessDataRepository repository;
     private final ObjectMapper mapper;
     private final RequestIdentityService identityService;
@@ -47,13 +54,15 @@ public class BusinessDataController {
     private final AssetService assetService;
     private final ApprovalIntegrationService approvalIntegration;
     private final ApprovalRequestStateService approvalState;
+    private final PortalReferenceCatalog referenceCatalog;
 
     public BusinessDataController(BusinessDataRepository repository, ObjectMapper mapper,
                                   RequestIdentityService identityService,
                                   SelfServiceRequestPolicy selfServiceRequestPolicy,
                                   AssetService assetService,
                                   ApprovalIntegrationService approvalIntegration,
-                                  ApprovalRequestStateService approvalState) {
+                                  ApprovalRequestStateService approvalState,
+                                  PortalReferenceCatalog referenceCatalog) {
         this.repository = repository;
         this.mapper = mapper;
         this.identityService = identityService;
@@ -61,6 +70,7 @@ public class BusinessDataController {
         this.assetService = assetService;
         this.approvalIntegration = approvalIntegration;
         this.approvalState = approvalState;
+        this.referenceCatalog = referenceCatalog;
     }
 
     @GetMapping
@@ -115,6 +125,7 @@ public class BusinessDataController {
         requireText(command.asset(), 4_000, "Request asset is required");
         requireOptionalText(command.reason(), 4_000, "Request reason is too long");
         validateRequestDetails(command.details());
+        validateRequestLocation(command.type(), command.details());
         var identity = identityService.current(request);
         identity.ifPresent(value ->
             selfServiceRequestPolicy.enforce(command.type(), command.reason(), command.details(), value));
@@ -428,6 +439,15 @@ public class BusinessDataController {
         if (!details.isObject()) throw new IllegalArgumentException("Request details must be an object");
         if (details.toString().getBytes(StandardCharsets.UTF_8).length > MAX_REQUEST_DETAILS_BYTES) {
             throw new IllegalArgumentException("Request details are too large");
+        }
+    }
+
+    private void validateRequestLocation(String requestType, JsonNode details) {
+        String field = REQUEST_LOCATION_FIELDS.get(requestType == null ? "" : requestType.trim());
+        if (field == null || details == null || !details.isObject()) return;
+        String location = details.path(field).asText("").trim();
+        if (!location.isEmpty() && !referenceCatalog.locations().contains(location)) {
+            throw new IllegalArgumentException("Request location is not present in the server catalog: " + location);
         }
     }
 

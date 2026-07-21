@@ -16,6 +16,8 @@ export type ApprovalRecord = {
   templateCode?: string
   approvalStatus?: string
   approvalSyncedAt?: string
+  decisionSubmitted?: ApprovalDecision
+  decisionSubmittedAt?: string
   decisionReason?: string
   decisionOperator?: string
   [key: string]: unknown

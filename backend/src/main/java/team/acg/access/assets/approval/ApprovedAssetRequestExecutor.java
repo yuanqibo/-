@@ -83,7 +83,10 @@ public class ApprovedAssetRequestExecutor {
             }
             default -> throw new IllegalStateException("Unsupported asset action: " + action);
         }
-        assetPartyResolver.normalizeCommand(action, fields);
+        // The applicant identity on receive/borrow requests was populated from the
+        // authenticated ECP session. Only handover targets originate in request input
+        // and therefore require a second directory lookup before asset assignment.
+        if ("handover".equals(action)) assetPartyResolver.normalizeCommand(action, fields);
         assetService.execute(action, assetIds, fields);
     }
 

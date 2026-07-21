@@ -7197,64 +7197,213 @@ button.self-service-category-chip.more:hover {
   box-shadow: var(--shadow);
 }
 
-.device-overview-strip {
-  margin: 16px 0;
-  padding: 18px 20px;
-  display: grid;
-  grid-template-columns: minmax(220px, 0.36fr) minmax(0, 1fr);
-  align-items: center;
-  gap: 18px 24px;
+.device-overview-section {
+  margin: 10px 0 24px;
+  min-height: 180px;
 }
 
 .device-overview-heading {
   min-width: 0;
-}
-
-.device-overview-body {
-  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 18px;
-  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
-.device-overview-main {
-  flex: 1 1 240px;
-  min-width: 220px;
+.device-overview-heading .panel-title {
+  margin-bottom: 4px;
 }
 
-.device-overview-main strong {
+.device-overview-count {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.device-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.device-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #edf0f4;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.04);
+}
+
+.device-card-content {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 16px;
+  padding: 20px 20px 18px;
+}
+
+.device-card-image {
+  width: 112px;
+  aspect-ratio: 1;
+  overflow: hidden;
+  align-self: center;
+  background: #f5f6f8;
+}
+
+.device-card-image img {
+  width: 100%;
+  height: 100%;
   display: block;
-  font-size: 16px;
+  object-fit: cover;
 }
 
-.device-overview-meta {
-  min-width: 112px;
-  padding-left: 16px;
-  border-left: 1px solid var(--line);
-}
-
-.device-overview-meta span {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--muted-2);
+.device-card-image-empty {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: #c0c5cc;
   font-size: 12px;
 }
 
-.device-overview-meta strong {
-  display: block;
-  color: #1f2937;
-  font-size: 14px;
+.device-card-image-empty .el-icon {
+  color: #d7dbe0;
+  font-size: 38px;
 }
 
-.device-overview-body .btn {
-  margin-left: auto;
+.device-card-details {
+  min-width: 0;
+}
+
+.device-card-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.device-card-title-row h3 {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  margin: 0;
+  color: #20242b;
+  font-size: 17px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-card-status {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: #f1edff;
+  color: #7655e8;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.device-card-status.borrowed {
+  background: #fff4dc;
+  color: #b66b08;
+}
+
+.device-card-fields {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+}
+
+.device-card-fields > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+
+.device-card-fields dt,
+.device-card-fields dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.device-card-fields dt {
+  color: #9aa0a9;
+}
+
+.device-card-fields dt::after {
+  content: "：";
+}
+
+.device-card-fields dd {
+  min-width: 0;
+  overflow: hidden;
+  color: #737983;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-card-fields .device-card-code {
+  color: #1598df;
+}
+
+.device-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 0 20px;
+  padding: 14px 0;
+  border-top: 1px solid #eceff3;
+}
+
+.device-card-actions button {
+  width: 76px;
+  min-height: 34px;
+  border: 1px solid #d7ecfa;
+  border-radius: 6px;
+  background: #edf7fd;
+  color: #1598df;
+  font-size: 13px;
+}
+
+.device-card-actions button:hover,
+.device-card-actions button:focus-visible {
+  border-color: #9ed6f3;
+  background: #e1f2fc;
+  outline: none;
 }
 
 .device-overview-empty {
+  min-height: 220px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  border: 1px dashed #dfe4eb;
+  border-radius: 8px;
+  background: #ffffff;
   color: var(--muted);
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 13px;
+}
+
+.device-overview-empty .el-icon {
+  margin-bottom: 4px;
+  color: #c5cbd3;
+  font-size: 36px;
+}
+
+.device-overview-empty strong {
+  color: #4b5563;
+  font-size: 15px;
 }
 
 .action-icon {
@@ -12448,12 +12597,8 @@ body.is-resizing-column * {
     grid-template-columns: 1fr;
   }
 
-  .device-overview-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .device-overview-body .btn {
-    margin-left: 0;
+  .device-card-grid {
+    grid-template-columns: repeat(2, minmax(280px, 1fr));
   }
 
   .employee-request-actions-grid {
@@ -12517,14 +12662,28 @@ body.is-resizing-column * {
     grid-template-columns: 1fr;
   }
 
+  body.employee-terminal-view .app-shell {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+
   .sidebar {
     position: static;
     min-height: auto;
   }
 
+  body.employee-terminal-view .sidebar {
+    height: 100vh;
+    min-height: 0;
+  }
+
   .nav {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.employee-terminal-view .nav {
+    display: block;
+    grid-template-columns: none;
   }
 
   .source-card {
@@ -12600,20 +12759,45 @@ body.is-resizing-column * {
     grid-template-columns: 1fr;
   }
 
-  .device-overview-body {
-    display: grid;
+  .device-card-grid {
     grid-template-columns: 1fr;
   }
 
-  .device-overview-main {
-    min-width: 0;
+  .device-card-content {
+    grid-template-columns: 80px minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px;
   }
 
-  .device-overview-meta {
-    min-width: 0;
-    padding: 12px 0 0;
-    border-left: 0;
-    border-top: 1px solid var(--line);
+  .device-card-image {
+    width: 80px;
+  }
+
+  .device-card-details {
+    display: contents;
+  }
+
+  .device-card-title-row {
+    grid-column: 2;
+    align-self: start;
+    margin-bottom: 0;
+  }
+
+  .device-card-title-row h3 {
+    font-size: 16px;
+  }
+
+  .device-card-fields {
+    grid-column: 1 / -1;
+  }
+
+  .device-card-fields > div {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .device-card-actions {
+    margin: 0 16px;
   }
 
   .employee-request-head {

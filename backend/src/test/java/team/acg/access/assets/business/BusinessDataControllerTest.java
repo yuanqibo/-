@@ -66,6 +66,16 @@ class BusinessDataControllerTest {
     }
 
     @Test
+    void rejectsARequestLocationOutsideTheServerCatalogBeforeStartingApproval() throws Exception {
+        mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"资产领用\",\"applicant\":\"李雷\",\"asset\":\"电脑\",\"details\":{\"receiveLocation\":\"不存在的位置\"}}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Request location is not present in the server catalog: 不存在的位置"));
+        org.mockito.Mockito.verify(approvalIntegration, org.mockito.Mockito.never())
+            .start(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void recordsRequestDecisionsAndRejectsRepeatedFinalization() throws Exception {
         String response = mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"type\":\"资产领用\",\"applicant\":\"李雷\",\"asset\":\"电脑\",\"reason\":\"入职\"}"))

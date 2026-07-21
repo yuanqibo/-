@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { PictureFilled } from '@element-plus/icons-vue'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { useDashboard } from '../composables/useDashboard'
@@ -20,8 +21,20 @@ const categoryMetricMode = ref<CategoryMetricMode>('count')
 const totalValue = computed(() => assets.value.reduce((sum, item) => sum + Number(item.price || 0), 0))
 const activeCount = computed(() => assets.value.filter((item) => item.status === '在用').length)
 const pendingCount = computed(() => requests.value.filter((item) => item.status !== '已完成').length)
-const primaryEmployeeAsset = computed(() => assets.value.find((item) => item.owner === user.value?.name) || assets.value[0] || null)
-const openEmployeeAssets = (): void => { void router.push('/assets') }
+const employeeAssets = computed(() => {
+  const assigned = assets.value.filter((item) => ['在用', '领用中', '借用中'].includes(item.status))
+  return assigned.filter((item) => item.owner === user.value?.name || item.ownerSubject === user.value?.externalSubject)
+})
+const failedAssetImages = ref(new Set<string>())
+const hasAssetImage = (item: AssetRecord): boolean => Boolean(item.image) && !failedAssetImages.value.has(item.id)
+const markAssetImageFailed = (item: AssetRecord): void => {
+  failedAssetImages.value = new Set([...failedAssetImages.value, item.id])
+}
+const assetAssignmentLabel = (item: AssetRecord): string => item.status === '借用中' ? '借用' : '领用'
+const assetModelLabel = (item: AssetRecord): string => [item.brand, item.model].filter(Boolean).join(' ') || '-'
+const openEmployeeRequest = (action: 'return' | 'handover', item: AssetRecord): void => {
+  void router.push({ path: '/requests', query: { action, asset: item.id } })
+}
 
 const statusRows = computed(() => {
   const receiveCount = assets.value.filter((item) => item.status === '在用').length
@@ -94,17 +107,38 @@ const metricLabel = (value: number, mode: CategoryMetricMode = 'count'): string 
   <el-alert v-if="state.errorMessage" :title="state.errorMessage" type="error" show-icon :closable="false" />
   <template v-if="isEmployeeTerminal">
     <section class="hero employee-home-hero"><h1>你好，{{ user?.name }}</h1></section>
-    <section v-loading="state.loading" class="panel device-overview-strip">
-      <div class="device-overview-heading"><h2 class="panel-title">我的设备概览</h2><div class="panel-subtitle">如果设备异常，可从资产详情发起归还或报修。</div></div>
-      <div v-if="primaryEmployeeAsset" class="device-overview-body">
-        <div class="device-overview-main"><strong>{{ primaryEmployeeAsset.name }}</strong><div class="panel-subtitle">{{ primaryEmployeeAsset.model || '-' }} / {{ primaryEmployeeAsset.assetTag || '-' }}</div></div>
-        <div class="device-overview-meta"><span>当前状态</span><span class="tag" :class="primaryEmployeeAsset.status === '在用' ? 'green' : 'blue'">{{ primaryEmployeeAsset.status }}</span></div>
-        <div class="device-overview-meta"><span>存放位置</span><strong>{{ primaryEmployeeAsset.location || '-' }}</strong></div>
-        <div class="device-overview-meta"><span>资产风险</span><strong>{{ primaryEmployeeAsset.risk || '正常' }}</strong></div>
-        <div class="device-overview-meta"><span>保修截止</span><strong>{{ primaryEmployeeAsset.warrantyDate || '-' }}</strong></div>
-        <button class="btn" type="button" @click="openEmployeeAssets">查看详情</button>
+    <section v-loading="state.loading" class="device-overview-section">
+      <div class="device-overview-heading">
+        <div><h2 class="panel-title">我的设备概览</h2><div class="panel-subtitle">查看当前领用或借用的设备信息。</div></div>
+        <span v-if="employeeAssets.length" class="device-overview-count">共 {{ employeeAssets.length }} 台</span>
       </div>
-      <div v-else class="device-overview-empty">当前还没有分配到你的设备，建议先发起领用申请。</div>
+      <div v-if="employeeAssets.length" class="device-card-grid">
+        <article v-for="item in employeeAssets" :key="item.id" class="device-card">
+          <div class="device-card-content">
+            <div class="device-card-image">
+              <img v-if="hasAssetImage(item)" :src="item.image" :alt="item.name" @error="markAssetImageFailed(item)">
+              <div v-else class="device-card-image-empty"><el-icon><PictureFilled /></el-icon><span>暂无图片</span></div>
+            </div>
+            <div class="device-card-details">
+              <div class="device-card-title-row">
+                <h3 :title="item.name">{{ item.name }}</h3>
+                <span class="device-card-status" :class="{ borrowed: item.status === '借用中' }">{{ assetAssignmentLabel(item) }}</span>
+              </div>
+              <dl class="device-card-fields">
+                <div><dt>资产编码</dt><dd class="device-card-code" :title="item.id">{{ item.id }}</dd></div>
+                <div><dt>品牌/型号</dt><dd :title="assetModelLabel(item)">{{ assetModelLabel(item) }}</dd></div>
+                <div><dt>管理员</dt><dd :title="item.custodian || '-'">{{ item.custodian || '-' }}</dd></div>
+                <div><dt>领用日期</dt><dd :title="item.receiveDate || '-'">{{ item.receiveDate || '-' }}</dd></div>
+              </dl>
+            </div>
+          </div>
+          <div class="device-card-actions">
+            <button type="button" @click="openEmployeeRequest('return', item)">退还</button>
+            <button type="button" @click="openEmployeeRequest('handover', item)">交接</button>
+          </div>
+        </article>
+      </div>
+      <div v-else class="device-overview-empty"><el-icon><PictureFilled /></el-icon><strong>暂无设备</strong><span>当前还没有分配到你的设备。</span></div>
     </section>
   </template>
   <template v-else>
