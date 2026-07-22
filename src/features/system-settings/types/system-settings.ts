@@ -24,6 +24,7 @@ export type SystemFormDefinition = {
 
 export type SelfServiceItem = {
   enabled: boolean
+  approvalRequired?: boolean
   remarkRequired: boolean
   remarkPrompt: string
   categories?: string[]

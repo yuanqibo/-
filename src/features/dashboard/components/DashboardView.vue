@@ -1,26 +1,29 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { PictureFilled } from '@element-plus/icons-vue'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { useDashboard } from '../composables/useDashboard'
 import type { AssetRecord } from '../../assets/types/assets'
+import AssetRequestDialog from '../../approvals/components/AssetRequestDialog.vue'
 
 type DistributionMode = 'organization' | 'location'
 type CategoryMetricMode = 'count' | 'amount'
 type ChartRow = { key: string; label: string; title: string; count: number; amount: number }
 
-const { state, assets, requests } = useDashboard()
+const { state, assets, requests, load } = useDashboard()
 const { user } = usePortalSession()
 const { isEmployeeTerminal } = useTerminalMode()
-const router = useRouter()
 const distributionMode = ref<DistributionMode>('organization')
 const categoryMetricMode = ref<CategoryMetricMode>('count')
+const statusScope = ref('')
+const requestOpen = ref(false)
+const requestType = ref('资产退还')
+const requestAssetId = ref('')
 
 const totalValue = computed(() => assets.value.reduce((sum, item) => sum + Number(item.price || 0), 0))
 const activeCount = computed(() => assets.value.filter((item) => item.status === '在用').length)
-const pendingCount = computed(() => requests.value.filter((item) => item.status !== '已完成').length)
+const pendingCount = computed(() => requests.value.filter((item) => ['审批中', '待审批', '待执行'].includes(item.status)).length)
 const employeeAssets = computed(() => {
   const assigned = assets.value.filter((item) => ['在用', '领用中', '借用中'].includes(item.status))
   return assigned.filter((item) => item.owner === user.value?.name || item.ownerSubject === user.value?.externalSubject)
@@ -33,7 +36,9 @@ const markAssetImageFailed = (item: AssetRecord): void => {
 const assetAssignmentLabel = (item: AssetRecord): string => item.status === '借用中' ? '借用' : '领用'
 const assetModelLabel = (item: AssetRecord): string => [item.brand, item.model].filter(Boolean).join(' ') || '-'
 const openEmployeeRequest = (action: 'return' | 'handover', item: AssetRecord): void => {
-  void router.push({ path: '/requests', query: { action, asset: item.id } })
+  requestType.value = action === 'handover' ? '资产交接' : item.status === '借用中' ? '资产归还' : '资产退还'
+  requestAssetId.value = item.id
+  requestOpen.value = true
 }
 
 const statusRows = computed(() => {
@@ -154,7 +159,7 @@ const metricLabel = (value: number, mode: CategoryMetricMode = 'count'): string 
       <div class="panel-header"><div><h2 class="panel-title">仪表盘</h2><div class="panel-subtitle">查看当前账号范围内的核心资产数量。</div></div></div>
       <div class="dashboard-charts">
         <article class="dashboard-chart-card dashboard-status-card">
-          <div class="dashboard-card-head"><h3>资产状态占比</h3><div class="dashboard-card-filters"><select aria-label="资产状态范围"><option>全部</option></select><select aria-label="所属或承租公司" disabled><option>所属/承租公司</option></select></div></div>
+          <div class="dashboard-card-head"><h3>资产状态占比</h3><div class="dashboard-card-filters"><el-select v-model="statusScope" aria-label="资产状态范围" placeholder="全部"><el-option label="全部" value="" /></el-select><el-select model-value="" aria-label="所属或承租公司" placeholder="所属/承租公司" disabled><el-option label="所属/承租公司" value="" /></el-select></div></div>
           <div class="donut-layout">
             <div class="dashboard-donut">
               <svg class="donut-svg" viewBox="0 0 100 100" aria-hidden="true"><circle class="donut-ring donut-ring-base" cx="50" cy="50" r="34" /><circle v-for="segment in statusSegments.filter((item) => item.count > 0)" :key="segment.key" class="donut-ring donut-ring-segment" :class="`donut-ring-${segment.key}`" cx="50" cy="50" r="34" :style="{ '--segment-color': segment.color, '--segment-dash': segment.dash, '--segment-offset': segment.offset }" /></svg>
@@ -185,4 +190,5 @@ const metricLabel = (value: number, mode: CategoryMetricMode = 'count'): string 
     </article>
   </section>
   </template>
+  <AssetRequestDialog v-model="requestOpen" :type="requestType" :preselected-asset-id="requestAssetId" @submitted="load" />
 </template>

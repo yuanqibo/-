@@ -17,6 +17,7 @@ type ListColumnKey = 'status' | 'code' | 'name' | 'category' | 'phone' | 'email'
 type TableDensity = 'compact' | 'standard' | 'roomy'
 type ReceiveReturnTab = 'receive' | 'return' | 'employee' | 'handover'
 type BorrowReturnTab = 'borrow' | 'return'
+type AdvancedPanelTab = 'search' | 'columns'
 type DateRange = [string, string] | null
 type ActionForm = {
   action: AssetCommand
@@ -210,7 +211,20 @@ const formAdministrators = computed(() => Array.from(new Set([
 ].filter(Boolean) as string[])))
 const assetConditions = ['正常', '全新', '良好', '维修中', '待验收']
 const purchaseMethods = ['采购', '租赁', '自购', '调拨入库']
-const defaultAssetAdvanced = () => ({ id: '', name: '', type: '', model: '', sn: '', owner: '', department: '', location: '', supplier: '', risk: '', tag: '' })
+const uniqueStrings = (values: unknown[]): string[] => Array.from(new Set(values
+  .map((value) => String(value || '').trim())
+  .filter(Boolean)))
+  .sort((left, right) => left.localeCompare(right, 'zh-CN'))
+const assetAdvancedOptions = computed(() => ({
+  statuses: uniqueStrings(assets.value.map((item) => item.status)),
+  categories: uniqueStrings(assets.value.map((item) => item.category)),
+  types: uniqueStrings(assets.value.map((item) => item.type)),
+  departments: uniqueStrings(assets.value.map((item) => item.department)),
+  locations: uniqueStrings([...managedLocations.value.map((item) => item.value), ...assets.value.map((item) => item.location)]),
+  risks: uniqueStrings(assets.value.map((item) => item.risk)),
+  tags: uniqueStrings(assets.value.flatMap((item) => item.tags || []))
+}))
+const defaultAssetAdvanced = () => ({ status: '', id: '', name: '', category: '', type: '', model: '', sn: '', owner: '', department: '', location: '', supplier: '', risk: '', tag: '' })
 const defaultInboundAdvanced = () => ({ status: '', id: '', type: '', dateRange: null as DateRange, operator: '', purchaser: '', company: '' })
 const defaultReceiveAdvanced = () => ({ status: '', id: '', dateRange: null as DateRange, handler: '', receiver: '', company: '', department: '', location: '', note: '', assetId: '', assetName: '', brand: '', model: '', sn: '', owner: '', manager: '', ownerCompany: '' })
 const defaultBorrowAdvanced = () => ({ status: '', id: '', handler: '', borrower: '', borrowDateRange: null as DateRange, expectedReturnDateRange: null as DateRange, assetId: '', sn: '', company: '', department: '', employeeCode: '', phone: '', email: '', location: '' })
@@ -225,7 +239,7 @@ const borrowAdvancedDraft = reactive(defaultBorrowAdvanced())
 const searchable = (item: AssetRecord): string => [item.id, item.name, item.assetTag, item.owner, item.department, item.location, item.model, item.sn]
   .map((value) => String(value || '').toLowerCase()).join(' ')
 const contains = (value: unknown, expected: string): boolean => !expected || String(value || '').toLowerCase().includes(expected.trim().toLowerCase())
-const containsOne = (values: unknown[], expected: string): boolean => !expected || values.some((value) => contains(value, expected))
+const equals = (value: unknown, expected: string): boolean => !expected || String(value || '').trim() === expected.trim()
 const dateInRange = (value: unknown, range: DateRange): boolean => {
   if (!range) return true
   const current = String(value || '')
@@ -244,12 +258,13 @@ const filteredAssets = computed(() => {
       && (!keyword || searchable(item).includes(keyword))
       && (status.value === '全部' || item.status === status.value)
       && (category.value === '全部' || item.category === category.value)
+      && equals(item.status, assetAdvanced.status) && equals(item.category, assetAdvanced.category)
       && contains(item.id, assetAdvanced.id) && contains(item.name, assetAdvanced.name)
-      && containsOne([item.brand, item.type], assetAdvanced.type)
+      && equals(item.type, assetAdvanced.type)
       && contains(item.model, assetAdvanced.model) && contains(item.sn, assetAdvanced.sn) && contains(item.owner, assetAdvanced.owner)
-      && contains(item.department, assetAdvanced.department) && contains(item.location, assetAdvanced.location)
-      && contains(item.supplier, assetAdvanced.supplier) && contains(item.risk, assetAdvanced.risk)
-      && (!assetAdvanced.tag || (item.tags || []).some((tag) => contains(tag, assetAdvanced.tag)))
+      && equals(item.department, assetAdvanced.department) && equals(item.location, assetAdvanced.location)
+      && contains(item.supplier, assetAdvanced.supplier) && equals(item.risk, assetAdvanced.risk)
+      && (!assetAdvanced.tag || (item.tags || []).some((tag) => equals(tag, assetAdvanced.tag)))
   })
 })
 const operationAsset = (record: AssetOperationRecord): AssetRecord => {
@@ -299,7 +314,7 @@ const matchesFlowQuery = (item: AssetRecord): boolean => {
   return !keyword || searchable(item).includes(keyword) || String(item.operationId || '').toLowerCase().includes(keyword)
 }
 const matchesInboundFilters = (item: AssetRecord): boolean => matchesFlowQuery(item)
-  && contains(item.operationStatus, inboundAdvanced.status)
+  && equals(item.operationStatus, inboundAdvanced.status)
   && contains(item.operationId, inboundAdvanced.id)
   && contains(item.purchaseMethod, inboundAdvanced.type)
   && dateInRange(item.operationDate, inboundAdvanced.dateRange)
@@ -307,14 +322,14 @@ const matchesInboundFilters = (item: AssetRecord): boolean => matchesFlowQuery(i
   && contains(item.purchaser, inboundAdvanced.purchaser)
   && contains(item.company, inboundAdvanced.company)
 const matchesReceiveFilters = (item: AssetRecord): boolean => matchesFlowQuery(item)
-  && contains(item.operationStatus || item.status, receiveAdvanced.status)
+  && equals(item.operationStatus || item.status, receiveAdvanced.status)
   && contains(item.operationId, receiveAdvanced.id)
   && dateInRange(item.operationDate, receiveAdvanced.dateRange)
   && contains(item.operator || item.custodian, receiveAdvanced.handler)
   && contains(item.owner, receiveAdvanced.receiver)
   && contains(item.company, receiveAdvanced.company)
   && contains(item.department, receiveAdvanced.department)
-  && contains(item.location, receiveAdvanced.location)
+  && equals(item.location, receiveAdvanced.location)
   && contains(item.note, receiveAdvanced.note)
   && contains(item.id, receiveAdvanced.assetId)
   && contains(item.name, receiveAdvanced.assetName)
@@ -325,7 +340,7 @@ const matchesReceiveFilters = (item: AssetRecord): boolean => matchesFlowQuery(i
   && contains(item.custodian, receiveAdvanced.manager)
   && contains(item.ownerCompany || item.company, receiveAdvanced.ownerCompany)
 const matchesBorrowFilters = (item: AssetRecord): boolean => matchesFlowQuery(item)
-  && contains(item.operationStatus || item.status, borrowAdvanced.status)
+  && equals(item.operationStatus || item.status, borrowAdvanced.status)
   && contains(item.operationId, borrowAdvanced.id)
   && contains(item.operator || item.custodian, borrowAdvanced.handler)
   && contains(item.owner, borrowAdvanced.borrower)
@@ -338,27 +353,26 @@ const matchesBorrowFilters = (item: AssetRecord): boolean => matchesFlowQuery(it
   && contains(item.employeeCode, borrowAdvanced.employeeCode)
   && contains(item.phone, borrowAdvanced.phone)
   && contains(item.email, borrowAdvanced.email)
-  && contains(item.location, borrowAdvanced.location)
+  && equals(item.location, borrowAdvanced.location)
 const employeeRequestRows = computed<AssetRecord[]>(() => (business.value.requests || [])
   .filter((request) => request.type === '资产领用' && Array.isArray(request.assetIds))
   .flatMap((request) => (request.assetIds as string[]).flatMap((assetId) => {
     const asset = assets.value.find((item) => item.id === assetId)
     return asset ? [{ ...asset, status: String(request.status || '待处理'), operationId: request.id, operationDate: request.date || '-', custodian: String(request.decisionOperator || '-'), owner: String(request.applicant || '-'), requestId: request.id } as AssetRecord] : []
   })))
+const receiveSourceRows = computed<AssetRecord[]>(() => {
+  if (receiveReturnTab.value === 'receive') return operationRows('RECEIVE')
+  if (receiveReturnTab.value === 'return') return operationRows('RETURN')
+  if (receiveReturnTab.value === 'handover') return operationRows('HANDOVER')
+  return employeeRequestRows.value
+})
+const borrowSourceRows = computed<AssetRecord[]>(() => borrowReturnTab.value === 'return'
+  ? [...operationRows('BORROW').filter((item) => item.status === '待归还'), ...operationRows('BORROW_RETURN')]
+  : operationRows('BORROW'))
 const modeRows = computed<AssetRecord[]>(() => {
   if (props.mode === 'inbound') return operationRows('INBOUND').filter(matchesInboundFilters)
-  if (props.mode === 'receive-return') {
-    if (receiveReturnTab.value === 'receive') return operationRows('RECEIVE').filter(matchesReceiveFilters)
-    if (receiveReturnTab.value === 'return') return operationRows('RETURN').filter(matchesReceiveFilters)
-    if (receiveReturnTab.value === 'handover') return operationRows('HANDOVER').filter(matchesReceiveFilters)
-    return employeeRequestRows.value.filter(matchesReceiveFilters)
-  }
-  if (props.mode === 'borrow-return') {
-    const rows = borrowReturnTab.value === 'return'
-      ? [...operationRows('BORROW').filter((item) => item.status === '待归还'), ...operationRows('BORROW_RETURN')]
-      : operationRows('BORROW')
-    return rows.filter(matchesBorrowFilters)
-  }
+  if (props.mode === 'receive-return') return receiveSourceRows.value.filter(matchesReceiveFilters)
+  if (props.mode === 'borrow-return') return borrowSourceRows.value.filter(matchesBorrowFilters)
   return filteredAssets.value
 })
 const displayedRows = computed(() => modeRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
@@ -433,24 +447,50 @@ const confirmAssetPicker = (): void => {
   actionSelectedIds.value = []
 }
 
-const workflowStatuses = ['待提交', '审批中', '审批通过', '审批驳回', '待确认', '执行中', '部分完成', '已完成', '已取消', '已撤销', '待签字', '已入库', '待归还']
+const workflowStatuses = ['待提交', '审批中', '审批通过', '审批驳回', '待确认', '执行中', '部分完成', '已完成', '已取消', '已撤销', '待签字']
 const cloneDateRange = (range: DateRange): DateRange => range ? [...range] : null
-const advancedDrawerSize = computed(() => props.mode === 'list' ? 'min(920px, 94vw)' : 'min(620px, 94vw)')
+const advancedDrawerSize = 'min(520px, 94vw)'
+const advancedTab = ref<AdvancedPanelTab>('search')
+const advancedDrawerTitle = computed(() => advancedTab.value === 'columns' ? '自定义列' : '高级搜索')
 const receiveAdvancedLabels = computed(() => {
   if (receiveReturnTab.value === 'handover') return { status: '交接状态', order: '交接单号', date: '交接日期', person: '接收人', company: '接收公司', department: '接收部门', location: '接收后所在位置', note: '交接备注' }
   if (receiveReturnTab.value === 'return') return { status: '退库状态', order: '退库单号', date: '退库日期', person: '领用人', company: '退库后使用公司', department: '退库后使用部门', location: '退库后所在位置', note: '退库备注' }
   if (receiveReturnTab.value === 'employee') return { status: '申领状态', order: '申领单号', date: '申领日期', person: '申领人', company: '申领后使用公司', department: '申领后使用部门', location: '申领后所在位置', note: '申领备注' }
   return { status: '领用状态', order: '领用单号', date: '领用日期', person: '领用人', company: '领用后使用公司', department: '领用后使用部门', location: '领用后所在位置', note: '领用备注' }
 })
-const borrowAdvancedLabels = computed(() => borrowReturnTab.value === 'return'
-  ? { status: '归还状态', order: '归还单号', person: '归还人', date: '归还日期', company: '归还人公司', department: '归还人部门', location: '归还后位置' }
-  : { status: '借用状态', order: '借用单号', person: '借用人', date: '借用日期', company: '借用人公司', department: '借用人部门', location: '借用后位置' })
-const openAdvancedSearch = (): void => {
+const inboundColumnLabels = ['入库状态', '入库单号', '入库类型', '入库日期', '入库人', '采购人', '创建日期', '所属公司', '入库备注', '操作']
+const receiveColumnLabels = computed(() => receiveReturnTab.value === 'handover'
+  ? ['交接状态', '交接单号', '经办人', '接收人', '接收公司', '接收部门', '操作']
+  : ['状态', '单号', '日期', '经办人', '领用人', '工号', '位置', '所属公司', '资产编码', '操作'])
+const borrowColumnLabels = ['借用状态', '借用单号', '经办人', '借用人', '借用日期', '借用人公司', '借用人部门', '工号', '手机号', '邮箱', '借用后位置', '签字人', '签字图片', '借用备注', '资产编码', '资产分类', '资产名称', '品牌', '型号', '设备序列号', '操作']
+const allListColumnsSelected = computed(() => listVisibleColumns.value.length === listColumnKeys.length)
+const updateAdvancedDateRange = (range: DateRange, index: 0 | 1, value: string): DateRange => {
+  const next: [string, string] = [range?.[0] || '', range?.[1] || '']
+  next[index] = value
+  return next[0] || next[1] ? next : null
+}
+const syncAdvancedDraft = (): void => {
   if (props.mode === 'list') Object.assign(assetAdvancedDraft, assetAdvanced)
   else if (props.mode === 'inbound') Object.assign(inboundAdvancedDraft, inboundAdvanced, { dateRange: cloneDateRange(inboundAdvanced.dateRange) })
   else if (props.mode === 'receive-return') Object.assign(receiveAdvancedDraft, receiveAdvanced, { dateRange: cloneDateRange(receiveAdvanced.dateRange) })
   else Object.assign(borrowAdvancedDraft, borrowAdvanced, { borrowDateRange: cloneDateRange(borrowAdvanced.borrowDateRange), expectedReturnDateRange: cloneDateRange(borrowAdvanced.expectedReturnDateRange) })
+}
+const openAdvancedSearch = (): void => {
+  advancedTab.value = 'search'
+  syncAdvancedDraft()
   advancedOpen.value = true
+}
+const openAdvancedColumns = (): void => {
+  advancedTab.value = 'columns'
+  advancedOpen.value = true
+}
+const selectAdvancedTab = (tab: AdvancedPanelTab): void => {
+  advancedTab.value = tab
+  if (tab === 'search') syncAdvancedDraft()
+}
+const setAllListColumns = (checked: boolean): void => {
+  if (checked) listVisibleColumns.value = [...listColumnKeys]
+  else listVisibleColumns.value = [listColumnKeys[0]]
 }
 const applyAdvanced = (): void => {
   if (props.mode === 'list') Object.assign(assetAdvanced, assetAdvancedDraft)
@@ -466,6 +506,7 @@ const clearAdvanced = (): void => {
   else if (props.mode === 'receive-return') { Object.assign(receiveAdvanced, defaultReceiveAdvanced()); Object.assign(receiveAdvancedDraft, defaultReceiveAdvanced()) }
   else { Object.assign(borrowAdvanced, defaultBorrowAdvanced()); Object.assign(borrowAdvancedDraft, defaultBorrowAdvanced()) }
   page.value = 1
+  advancedOpen.value = false
 }
 
 const createDraft = reactive<AssetDraft>({
@@ -907,18 +948,10 @@ onMounted(() => void load())
       <div v-loading="state.loading" class="asset-table-shell" :class="`density-${listDensity}`">
         <div class="asset-table-actions">
           <button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="openAdvancedSearch">高级搜索</button>
-          <el-popover v-if="can('asset:item:columnSettings')" placement="bottom-end" :width="300" trigger="click">
-            <template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template>
-            <div class="standard-column-settings asset-column-settings">
-              <div class="asset-column-settings__head"><strong>显示字段</strong><button type="button" @click="resetListSettings">重置</button></div>
-              <div class="asset-column-settings__grid"><el-checkbox v-for="item in listColumns" :key="item.key" :model-value="listVisibleColumns.includes(item.key)" @change="toggleListColumn(item.key, $event === true)">{{ item.label }}</el-checkbox></div>
-              <strong>表格密度</strong>
-              <el-radio-group v-model="listDensity" size="small"><el-radio-button value="compact">紧凑</el-radio-button><el-radio-button value="standard">标准</el-radio-button><el-radio-button value="roomy">宽松</el-radio-button></el-radio-group>
-            </div>
-          </el-popover>
+          <button v-if="can('asset:item:columnSettings')" class="list-settings-button" type="button" title="列表设置" aria-label="列表设置" @click="openAdvancedColumns">⚙</button>
         </div>
         <div class="asset-table-scroll">
-          <table class="asset-list-table" :style="{ minWidth: `${listTableMinWidth}px` }">
+          <table v-resizable-columns="'assets:list'" class="asset-list-table" :style="{ minWidth: `${listTableMinWidth}px` }">
             <colgroup><col style="width: 36px"><col v-for="column in listDisplayedColumns" :key="column.key" :style="{ width: `${column.width}px` }"></colgroup>
             <thead><tr><th class="asset-list-select-cell"><input type="checkbox" aria-label="全选" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th v-for="column in listDisplayedColumns" :key="column.key" :data-column-key="column.key">{{ column.label }}</th></tr></thead>
             <tbody>
@@ -940,7 +973,7 @@ onMounted(() => void load())
         <button class="page-btn" type="button" aria-label="上一页" :disabled="page <= 1" @click="page--">‹</button>
         <template v-for="(item, index) in paginationItems" :key="`${item}-${index}`"><span v-if="item === 'ellipsis'" class="page-ellipsis">…</span><button v-else class="page-btn" :class="{ active: item === page }" type="button" :aria-current="item === page ? 'page' : undefined" @click="page = item">{{ item }}</button></template>
         <button class="page-btn" type="button" aria-label="下一页" :disabled="page >= pageCount" @click="page++">›</button>
-        <select v-model.number="pageSize" aria-label="每页条数"><option :value="20">20 条/页</option><option :value="50">50 条/页</option></select>
+        <el-select v-model="pageSize" class="asset-page-size-select" aria-label="每页条数"><el-option label="20 条/页" :value="20" /><el-option label="50 条/页" :value="50" /></el-select>
         <span>跳至</span><input v-model.number="jumpPage" aria-label="跳转页码" inputmode="numeric" @keydown.enter="goToJumpPage"><span>页</span>
       </div>
     </template>
@@ -956,8 +989,8 @@ onMounted(() => void load())
       </div>
       <el-alert v-if="state.errorMessage" :title="state.errorMessage" type="error" show-icon :closable="false" />
       <div v-loading="state.loading" class="asset-table-shell inbound-table-shell">
-        <div class="asset-table-actions inbound-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="openAdvancedSearch">高级搜索</button><el-popover placement="bottom-end" :width="260" trigger="click"><template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template><div>入库状态、入库单号、入库类型、入库日期、入库人、采购人、创建日期、所属公司、入库备注、操作</div></el-popover></div>
-        <div class="asset-table-scroll inbound-table-scroll"><table class="asset-list-table inbound-order-table" style="min-width: 1080px"><thead><tr><th class="inbound-select-cell"><input type="checkbox" aria-label="全选入库单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>入库状态</th><th>入库单号</th><th>入库类型</th><th>入库日期</th><th>入库人</th><th>采购人</th><th>创建日期</th><th>所属公司</th><th>入库备注</th><th>操作</th></tr></thead><tbody>
+        <div class="asset-table-actions inbound-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="openAdvancedSearch">高级搜索</button><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置" @click="openAdvancedColumns">⚙</button></div>
+        <div class="asset-table-scroll inbound-table-scroll"><table v-resizable-columns="'assets:inbound'" class="asset-list-table inbound-order-table" style="min-width: 1080px"><thead><tr><th class="inbound-select-cell"><input type="checkbox" aria-label="全选入库单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>入库状态</th><th>入库单号</th><th>入库类型</th><th>入库日期</th><th>入库人</th><th>采购人</th><th>创建日期</th><th>所属公司</th><th>入库备注</th><th>操作</th></tr></thead><tbody>
           <tr v-for="item in displayedRows" :key="operationId(item, 'RK')"><td class="inbound-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'RK')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="inbound-status-pill" :class="assetStatusClass(item.status)">{{ item.status || '已入库' }}</span></td><td><button class="link inbound-order-link" type="button" @click="detail = item">{{ operationId(item, 'RK') }}</button></td><td>{{ item.purchaseMethod || '新增资产' }}</td><td>{{ operationDate(item) }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.purchaser || '-' }}</td><td>{{ item.createdDate || operationDate(item) }}</td><td>{{ item.ownerCompany || item.company || '-' }}</td><td>{{ item.note || '-' }}</td><td><button v-if="can('asset:inbound:cancel') && item.status !== '已取消'" class="link inbound-cancel-link" type="button" @click="openAction(item, 'cancel-inbound')">取消入库</button><span v-else class="muted-text">已取消</span></td></tr>
           <tr v-if="!displayedRows.length" class="empty-row"><td colspan="11">{{ query ? '没有匹配的入库单。' : '暂无入库单，点击新增录入资产。' }}</td></tr>
         </tbody></table></div>
@@ -967,7 +1000,7 @@ onMounted(() => void load())
     <template v-else-if="mode === 'receive-return'">
       <div class="receive-return-tabs"><button v-for="tab in ([['receive','领用'],['return','退库'],['employee','员工申领'],['handover','交接']] as const)" :key="tab[0]" class="receive-return-tab" :class="{ active: receiveReturnTab === tab[0] }" type="button" @click="receiveReturnTab = tab[0]">{{ tab[1] }}</button></div>
       <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button class="table-action primary" type="button" @click="openBlankAction(receiveAction)">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openOrderPrint(flowOrderPrintKind)">打印{{ receiveReturnTab === 'handover' ? '交接单' : receiveReturnTab === 'employee' ? '员工申领单' : receiveReturnTab === 'return' ? '领用退库单' : '领用单' }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
-      <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="openAdvancedSearch">高级搜索</button><el-popover placement="bottom-end" :width="260" trigger="click"><template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template><div>{{ receiveReturnTab === 'handover' ? '交接状态、交接单号、经办人、接收人、接收公司、接收部门、操作' : '状态、单号、日期、经办人、领用人、工号、位置、所属公司、资产编码、操作' }}</div></el-popover></div><div class="asset-table-scroll receive-return-table-scroll"><table class="asset-list-table receive-return-table" style="min-width: 1040px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选领用退库单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>{{ receiveReturnTab === 'handover' ? '交接状态' : receiveReturnTab === 'employee' ? '申领状态' : receiveReturnTab === 'return' ? '退库状态' : '领用状态' }}</th><th>{{ receiveReturnTab === 'handover' ? '交接单号' : receiveReturnTab === 'employee' ? '申领单号' : receiveReturnTab === 'return' ? '退库单号' : '领用单号' }}</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领日期' : receiveReturnTab === 'return' ? '退库日期' : '领用日期' }}</th><th>经办人</th><th>{{ receiveReturnTab === 'handover' ? '接收人' : receiveReturnTab === 'employee' ? '申领人' : '领用人' }}</th><th v-if="receiveReturnTab !== 'handover'">工号</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领后位置' : receiveReturnTab === 'return' ? '退库后位置' : '领用后位置' }}</th><th>{{ receiveReturnTab === 'handover' ? '接收公司' : '所属公司' }}</th><th v-if="receiveReturnTab === 'handover'">接收部门</th><th v-else>资产编码</th><th>操作</th></tr></thead><tbody>
+      <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="openAdvancedSearch">高级搜索</button><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置" @click="openAdvancedColumns">⚙</button></div><div class="asset-table-scroll receive-return-table-scroll"><table v-resizable-columns="`assets:receive-return:${receiveReturnTab}`" class="asset-list-table receive-return-table" style="min-width: 1040px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选领用退库单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>{{ receiveReturnTab === 'handover' ? '交接状态' : receiveReturnTab === 'employee' ? '申领状态' : receiveReturnTab === 'return' ? '退库状态' : '领用状态' }}</th><th>{{ receiveReturnTab === 'handover' ? '交接单号' : receiveReturnTab === 'employee' ? '申领单号' : receiveReturnTab === 'return' ? '退库单号' : '领用单号' }}</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领日期' : receiveReturnTab === 'return' ? '退库日期' : '领用日期' }}</th><th>经办人</th><th>{{ receiveReturnTab === 'handover' ? '接收人' : receiveReturnTab === 'employee' ? '申领人' : '领用人' }}</th><th v-if="receiveReturnTab !== 'handover'">工号</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领后位置' : receiveReturnTab === 'return' ? '退库后位置' : '领用后位置' }}</th><th>{{ receiveReturnTab === 'handover' ? '接收公司' : '所属公司' }}</th><th v-if="receiveReturnTab === 'handover'">接收部门</th><th v-else>资产编码</th><th>操作</th></tr></thead><tbody>
         <tr v-for="item in displayedRows" :key="operationId(item, 'FLOW')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'FLOW')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="assetStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, receiveReturnTab === 'handover' ? 'JJ' : receiveReturnTab === 'return' ? 'TK' : 'LY') }}</button></td><td v-if="receiveReturnTab !== 'handover'">{{ operationDate(item) }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.employeeCode || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.location || '-' }}</td><td>{{ item.company || item.ownerCompany || '-' }}</td><td v-if="receiveReturnTab === 'handover'">{{ item.department || '-' }}</td><td v-else>{{ item.id }}</td><td><button class="link receive-return-action-link" type="button" @click="detail = item">{{ receiveReturnTab === 'handover' && item.canSign ? '签字' : '查看' }}</button></td></tr>
         <tr v-if="!displayedRows.length" class="empty-row"><td :colspan="receiveReturnTab === 'handover' ? 9 : 11">{{ query ? '没有匹配的领用退库记录。' : '暂无领用退库记录。' }}</td></tr>
       </tbody></table></div></div>
@@ -976,56 +1009,115 @@ onMounted(() => void load())
     <template v-else>
       <div class="receive-return-tabs"><button class="receive-return-tab" :class="{ active: borrowReturnTab === 'borrow' }" type="button" @click="borrowReturnTab = 'borrow'">借用</button><button class="receive-return-tab" :class="{ active: borrowReturnTab === 'return' }" type="button" @click="borrowReturnTab = 'return'">归还</button></div>
       <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button class="table-action primary" type="button" @click="openBlankAction('borrow')">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="notifyBorrowPrint">打印借用归还单</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
-      <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="openAdvancedSearch">高级搜索</button><el-popover placement="bottom-end" :width="300" trigger="click"><template #reference><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置">⚙</button></template><div>借用状态、借用单号、经办人、借用人、借用日期、借用人公司、借用人部门、工号、手机号、邮箱、借用后位置、签字人、签字图片、借用备注、资产信息、操作</div></el-popover></div><div class="asset-table-scroll receive-return-table-scroll"><table class="asset-list-table receive-return-table borrow-return-table" style="min-width: 1900px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选借用归还单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>借用状态</th><th>借用单号</th><th>经办人</th><th>借用人</th><th>借用日期</th><th>借用人公司</th><th>借用人部门</th><th>工号</th><th>手机号</th><th>邮箱</th><th>借用后位置</th><th>签字人</th><th>签字图片</th><th>借用备注</th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌</th><th>型号</th><th>设备序列号</th><th>操作</th></tr></thead><tbody>
+      <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="openAdvancedSearch">高级搜索</button><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置" @click="openAdvancedColumns">⚙</button></div><div class="asset-table-scroll receive-return-table-scroll"><table v-resizable-columns="`assets:borrow-return:${borrowReturnTab}`" class="asset-list-table receive-return-table borrow-return-table" style="min-width: 1900px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选借用归还单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>借用状态</th><th>借用单号</th><th>经办人</th><th>借用人</th><th>借用日期</th><th>借用人公司</th><th>借用人部门</th><th>工号</th><th>手机号</th><th>邮箱</th><th>借用后位置</th><th>签字人</th><th>签字图片</th><th>借用备注</th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌</th><th>型号</th><th>设备序列号</th><th>操作</th></tr></thead><tbody>
         <tr v-for="item in displayedRows" :key="operationId(item, 'JY')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'JY')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="assetStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, 'JY') }}</button></td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td>{{ operationDate(item) }}</td><td>{{ item.company || '-' }}</td><td>{{ item.department || '-' }}</td><td>{{ item.employeeCode || '-' }}</td><td>{{ item.phone || '-' }}</td><td>{{ item.email || '-' }}</td><td>{{ item.location || '-' }}</td><td>{{ item.owner || '-' }}</td><td>-</td><td>{{ item.note || '-' }}</td><td>{{ item.id }}</td><td>{{ item.category || '-' }}</td><td>{{ item.name || '-' }}</td><td>{{ item.brand || '-' }}</td><td>{{ item.model || '-' }}</td><td>{{ item.sn || '-' }}</td><td><template v-if="borrowReturnTab === 'return' && item.operationType === 'BORROW'"><button class="link receive-return-action-link" type="button" @click="openAction(item, 'borrow-return')">归还</button><button class="link receive-return-action-link" type="button" @click="openAction(item, 'borrow')">延期</button></template><button v-else class="link receive-return-action-link" type="button" @click="detail = item">查看</button></td></tr>
         <tr v-if="!displayedRows.length" class="empty-row"><td colspan="22">{{ query ? (borrowReturnTab === 'return' ? '没有匹配的归还记录。' : '没有匹配的借用记录。') : (borrowReturnTab === 'return' ? '暂无可归还记录。' : '暂无借用记录。') }}</td></tr>
       </tbody></table></div></div>
     </template>
 
-    <div v-if="mode !== 'list'" class="asset-list-pagination"><span>共 {{ modeRows.length }} 条</span><button class="page-btn" type="button" aria-label="上一页" :disabled="page <= 1" @click="page--">‹</button><template v-for="(item, index) in paginationItems" :key="`${item}-${index}`"><span v-if="item === 'ellipsis'" class="page-ellipsis">…</span><button v-else class="page-btn" :class="{ active: item === page }" type="button" @click="page = item">{{ item }}</button></template><button class="page-btn" type="button" aria-label="下一页" :disabled="page >= pageCount" @click="page++">›</button><select v-model.number="pageSize" aria-label="每页条数"><option :value="20">20 条/页</option><option :value="50">50 条/页</option></select><span>跳至</span><input v-model.number="jumpPage" aria-label="跳转页码" @keydown.enter="goToJumpPage"><span>页</span></div>
+    <div v-if="mode !== 'list'" class="asset-list-pagination"><span>共 {{ modeRows.length }} 条</span><button class="page-btn" type="button" aria-label="上一页" :disabled="page <= 1" @click="page--">‹</button><template v-for="(item, index) in paginationItems" :key="`${item}-${index}`"><span v-if="item === 'ellipsis'" class="page-ellipsis">…</span><button v-else class="page-btn" :class="{ active: item === page }" type="button" @click="page = item">{{ item }}</button></template><button class="page-btn" type="button" aria-label="下一页" :disabled="page >= pageCount" @click="page++">›</button><el-select v-model="pageSize" class="asset-page-size-select" aria-label="每页条数"><el-option label="20 条/页" :value="20" /><el-option label="50 条/页" :value="50" /></el-select><span>跳至</span><input v-model.number="jumpPage" aria-label="跳转页码" @keydown.enter="goToJumpPage"><span>页</span></div>
 
-    <el-drawer v-model="advancedOpen" class="asset-advanced-search-drawer" title="高级筛选" :size="advancedDrawerSize" append-to-body>
-      <el-form v-if="mode === 'list'" label-position="top" class="standard-form-grid asset-advanced-form">
-        <el-form-item label="资产编码"><el-input v-model="assetAdvancedDraft.id" /></el-form-item><el-form-item label="资产名称"><el-input v-model="assetAdvancedDraft.name" /></el-form-item>
-        <el-form-item label="品牌/类型"><el-input v-model="assetAdvancedDraft.type" /></el-form-item><el-form-item label="型号"><el-input v-model="assetAdvancedDraft.model" /></el-form-item>
-        <el-form-item label="设备序列号"><el-input v-model="assetAdvancedDraft.sn" /></el-form-item><el-form-item label="使用人"><el-input v-model="assetAdvancedDraft.owner" /></el-form-item>
-        <el-form-item label="所属部门"><el-input v-model="assetAdvancedDraft.department" /></el-form-item><el-form-item label="所在位置"><el-input v-model="assetAdvancedDraft.location" /></el-form-item>
-        <el-form-item label="供应商"><el-input v-model="assetAdvancedDraft.supplier" /></el-form-item><el-form-item label="风险状态"><el-input v-model="assetAdvancedDraft.risk" /></el-form-item>
-        <el-form-item label="资产标签"><el-input v-model="assetAdvancedDraft.tag" /></el-form-item>
-      </el-form>
-      <el-form v-else-if="mode === 'inbound'" label-position="top" class="standard-form-grid asset-advanced-form">
-        <el-form-item label="入库状态"><el-select v-model="inboundAdvancedDraft.status" clearable placeholder="请选择"><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-        <el-form-item label="入库单号"><el-input v-model="inboundAdvancedDraft.id" /></el-form-item>
-        <el-form-item label="入库类型"><el-input v-model="inboundAdvancedDraft.type" /></el-form-item>
-        <el-form-item label="入库日期" class="standard-form-span"><el-date-picker v-model="inboundAdvancedDraft.dateRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" /></el-form-item>
-        <el-form-item label="入库人"><el-input v-model="inboundAdvancedDraft.operator" /></el-form-item><el-form-item label="采购人"><el-input v-model="inboundAdvancedDraft.purchaser" /></el-form-item>
-        <el-form-item label="所属公司"><el-input v-model="inboundAdvancedDraft.company" /></el-form-item>
-      </el-form>
-      <el-form v-else-if="mode === 'receive-return'" label-position="top" class="standard-form-grid asset-advanced-form">
-        <el-form-item :label="receiveAdvancedLabels.status"><el-select v-model="receiveAdvancedDraft.status" clearable placeholder="请选择"><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-        <el-form-item :label="receiveAdvancedLabels.order"><el-input v-model="receiveAdvancedDraft.id" /></el-form-item>
-        <el-form-item :label="receiveAdvancedLabels.date" class="standard-form-span"><el-date-picker v-model="receiveAdvancedDraft.dateRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" /></el-form-item>
-        <el-form-item label="经办人"><el-input v-model="receiveAdvancedDraft.handler" /></el-form-item><el-form-item :label="receiveAdvancedLabels.person"><el-input v-model="receiveAdvancedDraft.receiver" /></el-form-item>
-        <el-form-item :label="receiveAdvancedLabels.company"><el-input v-model="receiveAdvancedDraft.company" /></el-form-item><el-form-item :label="receiveAdvancedLabels.department"><el-input v-model="receiveAdvancedDraft.department" /></el-form-item>
-        <el-form-item :label="receiveAdvancedLabels.location"><el-select v-model="receiveAdvancedDraft.location" clearable filterable placeholder="请选择"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
-        <el-form-item :label="receiveAdvancedLabels.note"><el-input v-model="receiveAdvancedDraft.note" /></el-form-item>
-        <el-form-item label="资产编码"><el-input v-model="receiveAdvancedDraft.assetId" /></el-form-item><el-form-item label="资产名称"><el-input v-model="receiveAdvancedDraft.assetName" /></el-form-item>
-        <el-form-item label="品牌"><el-input v-model="receiveAdvancedDraft.brand" /></el-form-item><el-form-item label="型号"><el-input v-model="receiveAdvancedDraft.model" /></el-form-item>
-        <el-form-item label="设备序列号"><el-input v-model="receiveAdvancedDraft.sn" /></el-form-item><el-form-item v-if="receiveReturnTab !== 'handover'" label="使用人"><el-input v-model="receiveAdvancedDraft.owner" /></el-form-item>
-        <el-form-item label="管理员"><el-input v-model="receiveAdvancedDraft.manager" /></el-form-item><el-form-item label="所属/承租公司"><el-input v-model="receiveAdvancedDraft.ownerCompany" /></el-form-item>
-      </el-form>
-      <el-form v-else label-position="top" class="standard-form-grid asset-advanced-form">
-        <el-form-item :label="borrowAdvancedLabels.status"><el-select v-model="borrowAdvancedDraft.status" clearable placeholder="请选择"><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-        <el-form-item :label="borrowAdvancedLabels.order"><el-input v-model="borrowAdvancedDraft.id" /></el-form-item>
-        <el-form-item label="经办人"><el-input v-model="borrowAdvancedDraft.handler" /></el-form-item><el-form-item :label="borrowAdvancedLabels.person"><el-input v-model="borrowAdvancedDraft.borrower" /></el-form-item>
-        <el-form-item :label="borrowAdvancedLabels.date" class="standard-form-span"><el-date-picker v-model="borrowAdvancedDraft.borrowDateRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" /></el-form-item>
-        <el-form-item label="预计归还" class="standard-form-span"><el-date-picker v-model="borrowAdvancedDraft.expectedReturnDateRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" /></el-form-item>
-        <el-form-item label="资产编码"><el-input v-model="borrowAdvancedDraft.assetId" /></el-form-item><el-form-item label="设备序列号"><el-input v-model="borrowAdvancedDraft.sn" /></el-form-item>
-        <el-form-item :label="borrowAdvancedLabels.company"><el-input v-model="borrowAdvancedDraft.company" /></el-form-item><el-form-item :label="borrowAdvancedLabels.department"><el-input v-model="borrowAdvancedDraft.department" /></el-form-item>
-        <el-form-item label="工号"><el-input v-model="borrowAdvancedDraft.employeeCode" /></el-form-item><el-form-item label="手机号"><el-input v-model="borrowAdvancedDraft.phone" /></el-form-item>
-        <el-form-item label="邮箱"><el-input v-model="borrowAdvancedDraft.email" /></el-form-item><el-form-item :label="borrowAdvancedLabels.location"><el-select v-model="borrowAdvancedDraft.location" clearable filterable placeholder="请选择"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
-      </el-form>
-      <template #footer><el-button @click="clearAdvanced">重置</el-button><el-button type="primary" @click="applyAdvanced">查询</el-button></template>
+    <el-drawer v-model="advancedOpen" class="asset-advanced-search-drawer" :size="advancedDrawerSize" :show-close="false" append-to-body>
+      <template #header="{ close, titleId, titleClass }">
+        <div class="asset-advanced-drawer-title"><span class="eyebrow">列表操作</span><h2 :id="titleId" :class="titleClass">{{ advancedDrawerTitle }}</h2></div>
+        <button class="asset-advanced-drawer-close" type="button" aria-label="关闭" @click="close">×</button>
+      </template>
+      <form class="advanced-search-form" @submit.prevent="applyAdvanced">
+        <div class="advanced-search-tabs">
+          <button type="button" :class="{ active: advancedTab === 'search' }" @click="selectAdvancedTab('search')">高级搜索</button>
+          <button type="button" :class="{ active: advancedTab === 'columns' }" @click="selectAdvancedTab('columns')">自定义列</button>
+        </div>
+
+        <template v-if="advancedTab === 'search'">
+          <template v-if="mode === 'list'">
+            <p class="advanced-search-hint">系统支持多种字段组合筛选，选择要精确匹配的字段后点击查询。</p>
+            <div class="advanced-filter-section">
+              <label class="advanced-filter-field"><span>资产状态</span><el-select v-model="assetAdvancedDraft.status" aria-label="资产状态" placeholder="全部"><el-option label="全部" value="" /><el-option v-for="item in assetAdvancedOptions.statuses" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>资产编码</span><input v-model="assetAdvancedDraft.id" placeholder="例如 AST-0001"></label>
+              <label class="advanced-filter-field"><span>资产名称</span><input v-model="assetAdvancedDraft.name" placeholder="例如 测试笔记本"></label>
+              <label class="advanced-filter-field"><span>资产分类</span><el-select v-model="assetAdvancedDraft.category" aria-label="资产分类" placeholder="全部"><el-option label="全部" value="" /><el-option v-for="item in assetAdvancedOptions.categories" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>品牌/类型</span><el-select v-model="assetAdvancedDraft.type" aria-label="品牌/类型" placeholder="全部"><el-option label="全部" value="" /><el-option v-for="item in assetAdvancedOptions.types" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>型号</span><input v-model="assetAdvancedDraft.model" placeholder="例如 X1 Carbon"></label>
+              <label class="advanced-filter-field"><span>设备序列号</span><input v-model="assetAdvancedDraft.sn" placeholder="SN / 序列号"></label>
+              <label class="advanced-filter-field"><span>使用人</span><input v-model="assetAdvancedDraft.owner" placeholder="姓名或未分配"></label>
+              <label class="advanced-filter-field"><span>所属部门</span><el-select v-model="assetAdvancedDraft.department" aria-label="所属部门" placeholder="全部"><el-option label="全部" value="" /><el-option v-for="item in assetAdvancedOptions.departments" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>所在位置</span><el-select v-model="assetAdvancedDraft.location" aria-label="所在位置" placeholder="全部"><el-option label="全部" value="" /><el-option v-for="item in assetAdvancedOptions.locations" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>供应商</span><input v-model="assetAdvancedDraft.supplier" placeholder="采购或租赁供应商"></label>
+              <label class="advanced-filter-field"><span>风险状态</span><el-select v-model="assetAdvancedDraft.risk" aria-label="风险状态" placeholder="全部"><el-option label="全部" value="" /><el-option v-for="item in assetAdvancedOptions.risks" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>资产标签</span><el-select v-model="assetAdvancedDraft.tag" aria-label="资产标签" placeholder="全部"><el-option label="全部" value="" /><el-option v-for="item in assetAdvancedOptions.tags" :key="item" :label="item" :value="item" /></el-select></label>
+            </div>
+          </template>
+
+          <template v-else-if="mode === 'inbound'">
+            <p class="advanced-search-hint">入库搜索只筛选当前入库板块，可按入库单据字段组合查询。</p>
+            <div class="advanced-filter-section inbound-advanced-fields">
+              <label class="advanced-filter-field"><span>入库状态</span><el-select v-model="inboundAdvancedDraft.status" aria-label="入库状态" placeholder="入库状态"><el-option label="全部" value="" /><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>入库单号</span><input v-model="inboundAdvancedDraft.id" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>入库类型</span><input v-model="inboundAdvancedDraft.type" placeholder="入库类型"></label>
+              <label class="advanced-filter-field advanced-filter-date-range"><span>入库日期</span><div class="advanced-date-range-control"><input type="date" :value="inboundAdvancedDraft.dateRange?.[0] || ''" aria-label="入库日期开始日期" @input="inboundAdvancedDraft.dateRange = updateAdvancedDateRange(inboundAdvancedDraft.dateRange, 0, ($event.target as HTMLInputElement).value)"><span>→</span><input type="date" :value="inboundAdvancedDraft.dateRange?.[1] || ''" aria-label="入库日期结束日期" @input="inboundAdvancedDraft.dateRange = updateAdvancedDateRange(inboundAdvancedDraft.dateRange, 1, ($event.target as HTMLInputElement).value)"></div></label>
+              <label class="advanced-filter-field"><span>入库人</span><input v-model="inboundAdvancedDraft.operator" placeholder="入库人"></label>
+              <label class="advanced-filter-field"><span>采购人</span><input v-model="inboundAdvancedDraft.purchaser" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>所属公司</span><input v-model="inboundAdvancedDraft.company" placeholder="默认公司"></label>
+            </div>
+          </template>
+
+          <template v-else-if="mode === 'receive-return'">
+            <div class="advanced-filter-section receive-return-advanced-fields">
+              <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.status }}</span><el-select v-model="receiveAdvancedDraft.status" :aria-label="receiveAdvancedLabels.status" :placeholder="receiveAdvancedLabels.status"><el-option label="全部" value="" /><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.order }}</span><input v-model="receiveAdvancedDraft.id" placeholder="请输入"></label>
+              <label class="advanced-filter-field advanced-filter-date-range"><span>{{ receiveAdvancedLabels.date }}</span><div class="advanced-date-range-control"><input type="date" :value="receiveAdvancedDraft.dateRange?.[0] || ''" :aria-label="`${receiveAdvancedLabels.date}开始日期`" @input="receiveAdvancedDraft.dateRange = updateAdvancedDateRange(receiveAdvancedDraft.dateRange, 0, ($event.target as HTMLInputElement).value)"><span>→</span><input type="date" :value="receiveAdvancedDraft.dateRange?.[1] || ''" :aria-label="`${receiveAdvancedLabels.date}结束日期`" @input="receiveAdvancedDraft.dateRange = updateAdvancedDateRange(receiveAdvancedDraft.dateRange, 1, ($event.target as HTMLInputElement).value)"></div></label>
+              <label class="advanced-filter-field"><span>经办人</span><input v-model="receiveAdvancedDraft.handler" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>{{ receiveReturnTab === 'handover' ? '接收人' : '领用人' }}</span><input v-model="receiveAdvancedDraft.receiver" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.company }}</span><input v-model="receiveAdvancedDraft.company" placeholder="默认公司"></label>
+              <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.department }}</span><input v-model="receiveAdvancedDraft.department" placeholder="默认部门"></label>
+              <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.location }}</span><el-select v-model="receiveAdvancedDraft.location" :aria-label="receiveAdvancedLabels.location" placeholder="所在位置"><el-option label="全部" value="" /><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+              <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.note }}</span><input v-model="receiveAdvancedDraft.note" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>资产编码</span><input v-model="receiveAdvancedDraft.assetId" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>资产名称</span><input v-model="receiveAdvancedDraft.assetName" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>品牌</span><input v-model="receiveAdvancedDraft.brand" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>型号</span><input v-model="receiveAdvancedDraft.model" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>设备序列号</span><input v-model="receiveAdvancedDraft.sn" placeholder="请输入"></label>
+              <label v-if="receiveReturnTab !== 'handover'" class="advanced-filter-field"><span>使用人</span><input v-model="receiveAdvancedDraft.owner" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>管理员</span><input v-model="receiveAdvancedDraft.manager" placeholder="管理员"></label>
+              <label class="advanced-filter-field"><span>所属/承租公司</span><input v-model="receiveAdvancedDraft.ownerCompany" placeholder="默认公司"></label>
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="advanced-filter-section borrow-return-advanced-fields">
+              <label class="advanced-filter-field"><span>借用状态</span><el-select v-model="borrowAdvancedDraft.status" aria-label="借用状态" placeholder="借用状态"><el-option label="全部" value="" /><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>借用单号</span><input v-model="borrowAdvancedDraft.id" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>经办人</span><input v-model="borrowAdvancedDraft.handler" placeholder="经办人"></label>
+              <label class="advanced-filter-field"><span>借用人</span><input v-model="borrowAdvancedDraft.borrower" placeholder="请输入"></label>
+              <label class="advanced-filter-field advanced-filter-date-range"><span>借用日期</span><div class="advanced-date-range-control"><input type="date" :value="borrowAdvancedDraft.borrowDateRange?.[0] || ''" aria-label="借用日期开始日期" @input="borrowAdvancedDraft.borrowDateRange = updateAdvancedDateRange(borrowAdvancedDraft.borrowDateRange, 0, ($event.target as HTMLInputElement).value)"><span>→</span><input type="date" :value="borrowAdvancedDraft.borrowDateRange?.[1] || ''" aria-label="借用日期结束日期" @input="borrowAdvancedDraft.borrowDateRange = updateAdvancedDateRange(borrowAdvancedDraft.borrowDateRange, 1, ($event.target as HTMLInputElement).value)"></div></label>
+              <label class="advanced-filter-field advanced-filter-date-range"><span>预计归还</span><div class="advanced-date-range-control"><input type="date" :value="borrowAdvancedDraft.expectedReturnDateRange?.[0] || ''" aria-label="预计归还开始日期" @input="borrowAdvancedDraft.expectedReturnDateRange = updateAdvancedDateRange(borrowAdvancedDraft.expectedReturnDateRange, 0, ($event.target as HTMLInputElement).value)"><span>→</span><input type="date" :value="borrowAdvancedDraft.expectedReturnDateRange?.[1] || ''" aria-label="预计归还结束日期" @input="borrowAdvancedDraft.expectedReturnDateRange = updateAdvancedDateRange(borrowAdvancedDraft.expectedReturnDateRange, 1, ($event.target as HTMLInputElement).value)"></div></label>
+              <label class="advanced-filter-field"><span>资产编码</span><input v-model="borrowAdvancedDraft.assetId" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>设备序列号</span><input v-model="borrowAdvancedDraft.sn" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>借用人公司</span><input v-model="borrowAdvancedDraft.company" placeholder="默认公司"></label>
+              <label class="advanced-filter-field"><span>借用人部门</span><input v-model="borrowAdvancedDraft.department" placeholder="默认部门"></label>
+              <label class="advanced-filter-field"><span>工号</span><input v-model="borrowAdvancedDraft.employeeCode" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>手机号</span><input v-model="borrowAdvancedDraft.phone" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>邮箱</span><input v-model="borrowAdvancedDraft.email" placeholder="请输入"></label>
+              <label class="advanced-filter-field"><span>借用后位置</span><el-select v-model="borrowAdvancedDraft.location" aria-label="借用后位置" placeholder="借用后位置"><el-option label="全部" value="" /><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+            </div>
+          </template>
+
+          <div class="advanced-search-actions"><button type="submit" class="btn primary">查询</button><button type="button" class="btn" @click="clearAdvanced">重置</button></div>
+        </template>
+
+        <template v-else>
+          <div v-if="mode === 'list'" class="custom-column-panel">
+            <p class="advanced-search-hint">对资产进行列设置，根据实际情况勾选关键信息展示资产列表。</p>
+            <div class="custom-column-toolbar"><label><input type="checkbox" :checked="allListColumnsSelected" @change="setAllListColumns(($event.target as HTMLInputElement).checked)"> 全选</label><span>({{ listVisibleColumns.length }}/{{ listColumnKeys.length }})</span><button type="button" @click="resetListSettings">重置</button></div>
+            <div class="custom-column-list"><label v-for="item in listColumns" :key="item.key"><input type="checkbox" :checked="listVisibleColumns.includes(item.key)" @change="toggleListColumn(item.key, ($event.target as HTMLInputElement).checked)"> {{ item.label }}</label></div>
+            <div class="list-setting-section compact-setting"><h3>表格密度</h3><div class="density-options"><button v-for="item in ([['compact','紧凑'],['standard','标准'],['roomy','宽松']] as const)" :key="item[0]" type="button" :class="{ active: listDensity === item[0] }" @click="listDensity = item[0]">{{ item[1] }}</button></div></div>
+          </div>
+          <div v-else class="custom-column-panel">
+            <p class="advanced-search-hint">当前列设置只覆盖本业务单据字段，不影响资产列表。</p>
+            <div class="custom-column-list"><label v-for="item in (mode === 'inbound' ? inboundColumnLabels : mode === 'receive-return' ? receiveColumnLabels : borrowColumnLabels)" :key="item"><input type="checkbox" checked disabled> {{ item }}</label></div>
+          </div>
+        </template>
+      </form>
     </el-drawer>
 
     <el-drawer :model-value="Boolean(detail)" class="asset-detail-drawer" aria-label="资产详情" title="资产详情" size="min(1120px, 96vw)" append-to-body @close="detail = null">
@@ -1050,7 +1142,7 @@ onMounted(() => void load())
             <label v-for="field in ([['供应商', detail.supplier], ['联系人', detail.supplierContact || detail.contact], ['联系方式', detail.supplierPhone || detail.contactPhone || detail.phone || detail.email], ['维保到期时间', detail.warrantyDate === '未设置' ? '' : detail.warrantyDate]] as Array<[string, unknown]>)" :key="field[0]" class="asset-detail-form-item"><span>{{ field[0] }}：</span><div class="asset-detail-readonly"><strong>{{ detailText(field[1]) }}</strong></div></label>
             <label class="asset-detail-form-item wide"><span>维保说明：</span><div class="asset-detail-readonly tall"><strong>{{ detailText(detail.maintenanceNote || detail.repairNote) }}</strong></div></label>
           </div></section>
-          <section class="asset-detail-section asset-detail-operations"><h3>操作记录</h3><div class="asset-detail-table-wrap"><table class="asset-detail-operation-table"><thead><tr><th>操作时间</th><th>操作人</th><th>渠道</th><th>操作类型</th><th>操作内容</th></tr></thead><tbody><tr v-for="(row, index) in detailOperationRows(detail)" :key="index"><td>{{ row[0] }}</td><td>{{ detail.custodian || user?.name || 'admin' }}</td><td>网页</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td></tr></tbody></table></div><div class="asset-detail-operation-footer"><span>共 {{ detailOperationRows(detail).length }} 条</span><button class="page-btn" type="button" disabled>‹</button><button class="page-btn active" type="button">1</button><button class="page-btn" type="button" disabled>›</button><select aria-label="每页条数"><option>20 条/页</option></select></div></section>
+          <section class="asset-detail-section asset-detail-operations"><h3>操作记录</h3><div class="asset-detail-table-wrap"><table class="asset-detail-operation-table"><thead><tr><th>操作时间</th><th>操作人</th><th>渠道</th><th>操作类型</th><th>操作内容</th></tr></thead><tbody><tr v-for="(row, index) in detailOperationRows(detail)" :key="index"><td>{{ row[0] }}</td><td>{{ detail.custodian || user?.name || 'admin' }}</td><td>网页</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td></tr></tbody></table></div><div class="asset-detail-operation-footer"><span>共 {{ detailOperationRows(detail).length }} 条</span><button class="page-btn" type="button" disabled>‹</button><button class="page-btn active" type="button">1</button><button class="page-btn" type="button" disabled>›</button><el-select model-value="20" class="asset-page-size-select" aria-label="每页条数" disabled><el-option label="20 条/页" value="20" /></el-select></div></section>
         </div>
         <div class="asset-detail-footer-actions">
           <button v-if="can(detail.status === '在用' || detail.status === '领用中' ? 'asset:item:return' : 'asset:item:receive')" class="table-action primary" type="button" @click="openAction(detail, detail.status === '在用' || detail.status === '领用中' ? 'return' : 'receive')">{{ detail.status === '在用' || detail.status === '领用中' ? '退库' : '领用' }}</button>

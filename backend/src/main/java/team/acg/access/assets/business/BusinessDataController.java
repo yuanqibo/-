@@ -35,6 +35,8 @@ public class BusinessDataController {
     private static final int MAX_BUSINESS_SNAPSHOT_BYTES = 10 * 1024 * 1024;
     private static final int MAX_REQUEST_DETAILS_BYTES = 256 * 1024;
     private static final Set<String> TYPES = Set.of("requests", "stocktakes", "consumables", "repairs", "contracts");
+    private static final Set<String> EMPLOYEE_SELF_SERVICE_TYPES = Set.of(
+        "资产领用", "资产借用", "资产归还", "资产退还", "资产交接");
     private static final Map<String, String> VIEW_PERMISSIONS = Map.of(
         "requests", "asset:request:view",
         "stocktakes", "asset:stocktake:view",
@@ -54,6 +56,7 @@ public class BusinessDataController {
     private final AssetService assetService;
     private final ApprovalIntegrationService approvalIntegration;
     private final ApprovalRequestStateService approvalState;
+    private final ApprovedAssetRequestExecutor requestExecutor;
     private final PortalReferenceCatalog referenceCatalog;
 
     public BusinessDataController(BusinessDataRepository repository, ObjectMapper mapper,
@@ -62,6 +65,7 @@ public class BusinessDataController {
                                   AssetService assetService,
                                   ApprovalIntegrationService approvalIntegration,
                                   ApprovalRequestStateService approvalState,
+                                  ApprovedAssetRequestExecutor requestExecutor,
                                   PortalReferenceCatalog referenceCatalog) {
         this.repository = repository;
         this.mapper = mapper;
@@ -70,6 +74,7 @@ public class BusinessDataController {
         this.assetService = assetService;
         this.approvalIntegration = approvalIntegration;
         this.approvalState = approvalState;
+        this.requestExecutor = requestExecutor;
         this.referenceCatalog = referenceCatalog;
     }
 
@@ -120,6 +125,7 @@ public class BusinessDataController {
 
     @PostMapping("/requests")
     @RequirePermission(permissions = "asset:request:create")
+    @Transactional
     public ResponseEntity<?> createRequest(@RequestBody CreateRequest command, HttpServletRequest request) {
         requireText(command.type(), 64, "Request type is required");
         requireText(command.asset(), 4_000, "Request asset is required");
@@ -129,6 +135,10 @@ public class BusinessDataController {
         var identity = identityService.current(request);
         identity.ifPresent(value ->
             selfServiceRequestPolicy.enforce(command.type(), command.reason(), command.details(), value));
+        boolean immediateSelfService = identity
+            .filter(value -> !value.manager() && EMPLOYEE_SELF_SERVICE_TYPES.contains(command.type().trim()))
+            .map(value -> !selfServiceRequestPolicy.requiresApproval(command.type(), value))
+            .orElse(false);
         String applicant = identityService.trustedName(request, command.applicant());
         ObjectNode item = mapper.createObjectNode();
         item.put("id", id("REQ"));
@@ -141,21 +151,38 @@ public class BusinessDataController {
         });
         item.put("asset", command.asset().trim());
         item.put("reason", command.reason() == null ? "" : command.reason().trim());
-        item.put("status", "审批中");
-        item.put("system", "ECP审批");
+        boolean selfServiceRequest = identity
+            .map(value -> !value.manager() && EMPLOYEE_SELF_SERVICE_TYPES.contains(command.type().trim()))
+            .orElse(false);
+        item.put("selfServiceRequest", selfServiceRequest);
+        if (selfServiceRequest) item.put("operator", applicant);
+        item.put("status", selfServiceRequest ? "待审批" : "审批中");
+        item.put("system", selfServiceRequest ? "资产管理员审批" : "ECP审批");
         item.put("date", java.time.LocalDate.now().toString());
-        item.put("currentNode", "直属主管");
+        item.put("currentNode", selfServiceRequest ? "管理员审批" : "直属主管");
         if (command.details() != null && command.details().isObject()) {
-            Set.of("assetCount", "assetIds", "receiveLocation", "receiveDate", "borrowLocation", "borrowDate",
+            Set.of("assetCount", "assetIds", "receiveType", "receiveLocation", "receiveDate", "borrowLocation", "borrowDate",
                     "returnLocation", "returnDate", "expectedReturnDate", "handoverLocation", "handoverDate",
-                    "receiverSubject", "handoverType", "approvalDate")
+                    "receiverSubject", "receiverName", "receiverCompany", "receiverDepartment",
+                    "handoverType", "approvalDate")
                 .forEach(field -> {
                     JsonNode value = command.details().get(field);
                     if (value != null) item.set(field, value);
                 });
         }
         item.put("bizNo", item.path("id").asText());
-        if (approvalIntegration.enabled()) {
+        if (immediateSelfService) {
+            RequestIdentityService.Identity initiator = identity.orElseThrow();
+            requestExecutor.execute(item, new ApprovedAssetRequestExecutor.Operator(
+                initiator.name(), initiator.account(), initiator.directorySubject(), initiator.subject()));
+            item.put("status", "已同意");
+            item.put("system", "系统自动审批");
+            item.put("currentNode", "已归档");
+            item.put("approvalStatus", "APPROVED");
+            item.put("approvalDate", java.time.LocalDate.now().toString());
+            item.put("approvalExecutedAt", java.time.Instant.now().toString());
+        } else if (approvalIntegration.enabled()) {
+            item.put("system", "ECP审批");
             RequestIdentityService.Identity initiator = identity.orElseThrow(() ->
                 new IllegalStateException("ECP identity is required to start an approval"));
             ApprovalIntegrationService.StartResult started = approvalIntegration.start(item, initiator);
@@ -164,7 +191,7 @@ public class BusinessDataController {
             item.put("templateCode", started.templateCode());
             item.put("approvalStatus", started.status().isBlank() ? "PENDING" : started.status());
             item.put("currentNodeKey", started.currentNodeKey());
-            item.put("currentNode", started.currentNodeName().isBlank() ? "审批中" : started.currentNodeName());
+            item.put("currentNode", started.currentNodeName().isBlank() ? item.path("status").asText("审批中") : started.currentNodeName());
             item.put("approvalCreatedAt", started.createdAt());
         }
 
@@ -209,7 +236,7 @@ public class BusinessDataController {
         ObjectNode target = findRequest((ArrayNode) document, id);
         if (approvalIntegration.enabled() && !target.path("approvalNo").asText("").isBlank()) {
             if (currentIdentity == null) throw new IllegalStateException("ECP identity is required to decide an approval");
-            if (!Set.of("审批中", "待执行").contains(target.path("status").asText())) {
+            if (!Set.of("审批中", "待审批", "待执行").contains(target.path("status").asText())) {
                 throw new IllegalArgumentException("Request is already finalized");
             }
             approvalIntegration.decide(target.path("approvalNo").asText(), command.decision(),

@@ -141,18 +141,20 @@
   "assetPortalSelfServiceSettingsV9": {
     "receiveAsset": {
       "enabled": true,
+      "approvalRequired": true,
       "remarkRequired": false,
       "remarkPrompt": "",
       "categories": ["IT设备", "笔记本电脑", "台式主机", "苹果一体机", "数位板", "显示器", "服务器", "云主机", "网络设备", "苹果工作站", "数据采集器", "固态硬盘", "视讯设备", "租赁设备", "租赁笔记本", "移动设备", "平板", "手机", "安卓手机", "苹果手机", "软件权限", "办公软件", "设计软件", "研发工具", "安全软件", "供应链设备", "打印机", "扫描仪", "条码设备", "标签设备", "摄影摄像直播设备", "相机机身", "镜头", "灯光设备", "封存资产", "行政资产"]
     },
     "borrowAsset": {
       "enabled": true,
+      "approvalRequired": true,
       "remarkRequired": false,
       "remarkPrompt": "",
       "categories": ["IT设备", "笔记本电脑", "台式主机", "苹果一体机", "数位板", "显示器", "服务器", "云主机", "网络设备", "苹果工作站", "数据采集器", "固态硬盘", "视讯设备", "租赁设备", "租赁笔记本", "移动设备", "平板", "手机", "安卓手机", "苹果手机", "软件权限", "办公软件", "设计软件", "研发工具", "安全软件", "供应链设备", "打印机", "扫描仪", "条码设备", "标签设备", "摄影摄像直播设备", "相机机身", "镜头", "灯光设备", "封存资产", "行政资产"]
     },
     "giveBackAsset": { "enabled": true, "remarkRequired": false, "remarkPrompt": "" },
-    "handoverAsset": { "enabled": true, "remarkRequired": false, "remarkPrompt": "" },
+    "handoverAsset": { "enabled": true, "approvalRequired": true, "remarkRequired": false, "remarkPrompt": "" },
     "returnAsset": { "enabled": true, "remarkRequired": false, "remarkPrompt": "" },
     "deviceRequest": { "enabled": false, "remarkRequired": false, "remarkPrompt": "", "allowEmployeeAddDevice": true },
     "signSettings": {

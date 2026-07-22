@@ -14,8 +14,8 @@ import java.util.Set;
 
 @Service
 public class ApprovalRequestStateService {
-    private static final Set<String> OPEN_STATUSES = Set.of("审批中", "待执行");
-    private static final Set<String> TERMINAL_STATUSES = Set.of("已完成", "已拒绝", "已取消");
+    private static final Set<String> OPEN_STATUSES = Set.of("审批中", "待审批", "待执行");
+    private static final Set<String> TERMINAL_STATUSES = Set.of("已完成", "已同意", "已拒绝", "已驳回", "已取消");
     private final BusinessDataRepository repository;
     private final ApprovedAssetRequestExecutor executor;
 
@@ -34,12 +34,12 @@ public class ApprovalRequestStateService {
         if ("approve".equals(decision)) {
             if (executor.supports(target.path("type").asText())) {
                 executor.execute(target, operator);
-                target.put("status", "已完成");
+                target.put("status", approvedStatus(target));
             } else {
                 target.put("status", "待执行");
             }
         } else if ("reject".equals(decision)) {
-            target.put("status", "已拒绝");
+            target.put("status", rejectedStatus(target));
         } else if ("cancel".equals(decision)) {
             target.put("status", "已取消");
         } else {
@@ -92,14 +92,15 @@ public class ApprovalRequestStateService {
         target.remove("approvalSyncError");
         switch (remoteStatus) {
             case "PENDING" -> {
-                if (!TERMINAL_STATUSES.contains(localStatus)) target.put("status", "审批中");
-                target.put("currentNode", currentNodeName(detail, "审批中"));
+                String pendingStatus = pendingStatus(target);
+                if (!TERMINAL_STATUSES.contains(localStatus)) target.put("status", pendingStatus);
+                target.put("currentNode", currentNodeName(detail, pendingStatus));
             }
             case "APPROVED" -> {
-                if (!"已完成".equals(localStatus) && !"待执行".equals(localStatus)) {
+                if (!Set.of("已完成", "已同意", "待执行").contains(localStatus)) {
                     if (executor.supports(target.path("type").asText())) {
                         executor.execute(target, ApprovedAssetRequestExecutor.Operator.ecp());
-                        target.put("status", "已完成");
+                        target.put("status", approvedStatus(target));
                         target.put("currentNode", "已归档");
                     } else {
                         target.put("status", "待执行");
@@ -109,7 +110,7 @@ public class ApprovalRequestStateService {
                 }
             }
             case "REJECTED" -> {
-                target.put("status", "已拒绝");
+                target.put("status", rejectedStatus(target));
                 target.put("currentNode", "已归档");
             }
             case "CANCELED", "CANCELLED" -> {
@@ -203,11 +204,23 @@ public class ApprovalRequestStateService {
 
     private boolean matchesRemoteFinalState(String localStatus, String remoteStatus) {
         return switch (localStatus) {
-            case "已完成", "待执行" -> "APPROVED".equals(remoteStatus);
-            case "已拒绝" -> "REJECTED".equals(remoteStatus);
+            case "已完成", "已同意", "待执行" -> "APPROVED".equals(remoteStatus);
+            case "已拒绝", "已驳回" -> "REJECTED".equals(remoteStatus);
             case "已取消" -> "CANCELED".equals(remoteStatus) || "CANCELLED".equals(remoteStatus);
             default -> false;
         };
+    }
+
+    private String pendingStatus(ObjectNode item) {
+        return item.path("selfServiceRequest").asBoolean(false) ? "待审批" : "审批中";
+    }
+
+    private String approvedStatus(ObjectNode item) {
+        return item.path("selfServiceRequest").asBoolean(false) ? "已同意" : "已完成";
+    }
+
+    private String rejectedStatus(ObjectNode item) {
+        return item.path("selfServiceRequest").asBoolean(false) ? "已驳回" : "已拒绝";
     }
 
     private void copyLong(JsonNode source, ObjectNode target, String field) {

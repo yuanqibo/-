@@ -1,7 +1,23 @@
 import type { Page, Request } from '@playwright/test'
 
-export type ApiMockOptions = { failAssets?: boolean }
-export type ApiMockState = { requests: Array<{ method: string; path: string; body: unknown }> }
+export type ApiMockOptions = {
+  assets?: Array<Record<string, unknown>>
+  failAssets?: boolean
+  handoverApprovalRequired?: boolean
+  borrowApprovalRequired?: boolean
+  borrowCategories?: string[]
+  borrowEnabled?: boolean
+  giveBackEnabled?: boolean
+  receiveApprovalRequired?: boolean
+  receiveCategories?: string[]
+  receiveEnabled?: boolean
+  returnEnabled?: boolean
+  selfServiceEnabled?: boolean
+}
+export type ApiMockState = {
+  requests: Array<{ method: string; path: string; body: unknown }>
+  approvals: Array<Record<string, unknown>>
+}
 
 const assets = Array.from({ length: 45 }, (_, index) => ({
   id: `AST-${String(index + 1).padStart(4, '0')}`,
@@ -49,7 +65,7 @@ const storeValues = {
   assetPortalAssetCodeRuleSettingsV1: { selectedFields: ['categoryCode'], serialLength: 5, customTexts: { customText: '' } },
   assetLabelPrintSettingsV2: { templateKey: 'standard', labelWidth: 40, labelHeight: 30, fields: ['name', 'id'], columns: 2, rows: 2, fontSize: 12, showLogo: false },
   assetLabelCustomTemplatesV1: [],
-  assetPortalSelfServiceSettingsV9: { receiveAsset: { enabled: true, remarkRequired: false, remarkPrompt: '', categories: ['IT设备'] }, returnAsset: { enabled: true, remarkRequired: false, remarkPrompt: '' }, borrowAsset: { enabled: true, remarkRequired: false, remarkPrompt: '', categories: ['IT设备'] }, giveBackAsset: { enabled: true, remarkRequired: false, remarkPrompt: '' }, handoverAsset: { enabled: true, remarkRequired: false, remarkPrompt: '' }, deviceRequest: { enabled: false, remarkRequired: false, remarkPrompt: '', allowEmployeeAddDevice: true }, signSettings: {} }
+  assetPortalSelfServiceSettingsV9: { receiveAsset: { enabled: true, approvalRequired: true, remarkRequired: false, remarkPrompt: '', categories: ['IT设备'] }, returnAsset: { enabled: true, remarkRequired: false, remarkPrompt: '' }, borrowAsset: { enabled: true, approvalRequired: true, remarkRequired: false, remarkPrompt: '', categories: ['IT设备'] }, giveBackAsset: { enabled: true, remarkRequired: false, remarkPrompt: '' }, handoverAsset: { enabled: true, approvalRequired: true, remarkRequired: false, remarkPrompt: '' }, deviceRequest: { enabled: false, remarkRequired: false, remarkPrompt: '', allowEmployeeAddDevice: true }, signSettings: {} }
 }
 
 const jsonBody = (request: Request): unknown => {
@@ -58,7 +74,35 @@ const jsonBody = (request: Request): unknown => {
 }
 
 export const installApiMocks = async (page: Page, options: ApiMockOptions = {}): Promise<ApiMockState> => {
-  const state: ApiMockState = { requests: [] }
+  const currentAssets: Array<Record<string, unknown>> = (options.assets || assets).map((item) => ({ ...item }))
+  const businessRequests: Array<Record<string, unknown>> = requests.map((item) => ({ ...item }))
+  const state: ApiMockState = { requests: [], approvals: businessRequests }
+  const approvalRequired = options.handoverApprovalRequired !== false
+  const borrowApprovalRequired = options.borrowApprovalRequired !== false
+  const receiveApprovalRequired = options.receiveApprovalRequired !== false
+  const returnEnabled = options.returnEnabled !== false
+  const selfServiceEnabled = options.selfServiceEnabled !== false
+  const currentStoreValues = {
+    ...storeValues,
+    assetPortalSelfServiceSettingsV9: {
+      ...storeValues.assetPortalSelfServiceSettingsV9,
+      receiveAsset: {
+        ...storeValues.assetPortalSelfServiceSettingsV9.receiveAsset,
+        enabled: selfServiceEnabled && options.receiveEnabled !== false,
+        approvalRequired: receiveApprovalRequired,
+        categories: options.receiveCategories || storeValues.assetPortalSelfServiceSettingsV9.receiveAsset.categories
+      },
+      returnAsset: { ...storeValues.assetPortalSelfServiceSettingsV9.returnAsset, enabled: selfServiceEnabled && returnEnabled },
+      borrowAsset: {
+        ...storeValues.assetPortalSelfServiceSettingsV9.borrowAsset,
+        enabled: selfServiceEnabled && options.borrowEnabled !== false,
+        approvalRequired: borrowApprovalRequired,
+        categories: options.borrowCategories || storeValues.assetPortalSelfServiceSettingsV9.borrowAsset.categories
+      },
+      giveBackAsset: { ...storeValues.assetPortalSelfServiceSettingsV9.giveBackAsset, enabled: selfServiceEnabled && options.giveBackEnabled !== false },
+      handoverAsset: { ...storeValues.assetPortalSelfServiceSettingsV9.handoverAsset, enabled: selfServiceEnabled, approvalRequired }
+    }
+  }
   await page.route('http://127.0.0.1:4174/api/**', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
@@ -68,18 +112,63 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
     state.requests.push({ method, path, body })
     const fulfill = (value: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) })
 
-    if (url.pathname === '/api/assets' && method === 'GET') return options.failAssets ? fulfill({ error: '资产服务暂不可用' }, 503) : fulfill({ items: assets })
+    if (url.pathname === '/api/assets' && method === 'GET') return options.failAssets ? fulfill({ error: '资产服务暂不可用' }, 503) : fulfill({ items: currentAssets })
     if (url.pathname === '/api/asset-operations' && method === 'GET') return fulfill({ items: assetOperations, total: assetOperations.length, page: 1, size: 500 })
     if (url.pathname === '/api/assets' && method === 'POST') return fulfill({ item: { ...assets[0], ...(body as { item?: object })?.item, id: 'AST-NEW' } }, 201)
     if (url.pathname === '/api/assets/import') return fulfill({ items: [] }, 201)
-    if (url.pathname.startsWith('/api/assets/commands/')) return fulfill({ items: assets.slice(0, 1) })
-    if (url.pathname === '/api/business-data' && method === 'GET') return fulfill({ values: { requests, stocktakes: [{ id: 'STK-001', name: '季度盘点', scope: '全部资产', owner: '管理员', progress: '盘点中', total: 45, checked: 20, diff: 1, date: '2026-07-20' }], consumables: [], repairs: [], contracts: [] }, versions: {} })
-    if (url.pathname === '/api/business-data/requests' && method === 'POST') return fulfill({ item: { id: 'REQ-NEW', status: '审批中', system: 'ECP审批', currentNode: '直属主管', date: '2026-07-19', ...(body as object) } }, 201)
+    if (url.pathname.startsWith('/api/assets/commands/')) return fulfill({ items: currentAssets.slice(0, 1) })
+    if (url.pathname === '/api/business-data' && method === 'GET') return fulfill({ values: { requests: businessRequests, stocktakes: [{ id: 'STK-001', name: '季度盘点', scope: '全部资产', owner: '管理员', progress: '盘点中', total: 45, checked: 20, diff: 1, date: '2026-07-20' }], consumables: [], repairs: [], contracts: [] }, versions: {} })
+    if (url.pathname === '/api/business-data/requests' && method === 'POST') {
+      const draft = body as { type?: string; applicant?: string; asset?: string; reason?: string; details?: Record<string, unknown> }
+      const handover = draft.type === '资产交接'
+      const selfServiceReturn = draft.type === '资产退还'
+      const selfServiceGiveBack = draft.type === '资产归还'
+      const selfServiceReceive = draft.type === '资产领用'
+      const selfServiceBorrow = draft.type === '资产借用'
+      const immediate = handover && !approvalRequired || selfServiceReceive && !receiveApprovalRequired || selfServiceBorrow && !borrowApprovalRequired
+      const selfServiceRequest = handover || selfServiceReturn || selfServiceGiveBack || selfServiceReceive || selfServiceBorrow
+      const item: Record<string, unknown> = {
+        id: 'REQ-NEW',
+        ...draft,
+        ...(draft.details || {}),
+        selfServiceRequest,
+        status: selfServiceRequest ? immediate ? '已同意' : '待审批' : '审批中',
+        system: immediate ? '系统自动审批' : selfServiceRequest ? '资产管理员审批' : 'ECP审批',
+        currentNode: immediate ? '已归档' : selfServiceRequest ? '管理员审批' : '直属主管',
+        date: '2026-07-22'
+      }
+      businessRequests.unshift(item)
+      if (immediate) {
+        const ids = new Set(Array.isArray(draft.details?.assetIds) ? draft.details.assetIds.map(String) : [])
+        currentAssets.forEach((asset) => {
+          if (!ids.has(String(asset.id))) return
+          if (selfServiceReceive) {
+            asset.owner = String(draft.applicant || '')
+            asset.ownerSubject = 'E2E001'
+            asset.status = '在用'
+            asset.location = String(draft.details?.receiveLocation || asset.location || '')
+            asset.receiveDate = String(draft.details?.receiveDate || '')
+          } else if (selfServiceBorrow) {
+            asset.owner = String(draft.applicant || '')
+            asset.ownerSubject = 'E2E001'
+            asset.status = '借用中'
+            asset.location = String(draft.details?.borrowLocation || asset.location || '')
+            asset.borrowDate = String(draft.details?.borrowDate || '')
+            asset.expectedReturnDate = String(draft.details?.expectedReturnDate || '')
+          } else {
+            asset.owner = String(draft.details?.receiverName || '')
+            asset.ownerSubject = String(draft.details?.receiverSubject || '')
+            asset.location = String(draft.details?.handoverLocation || asset.location || '')
+          }
+        })
+      }
+      return fulfill({ item }, 201)
+    }
     if (url.pathname.includes('/api/business-data/requests/') && url.pathname.endsWith('/decision')) return fulfill({ items: requests.map((item) => item.id === 'REQ-001' ? { ...item, status: '已完成', currentNode: '已归档' } : item) })
     if (url.pathname === '/api/business-data/stocktakes' && method === 'POST') return fulfill({ item: { id: 'STK-NEW', ...(body as object) } }, 201)
     if (url.pathname.startsWith('/api/business-data/stocktakes/') && method === 'PATCH') return fulfill({ items: [] })
-    if (url.pathname === '/api/store' && method === 'GET') return fulfill({ values: storeValues })
-    if (url.pathname === '/api/store' && method === 'POST') return fulfill({ values: storeValues })
+    if (url.pathname === '/api/store' && method === 'GET') return fulfill({ values: currentStoreValues })
+    if (url.pathname === '/api/store' && method === 'POST') return fulfill({ values: currentStoreValues })
     if (url.pathname.startsWith('/api/config/')) return fulfill({ ok: true })
     if (url.pathname === '/api/ecp/organization') return fulfill(organization)
     if (url.pathname.includes('/api/ecp/control-plane/iam/account-sets')) return fulfill({ items: organization.accountSets })

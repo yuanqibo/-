@@ -43,6 +43,9 @@ public class ApprovedAssetRequestExecutor {
         };
         ObjectNode fields = mapper.createObjectNode();
         List<String> assetIds = requestAssetIds(item);
+        if (Set.of("receive", "borrow").contains(action)) {
+            assetService.requireStatusForApprovedRequest(assetIds, Set.of("空闲"));
+        }
         fields.put("operator", operator.name());
         fields.put("operatorAccount", operator.account());
         fields.put("operatorSubject", operator.subject());
@@ -76,6 +79,7 @@ public class ApprovedAssetRequestExecutor {
                 String handoverType = item.path("handoverType").asText("员工交接");
                 if (!"公共交接".equals(handoverType)) {
                     fields.put("receiverSubject", requiredField(item, "receiverSubject"));
+                    fields.put("receiver", item.path("receiverName").asText(item.path("receiverSubject").asText()));
                 }
                 fields.put("location", requiredField(item, "handoverLocation"));
                 fields.put("date", requestDate(item, "handoverDate"));

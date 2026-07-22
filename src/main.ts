@@ -49,8 +49,55 @@ import './styles/portal.css'
 import App from './App.vue'
 import { router } from './router'
 import { configureEcp } from './ecp'
+import { resizableColumns } from './shared/directives/resizable-columns'
 
 const app = createApp(App)
+app.directive('resizable-columns', resizableColumns)
+
+// Keep every select menu below its trigger so opening it never covers the parent field.
+const selectProps = (ElSelect as unknown as { props: Record<string, { default?: unknown }> }).props
+selectProps.placement.default = 'bottom-start'
+selectProps.fallbackPlacements.default = []
+selectProps.fitInputWidth.default = true
+selectProps.offset.default = 6
+selectProps.showArrow.default = false
+selectProps.popperClass.default = 'portal-downward-select-popper'
+selectProps.popperOptions.default = () => ({
+  modifiers: [
+    { name: 'flip', enabled: false },
+    { name: 'preventOverflow', options: { mainAxis: true, altAxis: false, tether: false } }
+  ]
+})
+
+const fitSelectMenuBelowTrigger = (select: Element, combobox: Element): void => {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const listboxId = combobox.getAttribute('aria-controls')
+    const popper = listboxId ? document.getElementById(listboxId)?.closest<HTMLElement>('.el-popper') : null
+    if (!popper) return
+    const availableHeight = window.innerHeight - select.getBoundingClientRect().bottom - 18
+    popper.style.setProperty('--portal-select-max-height', `${Math.min(240, Math.max(48, availableHeight))}px`)
+  }))
+}
+
+const closeExpandedSelectOnSecondClick = (event: MouseEvent): void => {
+  const target = event.target instanceof Element ? event.target : null
+  if (target?.closest('.el-select__clear')) return
+  const select = target?.closest('.el-select')
+  const combobox = select?.querySelector<HTMLElement>('[role="combobox"]')
+  if (!select || !combobox) return
+  if (combobox.getAttribute('aria-expanded') !== 'true') {
+    fitSelectMenuBelowTrigger(select, combobox)
+    return
+  }
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  combobox.dispatchEvent(new KeyboardEvent('keydown', {
+    key: 'Escape',
+    code: 'Escape',
+    bubbles: true,
+    cancelable: true
+  }))
+}
 
 const elementComponents = [
   ElAlert, ElAutocomplete, ElAvatar, ElButton, ElCheckbox, ElCheckboxGroup, ElConfigProvider,
@@ -61,6 +108,7 @@ const elementComponents = [
 ]
 
 const bootstrap = async (): Promise<void> => {
+  document.addEventListener('click', closeExpandedSelectOnSecondClick, true)
   elementComponents.forEach((component) => app.use(component))
   app.use(ElLoading)
   await configureEcp(app, router)

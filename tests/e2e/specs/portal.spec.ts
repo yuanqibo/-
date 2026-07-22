@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { installApiMocks, type ApiMockOptions, type ApiMockState } from '../fixtures/api'
 
 const openApp = async (page: Page, path: string, options?: ApiMockOptions): Promise<ApiMockState> => {
@@ -74,6 +74,30 @@ const expectNeutralAutocompleteFocus = async (field: ReturnType<Page['locator']>
   expect(focusStyle.innerBorder, JSON.stringify(focusStyle)).toBe('0px')
   expect(focusStyle.wrapperShadow, JSON.stringify(focusStyle)).not.toContain('64, 158, 255')
   expect(focusStyle.wrapperShadow, JSON.stringify(focusStyle)).not.toContain('3px')
+}
+
+const choosePortalSelectOption = async (page: Page, select: Locator, option: string): Promise<void> => {
+  await select.click()
+  await page.getByRole('option', { name: option, exact: true }).last().click()
+}
+
+const expectPortalSelectOpensBelow = async (page: Page, select: Locator): Promise<void> => {
+  const combobox = select.getByRole('combobox')
+  const listboxId = await combobox.getAttribute('aria-controls')
+  expect(listboxId).toBeTruthy()
+  await select.click()
+  await expect(combobox).toHaveAttribute('aria-expanded', 'true')
+  const triggerBox = await select.locator('.el-select__wrapper').boundingBox()
+  expect(triggerBox).not.toBeNull()
+  const listbox = page.locator(`[id="${listboxId}"]`)
+  await expect(listbox).toBeVisible()
+  const listboxBox = await listbox.boundingBox()
+  expect(listboxBox).not.toBeNull()
+  expect(listboxBox!.y).toBeGreaterThanOrEqual(triggerBox!.y + triggerBox!.height)
+  expect(listboxBox!.y + listboxBox!.height).toBeLessThanOrEqual((page.viewportSize()?.height || 0) + 1)
+  await select.click()
+  await expect(combobox).toHaveAttribute('aria-expanded', 'false')
+  await expect(listbox).toBeHidden()
 }
 
 test.describe('登录后门户质量回归', () => {
@@ -237,24 +261,419 @@ test.describe('登录后门户质量回归', () => {
     }
   })
 
+  test('管理端铃铛展示待审批消息并可定位到对应审批单', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '管理端侧栏提醒在桌面项目执行')
+    const state = await openApp(page, '/')
+
+    let bell = page.getByRole('button', { name: '审批消息，1 条待处理', exact: true })
+    await expect(bell).toBeVisible()
+    await expect(bell.locator('.sidebar-notification-badge')).toHaveText('1')
+    state.approvals.unshift({
+      id: 'REQ-NOTICE-NEW', type: '资产退还', applicant: '王五', asset: '研发笔记本', reason: '',
+      status: '待审批', system: '资产管理员审批', date: '2026-07-22', currentNode: '管理员审批'
+    })
+    await expect(page.locator('.el-notification')).toContainText('新增审批待办', { timeout: 5_000 })
+    await expect(page.locator('.el-notification')).toContainText('王五提交了资产退还申请')
+    bell = page.getByRole('button', { name: '审批消息，2 条待处理', exact: true })
+    await expect(bell.locator('.sidebar-notification-badge')).toHaveText('2')
+    await bell.click()
+
+    const dialog = page.getByRole('dialog', { name: '消息通知' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('tab', { name: '审批消息 2', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(dialog).toContainText('张三')
+    await expect(dialog).toContainText('资产领用待审批')
+    await expect(dialog).toContainText('王五')
+    await dialog.getByRole('tab', { name: '业务待办', exact: true }).click()
+    const originalTodo = dialog.locator('.approval-todo-item').filter({ hasText: 'REQ-001' })
+    await expect(originalTodo.getByRole('button', { name: '去处理', exact: true })).toBeVisible()
+    await originalTodo.getByRole('button', { name: '去处理', exact: true }).click()
+
+    await expect(page).toHaveURL(/\/requests\?request=REQ-001/)
+    await expect(page.locator('.approval-workspace tbody')).toContainText('REQ-001')
+    await expect(page.locator('.approval-workspace tbody')).not.toContainText('REQ-002')
+  })
+
   test('管理员保留员工端切换与员工视图', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '端模式导航在桌面项目执行')
     await openApp(page, '/')
+    await expect(page.getByRole('button', { name: '审批消息，1 条待处理', exact: true })).toBeVisible()
     await page.getByRole('button', { name: '测试管理员', exact: true }).click()
     await expect(page.getByRole('menuitem', { name: '切换员工端', exact: true })).toBeVisible()
     await page.getByRole('menuitem', { name: '切换员工端', exact: true }).click()
 
     await expect(page.locator('body')).toHaveClass(/employee-terminal-view/)
+    await expect(page.getByRole('button', { name: '首页', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: '申请', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '资产', exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: '系统', exact: true })).toHaveCount(0)
+    await expect(page.locator('.sidebar-notification-tool')).toHaveCount(0)
+    await expect(page.locator('.nav-item')).toHaveCount(2)
     await expect(page.getByText('我的设备概览', { exact: true })).toBeVisible()
     await expect(page.getByText('资产总数', { exact: true })).toHaveCount(0)
     await expect.poll(() => page.evaluate(() => localStorage.getItem('assetPortalTerminalMode'))).toBe('employee')
 
+    await page.goto('/assets')
+    await expect(page).toHaveURL('/')
+    await expect(page.getByRole('button', { name: '资产', exact: true })).toHaveCount(0)
+
     await page.getByRole('button', { name: '测试管理员', exact: true }).click()
     await page.getByRole('menuitem', { name: '切换管理端', exact: true }).click()
     await expect(page.getByRole('button', { name: '系统', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '审批消息，1 条待处理', exact: true })).toBeVisible()
     await expect(page.getByText('资产总数', { exact: true })).toBeVisible()
+  })
+
+  test('员工首页退还和交接直接打开已选资产的申请表单', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '员工首页快捷申请在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    const state = await installApiMocks(page)
+    await page.route('http://127.0.0.1:4174/api/assets', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [{
+        id: 'AST-EMP-001', name: '员工显示器', status: '在用', category: 'IT设备', type: '设备',
+        owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司',
+        location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'M-1', sn: 'SN-1',
+        price: 5000, purchaseDate: '2026-07-01', receiveDate: '2026-07-21'
+      }] })
+    }))
+    await page.goto('/')
+
+    await page.getByRole('button', { name: '退还', exact: true }).click()
+    await expect(page).toHaveURL('/')
+    let dialog = page.getByRole('dialog', { name: '资产退还' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText('AST-EMP-001')
+    for (const label of ['退库人', '所属公司', '所在部门', '退库后位置', '经办人', '退库日期', '退库备注', '选择退还资产', '已选择资产 1']) {
+      await expect(dialog.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+    await dialog.getByRole('button', { name: '取消', exact: true }).click()
+
+    await page.getByRole('button', { name: '交接', exact: true }).click()
+    await expect(page).toHaveURL('/')
+    dialog = page.getByRole('dialog', { name: '资产交接' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText('AST-EMP-001')
+    for (const label of ['接收人', '接收公司', '接收部门', '接收位置', '交接日期', '经办人', '交接备注', '选择资产', '已选择资产 1']) {
+      await expect(dialog.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+    const receiver = dialog.getByPlaceholder('搜索姓名、工号或邮箱')
+    await receiver.fill('员工2')
+    await page.getByRole('option').filter({ hasText: '员工2' }).first().click()
+    await expect(dialog.getByLabel('接收公司')).toHaveValue('示例公司')
+    await expect(dialog.getByLabel('接收部门')).toHaveValue('综合部')
+    await dialog.getByRole('button', { name: '确认', exact: true }).click()
+    await expect(dialog).toBeHidden()
+
+    const submitted = state.requests.find((request) => request.method === 'POST' && request.path === '/api/business-data/requests')
+    expect(submitted?.body).toMatchObject({
+      type: '资产交接',
+      details: {
+        assetIds: ['AST-EMP-001'],
+        receiverSubject: 'sub-2',
+        receiverName: '员工2',
+        receiverCompany: '示例公司',
+        receiverDepartment: '综合部',
+        handoverLocation: '杭州仓库'
+      }
+    })
+
+    await page.getByRole('button', { name: '申请', exact: true }).click()
+    await expect(page).toHaveURL('/requests')
+    const createdCard = page.locator('.employee-request-card').filter({ hasText: 'REQ-NEW' })
+    await expect(createdCard).toContainText('待审批')
+
+    await page.getByText('自助交接', { exact: true }).click()
+    const requestDialog = page.getByRole('dialog', { name: '资产交接' })
+    await expect(requestDialog).toBeVisible()
+    for (const label of ['接收人', '接收公司', '接收部门', '接收位置', '交接日期', '经办人', '交接备注', '选择资产']) {
+      await expect(requestDialog.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+  })
+
+  test('自助退还按配置展示并支持名下领用资产批量申请', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '批量退还完整流程在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    const state = await installApiMocks(page)
+    await page.route('http://127.0.0.1:4174/api/assets', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [
+        { id: 'AST-RET-001', name: '待退还笔记本', status: '在用', category: 'IT设备', type: '设备', owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'R-1', sn: 'RET-SN-1', price: 5000 },
+        { id: 'AST-RET-002', name: '待退还显示器', status: '在用', category: 'IT设备', type: '设备', owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'R-2', sn: 'RET-SN-2', price: 3000 }
+      ] })
+    }))
+    await page.goto('/requests')
+
+    await page.getByText('自助退还', { exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '资产退还' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText('已选择资产 0', { exact: true })).toBeVisible()
+    await dialog.locator('.handover-asset-card').filter({ hasText: 'AST-RET-001' }).click()
+    await dialog.locator('.handover-asset-card').filter({ hasText: 'AST-RET-002' }).click()
+    await expect(dialog.getByText('已选择资产 2', { exact: true })).toBeVisible()
+    await choosePortalSelectOption(page, dialog.locator('.handover-request-fields .el-select'), '杭州仓库')
+    await dialog.getByPlaceholder('请输入退库备注').fill('批量退还测试')
+    await dialog.getByRole('button', { name: '确认', exact: true }).click()
+    await expect(dialog).toBeHidden()
+
+    const submitted = state.requests.find((request) => request.method === 'POST' && request.path === '/api/business-data/requests')
+    expect(submitted?.body).toMatchObject({
+      type: '资产退还',
+      reason: '批量退还测试',
+      details: {
+        assetIds: ['AST-RET-001', 'AST-RET-002'],
+        assetCount: 2,
+        returnLocation: '杭州仓库'
+      }
+    })
+    const createdCard = page.locator('.employee-request-card').filter({ hasText: 'REQ-NEW' })
+    await expect(createdCard).toContainText('自助退还')
+    await expect(createdCard).toContainText('待审批')
+    await expect(createdCard).toContainText('2')
+  })
+
+  test('自助归还只展示本人借用资产并提交待审批申请', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '自助归还完整表单在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    const state = await openApp(page, '/requests', {
+      assets: [
+        { id: 'AST-GIVE-BACK-001', name: '本人借用笔记本', status: '借用中', category: 'IT设备', type: '设备', owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司', location: '会议室', custodian: '资产管理员', brand: '测试品牌', model: 'GB-1', sn: 'GIVE-BACK-SN-1', assetTag: '', price: 5000, borrowDate: '2026-07-10', expectedReturnDate: '2026-07-30' },
+        { id: 'AST-GIVE-BACK-002', name: '他人借用笔记本', status: '借用中', category: 'IT设备', type: '设备', owner: '其他员工', ownerSubject: 'OTHER001', department: '综合部', company: '示例公司', location: '会议室', custodian: '资产管理员', brand: '测试品牌', model: 'GB-2', sn: 'GIVE-BACK-SN-2', assetTag: '', price: 4500, borrowDate: '2026-07-11', expectedReturnDate: '2026-07-31' },
+        { id: 'AST-GIVE-BACK-003', name: '本人领用显示器', status: '在用', category: 'IT设备', type: '设备', owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司', location: '工位', custodian: '资产管理员', brand: '测试品牌', model: 'GB-3', sn: 'GIVE-BACK-SN-3', assetTag: '', price: 3000 }
+      ]
+    })
+
+    await expect(page.locator('.employee-request-action-icon svg')).toHaveCount(5)
+    await page.getByRole('button', { name: '资产归还', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '资产归还' })
+    await expect(dialog).toBeVisible()
+    for (const label of ['归还人', '所属公司', '所在部门', '归还后位置', '经办人', '归还日期', '归还备注', '选择归还资产']) {
+      await expect(dialog.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+    await expect(dialog).toContainText('AST-GIVE-BACK-001')
+    await expect(dialog).toContainText('借用日期：2026-07-10')
+    await expect(dialog).toContainText('预计归还日期：2026-07-30')
+    await expect(dialog).not.toContainText('AST-GIVE-BACK-002')
+    await expect(dialog).not.toContainText('AST-GIVE-BACK-003')
+
+    await dialog.locator('.handover-asset-card').filter({ hasText: 'AST-GIVE-BACK-001' }).click()
+    await expect(dialog.getByText('已选择资产 1', { exact: true })).toBeVisible()
+    await choosePortalSelectOption(page, dialog.locator('.handover-request-fields .el-select'), '杭州仓库')
+    await dialog.getByPlaceholder('请输入归还备注').fill('设备已使用完毕')
+    await dialog.getByRole('button', { name: '确认', exact: true }).click()
+    await expect(dialog).toBeHidden()
+
+    const submitted = state.requests.find((request) => request.method === 'POST' && request.path === '/api/business-data/requests')
+    expect(submitted?.body).toMatchObject({
+      type: '资产归还',
+      reason: '设备已使用完毕',
+      details: {
+        assetIds: ['AST-GIVE-BACK-001'],
+        assetCount: 1,
+        returnLocation: '杭州仓库',
+        returnDate: '2026-07-22'
+      }
+    })
+    const createdCard = page.locator('.employee-request-card').filter({ hasText: 'REQ-NEW' })
+    await expect(createdCard).toContainText('自助归还')
+    await expect(createdCard).toContainText('待审批')
+  })
+
+  test('自助领用按配置分类展示空闲资产并支持扫码提交待审批申请', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '自助领用完整表单在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    const state = await openApp(page, '/requests', {
+      receiveApprovalRequired: true,
+      receiveCategories: ['IT设备'],
+      assets: [
+        { id: 'AST-RECEIVE-001', name: '可领用笔记本', status: '空闲', category: 'IT设备', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'R-1', sn: 'RECEIVE-SN-1', assetTag: 'TAG-RECEIVE-1', price: 5000 },
+        { id: 'AST-RECEIVE-002', name: '未配置分类显示器', status: '空闲', category: '显示器', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'R-2', sn: 'RECEIVE-SN-2', assetTag: '', price: 3000 },
+        { id: 'AST-RECEIVE-003', name: '非空闲笔记本', status: '闲置', category: 'IT设备', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'R-3', sn: 'RECEIVE-SN-3', assetTag: '', price: 4500 }
+      ]
+    })
+
+    await page.getByRole('button', { name: '资产领用', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '资产领用' })
+    await expect(dialog).toBeVisible()
+    for (const label of ['领用人', '领用类型', '所属公司', '所在部门', '领用后位置', '经办人', '领用日期', '领用备注', '资产分类', '选择领用资产']) {
+      await expect(dialog.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+    await expect(dialog.getByLabel('领用类型')).toHaveValue('个人领用')
+    await expect(dialog).toContainText('AST-RECEIVE-001')
+    await expect(dialog).not.toContainText('AST-RECEIVE-002')
+    await expect(dialog).not.toContainText('AST-RECEIVE-003')
+
+    await dialog.getByRole('button', { name: '扫码精确查询', exact: true }).click()
+    const scanInput = dialog.getByRole('textbox', { name: '扫码内容', exact: true })
+    await scanInput.fill('TAG-RECEIVE-1')
+    await scanInput.press('Enter')
+    await expect(dialog.getByText('已选择资产 1', { exact: true })).toBeVisible()
+    await choosePortalSelectOption(page, dialog.locator('.handover-request-fields .el-select'), '杭州仓库')
+    await dialog.getByPlaceholder('请输入领用备注').fill('项目办公领用')
+    await dialog.getByRole('button', { name: '确认提交', exact: true }).click()
+    await expect(dialog).toBeHidden()
+
+    const submitted = state.requests.find((request) => request.method === 'POST' && request.path === '/api/business-data/requests')
+    expect(submitted?.body).toMatchObject({
+      type: '资产领用',
+      reason: '项目办公领用',
+      details: {
+        assetIds: ['AST-RECEIVE-001'],
+        assetCount: 1,
+        receiveType: '个人领用',
+        receiveLocation: '杭州仓库'
+      }
+    })
+    const createdCard = page.locator('.employee-request-card').filter({ hasText: 'REQ-NEW' })
+    await expect(createdCard).toContainText('自助领用')
+    await expect(createdCard).toContainText('待审批')
+  })
+
+  test('免审批自助领用立即生效并出现在我的资产', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '自助领用即时落账在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    await openApp(page, '/requests', {
+      receiveApprovalRequired: false,
+      receiveCategories: ['IT设备'],
+      assets: [{ id: 'AST-RECEIVE-NOW', name: '即时领用笔记本', status: '空闲', category: 'IT设备', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'NOW-1', sn: 'NOW-SN-1', assetTag: '', price: 6000 }]
+    })
+
+    await page.getByRole('button', { name: '资产领用', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '资产领用' })
+    await dialog.locator('.handover-asset-card').filter({ hasText: 'AST-RECEIVE-NOW' }).click()
+    await choosePortalSelectOption(page, dialog.locator('.handover-request-fields .el-select'), '杭州仓库')
+    await dialog.getByRole('button', { name: '确认提交', exact: true }).click()
+    await expect(dialog).toBeHidden()
+
+    const createdCard = page.locator('.employee-request-card').filter({ hasText: 'REQ-NEW' })
+    await expect(createdCard).toContainText('自助领用')
+    await expect(createdCard).toContainText('已同意')
+    await page.getByRole('button', { name: '首页', exact: true }).click()
+    const receivedDevice = page.locator('.device-card').filter({ hasText: 'AST-RECEIVE-NOW' })
+    await expect(receivedDevice).toContainText('即时领用笔记本')
+    await expect(receivedDevice).toContainText('AST-RECEIVE-NOW')
+  })
+
+  test('自助借用按配置分类展示空闲资产并支持扫码提交待审批申请', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '自助借用完整表单在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    const state = await openApp(page, '/requests', {
+      borrowApprovalRequired: true,
+      borrowCategories: ['IT设备'],
+      assets: [
+        { id: 'AST-BORROW-001', name: '可借用笔记本', status: '空闲', category: 'IT设备', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'B-1', sn: 'BORROW-SN-1', assetTag: 'TAG-BORROW-1', price: 5000 },
+        { id: 'AST-BORROW-002', name: '未配置分类显示器', status: '空闲', category: '显示器', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'B-2', sn: 'BORROW-SN-2', assetTag: '', price: 3000 },
+        { id: 'AST-BORROW-003', name: '非空闲笔记本', status: '闲置', category: 'IT设备', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'B-3', sn: 'BORROW-SN-3', assetTag: '', price: 4500 }
+      ]
+    })
+
+    await page.getByRole('button', { name: '资产借用', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '资产借用' })
+    await expect(dialog).toBeVisible()
+    for (const label of ['借用人', '所属公司', '所在部门', '借用后位置', '经办人', '借用日期', '预计归还日期', '借用备注', '资产分类', '选择借用资产']) {
+      await expect(dialog.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+    await expect(dialog).toContainText('AST-BORROW-001')
+    await expect(dialog).not.toContainText('AST-BORROW-002')
+    await expect(dialog).not.toContainText('AST-BORROW-003')
+
+    await dialog.getByRole('button', { name: '扫码精确查询', exact: true }).click()
+    const scanInput = dialog.getByRole('textbox', { name: '扫码内容', exact: true })
+    await scanInput.fill('TAG-BORROW-1')
+    await scanInput.press('Enter')
+    await expect(dialog.getByText('已选择资产 1', { exact: true })).toBeVisible()
+    await choosePortalSelectOption(page, dialog.locator('.handover-request-fields .el-select'), '杭州仓库')
+    const expectedReturnInput = dialog.locator('.el-form-item').filter({ hasText: '预计归还日期' }).locator('input')
+    await expectedReturnInput.fill('2026-08-22')
+    await expectedReturnInput.press('Enter')
+    await dialog.getByPlaceholder('请输入借用备注').fill('项目临时借用')
+    await dialog.getByRole('button', { name: '确认提交', exact: true }).click()
+    await expect(dialog).toBeHidden()
+
+    const submitted = state.requests.find((request) => request.method === 'POST' && request.path === '/api/business-data/requests')
+    expect(submitted?.body).toMatchObject({
+      type: '资产借用',
+      reason: '项目临时借用',
+      details: {
+        assetIds: ['AST-BORROW-001'],
+        assetCount: 1,
+        borrowLocation: '杭州仓库',
+        borrowDate: '2026-07-22',
+        expectedReturnDate: '2026-08-22'
+      }
+    })
+    const createdCard = page.locator('.employee-request-card').filter({ hasText: 'REQ-NEW' })
+    await expect(createdCard).toContainText('自助借用')
+    await expect(createdCard).toContainText('待审批')
+  })
+
+  test('免审批自助借用立即生效并出现在我的资产', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '自助借用即时落账在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    await openApp(page, '/requests', {
+      borrowApprovalRequired: false,
+      borrowCategories: ['IT设备'],
+      assets: [{ id: 'AST-BORROW-NOW', name: '即时借用笔记本', status: '空闲', category: 'IT设备', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'BORROW-NOW', sn: 'BORROW-NOW-SN', assetTag: '', price: 6000 }]
+    })
+
+    await page.getByRole('button', { name: '资产借用', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '资产借用' })
+    await dialog.locator('.handover-asset-card').filter({ hasText: 'AST-BORROW-NOW' }).click()
+    await choosePortalSelectOption(page, dialog.locator('.handover-request-fields .el-select'), '杭州仓库')
+    const expectedReturnInput = dialog.locator('.el-form-item').filter({ hasText: '预计归还日期' }).locator('input')
+    await expectedReturnInput.fill('2026-08-22')
+    await expectedReturnInput.press('Enter')
+    await dialog.getByRole('button', { name: '确认提交', exact: true }).click()
+    await expect(dialog).toBeHidden()
+
+    const createdCard = page.locator('.employee-request-card').filter({ hasText: 'REQ-NEW' })
+    await expect(createdCard).toContainText('自助借用')
+    await expect(createdCard).toContainText('已同意')
+    await page.getByRole('button', { name: '首页', exact: true }).click()
+    const borrowedDevice = page.locator('.device-card').filter({ hasText: 'AST-BORROW-NOW' })
+    await expect(borrowedDevice).toContainText('即时借用笔记本')
+    await expect(borrowedDevice).toContainText('AST-BORROW-NOW')
+  })
+
+  test('管理员未开放员工自助时功能菜单为空', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '员工自助入口配置在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    await openApp(page, '/requests', { selfServiceEnabled: false })
+    await expect(page.locator('.employee-request-action')).toHaveCount(0)
+    await expect(page.getByText('当前未开放自助申请', { exact: true })).toBeVisible()
+  })
+
+  test('管理员可配置自助领用审批方式和资产分类范围', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '员工自助管理配置在桌面项目执行')
+    await openApp(page, '/system/self-service')
+
+    const receiveBlock = page.locator('.self-service-config-block').filter({ hasText: '自助资产领用' })
+    await expect(receiveBlock).toBeVisible()
+    const approvalRow = receiveBlock.locator('.self-service-config-row').filter({ hasText: '需要管理员审批' })
+    await expect(approvalRow.locator('.el-switch')).toHaveClass(/is-checked/)
+    const categoryRow = receiveBlock.locator('.self-service-config-row').filter({ hasText: '自助申请资产类别' })
+    await expect(categoryRow).toContainText('IT设备')
+  })
+
+  test('管理员可配置自助借用审批方式和资产分类范围', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '员工自助管理配置在桌面项目执行')
+    await openApp(page, '/system/self-service')
+
+    const borrowBlock = page.locator('.self-service-config-block').filter({ hasText: '自助资产借用' })
+    await expect(borrowBlock).toBeVisible()
+    const approvalRow = borrowBlock.locator('.self-service-config-row').filter({ hasText: '需要管理员审批' })
+    await expect(approvalRow.locator('.el-switch')).toHaveClass(/is-checked/)
+    const categoryRow = borrowBlock.locator('.self-service-config-row').filter({ hasText: '自助申请资产类别' })
+    await expect(categoryRow).toContainText('IT设备')
+  })
+
+  test('管理员关闭自助退还后员工入口隐藏', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '员工自助入口配置在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    await openApp(page, '/requests', { returnEnabled: false })
+    await expect(page.getByText('自助退还', { exact: true })).toHaveCount(0)
   })
 
   test('首页保留迁移前的统计与仪表盘板块', async ({ page, isMobile }) => {
@@ -279,6 +698,7 @@ test.describe('登录后门户质量回归', () => {
     expect(barLayout.every((item) => item.heightVariable.endsWith('%')), JSON.stringify(barLayout)).toBe(true)
     expect(barLayout.every((item) => item.fillHeight > 0), JSON.stringify(barLayout)).toBe(true)
     expect(barLayout.every((item) => item.valueBottom !== 'auto'), JSON.stringify(barLayout)).toBe(true)
+    await expectPortalSelectOpensBelow(page, page.locator('.dashboard-card-filters .el-select').first())
   })
 
   test('资产搜索、分页、详情和高级筛选可用', async ({ page, isMobile }) => {
@@ -304,18 +724,35 @@ test.describe('登录后门户质量回归', () => {
     await page.keyboard.press('Escape')
     await expect(drawer).toBeHidden()
 
-    await page.getByRole('button', { name: '高级搜索', exact: true }).click()
-    const advancedDrawer = page.getByRole('dialog', { name: '高级筛选' })
+    await page.locator('.asset-table-actions .link').filter({ hasText: '高级搜索' }).click()
+    const advancedDrawer = page.locator('.asset-advanced-search-drawer:visible').last()
     await expect(advancedDrawer).toBeVisible()
-    for (const label of ['资产编码', '资产名称', '品牌/类型', '型号', '设备序列号', '使用人', '所属部门', '所在位置', '供应商', '风险状态', '资产标签']) {
+    await expect(advancedDrawer.getByText('列表操作', { exact: true })).toBeVisible()
+    await expect(advancedDrawer.getByRole('heading', { name: '高级搜索', exact: true })).toBeVisible()
+    await expect(advancedDrawer.getByRole('button', { name: '高级搜索', exact: true })).toBeVisible()
+    await expect(advancedDrawer.getByRole('button', { name: '自定义列', exact: true })).toBeVisible()
+    for (const label of ['资产状态', '资产编码', '资产名称', '资产分类', '品牌/类型', '型号', '设备序列号', '使用人', '所属部门', '所在位置', '供应商', '风险状态', '资产标签']) {
       await expect(advancedDrawer.getByText(label, { exact: true })).toBeVisible()
     }
-    const brandType = advancedDrawer.locator('.el-form-item').filter({ hasText: '品牌/类型' }).locator('input')
-    await brandType.fill('不存在的品牌')
+    const advancedLayout = await advancedDrawer.evaluate((element) => {
+      const fields = Array.from(element.querySelectorAll('.advanced-filter-field')).slice(0, 2).map((field) => field.getBoundingClientRect())
+      return { width: element.getBoundingClientRect().width, firstLeft: fields[0]?.left, secondLeft: fields[1]?.left, firstBottom: fields[0]?.bottom, secondTop: fields[1]?.top }
+    })
+    expect(advancedLayout.width).toBeGreaterThanOrEqual(500)
+    expect(advancedLayout.width).toBeLessThanOrEqual(540)
+    expect(Math.abs((advancedLayout.firstLeft || 0) - (advancedLayout.secondLeft || 0))).toBeLessThanOrEqual(1)
+    expect(advancedLayout.secondTop || 0).toBeGreaterThanOrEqual(advancedLayout.firstBottom || 0)
+    await advancedDrawer.getByRole('button', { name: '自定义列', exact: true }).click()
+    await expect(advancedDrawer.getByRole('heading', { name: '自定义列', exact: true })).toBeVisible()
+    await expect(advancedDrawer.getByText('表格密度', { exact: true })).toBeVisible()
+    await advancedDrawer.getByRole('button', { name: '高级搜索', exact: true }).click()
+    const categorySelect = advancedDrawer.locator('.advanced-filter-field').filter({ hasText: '资产分类' }).locator('.el-select')
+    await expectPortalSelectOpensBelow(page, categorySelect)
+    await choosePortalSelectOption(page, categorySelect, '显示器')
     await expect(page.getByText('测试笔记本', { exact: true })).toBeVisible()
     await advancedDrawer.getByRole('button', { name: '查询', exact: true }).click()
     await expect(page.getByText('测试笔记本', { exact: true })).toHaveCount(0)
-    await page.getByRole('button', { name: '高级搜索', exact: true }).click()
+    await page.locator('.asset-table-actions .link').filter({ hasText: '高级搜索' }).click()
     await advancedDrawer.getByRole('button', { name: '重置', exact: true }).click()
     await expect(page.getByText('测试笔记本', { exact: true })).toBeVisible()
   })
@@ -330,13 +767,19 @@ test.describe('登录后门户质量回归', () => {
     await installApiMocks(page)
     for (const item of cases) {
       await page.goto(item.path)
-      await page.getByRole('button', { name: '高级搜索', exact: true }).click()
-      const drawer = page.getByRole('dialog', { name: '高级筛选' })
-      for (const label of item.labels) await expect(drawer.getByText(label, { exact: true })).toBeVisible()
-      await drawer.locator('.el-form-item').filter({ hasText: item.labels[1] }).locator('input').fill('NO-MATCH')
+      await page.locator('.asset-table-actions .link').filter({ hasText: '高级搜索' }).click()
+      const drawer = page.locator('.asset-advanced-search-drawer:visible').last()
+      for (const label of item.labels) await expect(drawer.locator('.advanced-filter-field > span').filter({ hasText: label }).first()).toBeVisible()
+      const statusSelect = drawer.locator('.advanced-filter-field').filter({ hasText: item.labels[0] }).locator('.el-select')
+      await expect(statusSelect).toBeVisible()
+      await expectPortalSelectOpensBelow(page, statusSelect)
+      if (item.path === '/assets/borrow-return') {
+        await expectPortalSelectOpensBelow(page, drawer.locator('.borrow-return-advanced-fields .advanced-filter-field:last-child .el-select'))
+      }
+      await drawer.locator('.advanced-filter-field').filter({ hasText: item.labels[1] }).locator('input').fill('NO-MATCH')
       await drawer.getByRole('button', { name: '查询', exact: true }).click()
       await expect(page.locator('.asset-list-table .empty-row')).toBeVisible()
-      await page.getByRole('button', { name: '高级搜索', exact: true }).click()
+      await page.locator('.asset-table-actions .link').filter({ hasText: '高级搜索' }).click()
       await drawer.getByRole('button', { name: '重置', exact: true }).click()
       await expect(page.locator('.asset-list-table .empty-row')).toHaveCount(0)
       await page.keyboard.press('Escape')
@@ -355,6 +798,7 @@ test.describe('登录后门户质量回归', () => {
     for (const label of ['人员姓名', '使用公司', '使用部门', '领用/借用日期', '资产编码', '所属/承租公司', '资产状况', '使用期限', '租金']) {
       await expect(dialog.locator('.el-form-item').filter({ hasText: label }).first()).toBeVisible()
     }
+    await expectPortalSelectOpensBelow(page, dialog.locator('.el-form-item').filter({ hasText: '使用公司' }).first().locator('.el-select'))
     const personField = dialog.locator('.el-form-item').filter({ hasText: '人员姓名' })
     const departmentField = dialog.locator('.el-form-item').filter({ hasText: '使用部门' })
     const personInput = personField.locator('input')
@@ -581,11 +1025,50 @@ test.describe('登录后门户质量回归', () => {
     await expect(panel).toHaveCSS('background-color', 'rgb(17, 17, 17)')
   })
 
+  test('资产各主列表支持拖拽调整列宽并持久化', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '列宽拖拽在桌面项目执行')
+    await openApp(page, '/assets')
+
+    const handle = page.getByRole('button', { name: '调整资产状态列宽' })
+    await expect(handle).toBeVisible()
+    const header = handle.locator('xpath=..')
+    const before = await header.evaluate((element) => element.getBoundingClientRect().width)
+    const box = await handle.boundingBox()
+    expect(box).not.toBeNull()
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box!.x + box!.width / 2 + 72, box!.y + box!.height / 2)
+    await page.mouse.up()
+    const resized = await header.evaluate((element) => element.getBoundingClientRect().width)
+    expect(resized).toBeGreaterThan(before + 50)
+    await expect.poll(() => page.evaluate(() => Boolean(localStorage.getItem('asset-table-column-widths:assets:list')))).toBe(true)
+
+    await page.reload()
+    const persisted = await page.getByRole('button', { name: '调整资产状态列宽' }).locator('xpath=..').evaluate((element) => element.getBoundingClientRect().width)
+    expect(persisted).toBeGreaterThan(before + 50)
+
+    for (const [path, selector] of [
+      ['/assets/inbound', '.inbound-order-table'],
+      ['/assets/receive-return', '.receive-return-table'],
+      ['/assets/borrow-return', '.borrow-return-table'],
+      ['/assets/stocktake', '.stocktake-view table'],
+      ['/assets/settings/locations', '.location-settings-table'],
+      ['/assets/settings/categories', '.asset-category-settings-table']
+    ] as const) {
+      await page.goto(path)
+      await expect(page.locator(`${selector} .column-resize-handle`).first()).toBeVisible()
+    }
+  })
+
   test('审批搜索与处理弹窗保持可操作', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '审批业务流在桌面项目执行')
     const state = await openApp(page, '/requests')
+    await page.getByRole('button', { name: '已完成', exact: true }).click()
+    await expect(page.locator('.approval-workspace tbody')).toContainText('REQ-002')
+    await expect(page.locator('.approval-workspace tbody')).not.toContainText('REQ-001')
+    await page.getByRole('button', { name: '待处理', exact: true }).click()
     await page.getByPlaceholder('搜索申请编号、类型、申请人或资产').fill('REQ-001')
-    const row = page.locator('.panel tbody tr').filter({ hasText: 'REQ-001' })
+    const row = page.locator('.approval-workspace tbody tr').filter({ hasText: 'REQ-001' })
     await row.getByRole('button', { name: '批准', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '通过审批' })
     await dialog.locator('textarea').fill('信息无误')
@@ -612,7 +1095,8 @@ test.describe('登录后门户质量回归', () => {
     await expect(page.locator('.borrow-return-table')).toContainText('GH-001')
 
     await page.goto('/assets/stocktake')
-    await expect(page.locator('.stocktake-view .hero')).toContainText('支持普通管理员扫码盘点')
+    await expect(page.locator('.stocktake-view .hero')).toHaveCount(0)
+    await expect(page.locator('.stocktake-view .toolbar')).toContainText('新建盘点')
     await expect(page.locator('.stocktake-view .panel table')).toContainText('任务编号')
 
     await page.goto('/assets/settings/locations')
@@ -633,8 +1117,10 @@ test.describe('登录后门户质量回归', () => {
 
     await page.goto('/requests')
     await expect(page.locator('.approvals-view .hero')).toHaveCount(0)
-    await expect(page.locator('.approvals-view .approval-toolbar-actions')).toContainText('新建申请')
-    await expect(page.locator('.approvals-view .panel table')).toContainText('当前节点')
+    await expect(page.locator('.approvals-view .approval-workspace-tabs')).toContainText('待处理')
+    await expect(page.locator('.approvals-view .approval-toolbar-actions')).toContainText('刷新')
+    await expect(page.getByRole('button', { name: '新建申请', exact: true })).toHaveCount(0)
+    await expect(page.locator('.approvals-view .approval-workspace table')).toContainText('当前节点')
 
     await page.goto('/system/self-service')
     await expect(page.locator('.self-service-panel')).toContainText('签字设置')
@@ -650,6 +1136,11 @@ test.describe('登录后门户质量回归', () => {
   test('盘点与资产设置表单保留迁移前结构和层级逻辑', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '密集设置表单在桌面项目执行')
     const state = await openApp(page, '/assets/stocktake')
+    const stocktakeToolbar = page.locator('.stocktake-toolbar')
+    await expect(stocktakeToolbar.locator(':scope > *')).toHaveCount(1)
+    await expect(page.getByPlaceholder('盘点任务名称')).toHaveCount(0)
+    await expect(page.getByRole('combobox', { name: '盘点状态' })).toHaveCount(0)
+    await expect(page.locator('.stocktake-view .table-wrap th').first()).toHaveCSS('font-size', '12px')
 
     await page.getByRole('button', { name: '新建盘点', exact: true }).click()
     const stocktakeDialog = page.getByRole('dialog', { name: '新建盘点' })
@@ -672,7 +1163,7 @@ test.describe('登录后门户质量回归', () => {
       await expect(locationDialog.locator('.location-form-row').filter({ hasText: label })).toHaveCount(1)
     }
     await locationDialog.locator('.location-form-row').filter({ hasText: '位置名称' }).locator('input').fill('研发办公室')
-    await locationDialog.locator('.location-form-row').filter({ hasText: '上级位置' }).locator('select').selectOption('loc-hz')
+    await choosePortalSelectOption(page, locationDialog.locator('.location-form-row').filter({ hasText: '上级位置' }).locator('.el-select'), '杭州仓库')
     await locationDialog.locator('.location-form-row').filter({ hasText: '位置编码' }).locator('input').fill('RD')
     await locationDialog.getByRole('button', { name: '确定', exact: true }).click()
     await expect(locationDialog).toBeHidden()
@@ -687,7 +1178,7 @@ test.describe('登录后门户质量回归', () => {
     }
     await categoryDialog.locator('.location-form-row').filter({ hasText: '分类编码' }).locator('input').fill('0101')
     await categoryDialog.locator('.location-form-row').filter({ hasText: '分类名称' }).locator('input').fill('笔记本电脑')
-    await categoryDialog.locator('.location-form-row').filter({ hasText: '上级分类' }).locator('select').selectOption('cat-it')
+    await choosePortalSelectOption(page, categoryDialog.locator('.location-form-row').filter({ hasText: '上级分类' }).locator('.el-select'), 'IT设备')
     await categoryDialog.locator('.location-form-row').filter({ hasText: '使用期限' }).locator('input').fill('48')
     await categoryDialog.getByRole('button', { name: '确定', exact: true }).click()
     await expect(categoryDialog).toBeHidden()
@@ -763,7 +1254,7 @@ test.describe('登录后门户质量回归', () => {
     await page.addInitScript(() => localStorage.setItem('e2e:permissions', JSON.stringify(['asset:item:view'])))
     await openApp(page, '/assets', { failAssets: true })
     await expect(page.getByText('资产服务暂不可用', { exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: '高级筛选', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '高级搜索', exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: '导出', exact: true })).toHaveCount(0)
   })
 

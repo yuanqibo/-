@@ -100,6 +100,21 @@ public class AssetService {
     }
 
     @Transactional
+    public void requireStatusForApprovedRequest(Collection<String> assetIds, Set<String> allowedStatuses) {
+        repository.lockForWrite();
+        Map<String, JsonNode> assets = repository.findAll().stream().collect(java.util.stream.Collectors.toMap(
+            asset -> asset.path("id").asText(), asset -> asset));
+        for (String assetId : assetIds) {
+            JsonNode asset = assets.get(assetId);
+            if (asset == null) throw new IllegalArgumentException("Requested asset was not found: " + assetId);
+            if (!allowedStatuses.contains(asset.path("status").asText())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Requested asset status changed before approval: " + assetId);
+            }
+        }
+    }
+
+    @Transactional
     public Instant replaceAll(List<JsonNode> assets) {
         if (assets == null || assets.size() > MAX_ASSETS) {
             throw new IllegalArgumentException("Asset snapshot exceeds the 5000 record limit");

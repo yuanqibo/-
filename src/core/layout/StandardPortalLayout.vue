@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { QuestionFilled } from '@element-plus/icons-vue'
+import { Bell, QuestionFilled } from '@element-plus/icons-vue'
+import { ElNotification } from 'element-plus'
 import { usePortalSession } from '../auth/portal-session'
 import { useTerminalMode, type PortalTerminalMode } from '../auth/terminal-mode'
 import type { PortalMenuItem } from '../auth/portal-context'
 import { MEMBER_AUTHORIZATION_PORTAL_PATH } from '../routing/standard-routes'
+import ApprovalNotificationDialog from '../../features/approvals/components/ApprovalNotificationDialog.vue'
+import { useApprovals } from '../../features/approvals/composables/useApprovals'
+import type { ApprovalRecord } from '../../features/approvals/types/approval'
 import PortalNavIcon from './PortalNavIcon.vue'
 import { subnavScrollState } from './subnav-scroll-state'
 
 type LayoutSection = 'auto' | 'assets' | 'system' | 'none'
+
+const knownPendingApprovalIds = new Set<string>()
+let approvalNotificationBaselineReady = false
 
 const props = withDefaults(defineProps<{ pageTitle?: string; section?: LayoutSection }>(), {
   pageTitle: '',
@@ -20,12 +27,24 @@ const route = useRoute()
 const router = useRouter()
 const { ready, loading, errorMessage, user, menuItems } = usePortalSession()
 const { isEmployeeTerminal, canSwitchTerminal, setTerminalMode } = useTerminalMode()
+const { rows: approvalRows, load: loadApprovals } = useApprovals()
 const openAssetGroups = ref(new Set<string>())
 const assetSubnav = ref<HTMLElement>()
 const systemSubnav = ref<HTMLElement>()
 const layoutActive = ref(true)
+const approvalNotificationOpen = ref(false)
 const routePreloads = new Map<string, Promise<void>>()
 let idlePreloadScheduled = false
+let approvalRefreshTimer: ReturnType<typeof setInterval> | null = null
+
+const pendingStatuses = new Set(['审批中', '待审批', '待执行'])
+const canReviewApprovals = computed(() => !isEmployeeTerminal.value
+  && (user.value?.permissionCodes || []).includes('asset:request:review'))
+const pendingApprovals = computed(() => approvalRows.value.filter((item) =>
+  pendingStatuses.has(item.status) && !item.decisionSubmitted))
+const approvalNotificationLabel = computed(() => pendingApprovals.value.length
+  ? `审批消息，${pendingApprovals.value.length} 条待处理`
+  : '审批消息，暂无待处理')
 
 const resolvedSection = computed<Exclude<LayoutSection, 'auto'>>(() => {
   if (ready.value && isEmployeeTerminal.value && (props.section === 'assets' || route.path.startsWith('/assets'))) return 'none'
@@ -36,10 +55,11 @@ const resolvedSection = computed<Exclude<LayoutSection, 'auto'>>(() => {
 })
 
 const primaryMenuIds = ['home', 'assets', 'requests', 'settings']
+const employeePortalPaths = new Set(['/', '/requests'])
 const primaryMenus = computed(() => primaryMenuIds
   .map((id) => menuItems.value.find((item) => item.id === id))
   .filter((item): item is PortalMenuItem => Boolean(item))
-  .filter((item) => !isEmployeeTerminal.value || ['home', 'assets', 'requests'].includes(item.id)))
+  .filter((item) => !isEmployeeTerminal.value || ['home', 'requests'].includes(item.id)))
 const systemMenus = computed(() => menuItems.value
   .filter((item) => item.parentId === 'settings')
   .sort((left, right) => left.order - right.order))
@@ -76,7 +96,7 @@ const preloadMenuRoute = (item: PortalMenuItem): void => { void preloadPath(rout
 const scheduleRoutePreload = (): void => {
   if (idlePreloadScheduled) return
   idlePreloadScheduled = true
-  const preload = () => menuItems.value.forEach(preloadMenuRoute)
+  const preload = () => (isEmployeeTerminal.value ? primaryMenus.value : menuItems.value).forEach(preloadMenuRoute)
   const idleWindow = window as Window & { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number }
   if (idleWindow.requestIdleCallback) idleWindow.requestIdleCallback(preload, { timeout: 1200 })
   else window.setTimeout(preload, 180)
@@ -111,6 +131,38 @@ const navigatePrimary = (item: PortalMenuItem): void => {
   navigate(item)
 }
 
+const openApprovalNotifications = (): void => {
+  approvalNotificationOpen.value = true
+  void loadApprovals()
+}
+
+const openApprovalRequest = (item: ApprovalRecord): void => {
+  approvalNotificationOpen.value = false
+  void router.push({ path: '/requests', query: { request: item.id } })
+}
+
+const refreshApprovalNotifications = async (): Promise<void> => {
+  if (!layoutActive.value || !canReviewApprovals.value) return
+  await loadApprovals()
+  if (!approvalNotificationBaselineReady) {
+    pendingApprovals.value.forEach((item) => knownPendingApprovalIds.add(item.id))
+    approvalNotificationBaselineReady = true
+  }
+}
+
+const stopApprovalRefresh = (): void => {
+  if (!approvalRefreshTimer) return
+  clearInterval(approvalRefreshTimer)
+  approvalRefreshTimer = null
+}
+
+const startApprovalRefresh = (): void => {
+  stopApprovalRefresh()
+  if (!canReviewApprovals.value) return
+  void refreshApprovalNotifications()
+  approvalRefreshTimer = setInterval(() => { void refreshApprovalNotifications() }, 15_000)
+}
+
 const logout = (): void => { void window.__ASSET_PORTAL_ECP_CONTEXT__?.logout() }
 const handleAccountCommand = (command: string | number | object): void => {
   if (command === 'logout') logout()
@@ -118,7 +170,7 @@ const handleAccountCommand = (command: string | number | object): void => {
 }
 const switchTerminal = (mode: PortalTerminalMode): void => {
   if (!setTerminalMode(mode)) return
-  if (mode === 'employee' && !['/', '/assets', '/requests'].includes(route.path)) void router.push('/')
+  if (mode === 'employee' && !employeePortalPaths.has(route.path)) void router.push('/')
 }
 const reload = (): void => window.location.reload()
 const avatarText = computed(() => String(user.value?.name || user.value?.account || '用').trim().slice(0, 1))
@@ -149,20 +201,48 @@ watch([() => route.path, assetMenus], () => {
 watch([() => route.path, openAssetGroups], () => { void restoreSubnavScroll() }, { flush: 'post' })
 
 watch([ready, isEmployeeTerminal, () => route.path], ([sessionReady, employee, path]) => {
-  if (sessionReady && employee && !['/', '/assets', '/requests'].includes(path)) void router.replace('/')
+  if (sessionReady && employee && !employeePortalPaths.has(path)) void router.replace('/')
 }, { immediate: true })
+
+watch(
+  [() => pendingApprovals.value.map((item) => item.id).join('|'), canReviewApprovals],
+  () => {
+    if (!approvalNotificationBaselineReady || !layoutActive.value || !canReviewApprovals.value) return
+    const newItems = pendingApprovals.value.filter((item) => !knownPendingApprovalIds.has(item.id))
+    if (!newItems.length) return
+    newItems.forEach((item) => knownPendingApprovalIds.add(item.id))
+    ElNotification({
+      title: '新增审批待办',
+      message: newItems.length === 1
+        ? `${newItems[0].applicant}提交了${newItems[0].type}申请`
+        : `新增 ${newItems.length} 条审批申请，请及时处理`,
+      type: 'info',
+      position: 'bottom-left',
+      duration: 5_000,
+      onClick: () => { approvalNotificationOpen.value = true }
+    })
+  }
+)
+
+watch(canReviewApprovals, () => {
+  if (layoutActive.value) startApprovalRefresh()
+  if (!canReviewApprovals.value) approvalNotificationOpen.value = false
+})
 
 onMounted(() => {
   syncActiveLayout()
   scheduleRoutePreload()
+  startApprovalRefresh()
 })
 
 onActivated(() => {
   layoutActive.value = true
   syncActiveLayout()
+  startApprovalRefresh()
 })
 onDeactivated(() => {
   layoutActive.value = false
+  stopApprovalRefresh()
   document.body.classList.remove('standard-vue-route', 'employee-terminal-view')
 })
 
@@ -174,6 +254,7 @@ watch([ready, isEmployeeTerminal], ([sessionReady, employee]) => {
 onBeforeUnmount(() => { if (layoutActive.value) rememberSubnavScroll() })
 
 onUnmounted(() => {
+  stopApprovalRefresh()
   if (!layoutActive.value) return
   document.body.classList.remove('standard-vue-route')
   document.body.classList.remove('employee-terminal-view')
@@ -221,6 +302,19 @@ onUnmounted(() => {
       </nav>
 
       <div class="sidebar-tools">
+        <el-tooltip v-if="canReviewApprovals" content="审批消息" placement="right">
+          <button
+            class="sidebar-tool sidebar-notification-tool"
+            type="button"
+            :aria-label="approvalNotificationLabel"
+            @click="openApprovalNotifications"
+          >
+            <span class="sidebar-tool-icon"><el-icon><Bell /></el-icon></span>
+            <span v-if="pendingApprovals.length" class="sidebar-notification-badge" aria-hidden="true">
+              {{ pendingApprovals.length > 99 ? '99+' : pendingApprovals.length }}
+            </span>
+          </button>
+        </el-tooltip>
         <el-tooltip content="系统使用说明" placement="right">
           <button class="sidebar-tool" type="button" aria-label="系统使用说明">
             <span class="sidebar-tool-icon"><el-icon><QuestionFilled /></el-icon></span>
@@ -285,5 +379,12 @@ onUnmounted(() => {
         <template v-else><slot /></template>
       </section>
     </main>
+
+    <ApprovalNotificationDialog
+      v-if="canReviewApprovals"
+      v-model="approvalNotificationOpen"
+      :items="pendingApprovals"
+      @select="openApprovalRequest"
+    />
   </div>
 </template>

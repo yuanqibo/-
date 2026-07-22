@@ -32,11 +32,33 @@ class ApprovedAssetRequestExecutorTest {
         executor.execute(request, ApprovedAssetRequestExecutor.Operator.ecp());
 
         ArgumentCaptor<ObjectNode> fields = ArgumentCaptor.forClass(ObjectNode.class);
+        verify(assets).requireStatusForApprovedRequest(List.of("A-1"), Set.of("空闲"));
         verify(assets).execute(eq("receive"), eq(List.of("A-1")), fields.capture());
         verifyNoInteractions(parties);
         assertThat(fields.getValue().path("receiver").asText()).isEqualTo("李雷");
         assertThat(fields.getValue().path("receiverSubject").asText()).isEqualTo("user-1");
         assertThat(fields.getValue().path("department").asText()).isEqualTo("销售部");
+    }
+
+    @Test
+    void executesBorrowWithTheConfiguredDatesAndAuthenticatedApplicant() {
+        AssetService assets = mock(AssetService.class);
+        AssetPartyResolver parties = mock(AssetPartyResolver.class);
+        ApprovedAssetRequestExecutor executor = new ApprovedAssetRequestExecutor(assets, parties, mapper);
+        ObjectNode request = baseRequest("资产借用", "A-1");
+        request.put("borrowLocation", "二楼");
+        request.put("borrowDate", "2026-07-22");
+        request.put("expectedReturnDate", "2026-08-22");
+
+        executor.execute(request, ApprovedAssetRequestExecutor.Operator.ecp());
+
+        ArgumentCaptor<ObjectNode> fields = ArgumentCaptor.forClass(ObjectNode.class);
+        verify(assets).requireStatusForApprovedRequest(List.of("A-1"), Set.of("空闲"));
+        verify(assets).execute(eq("borrow"), eq(List.of("A-1")), fields.capture());
+        verifyNoInteractions(parties);
+        assertThat(fields.getValue().path("borrower").asText()).isEqualTo("李雷");
+        assertThat(fields.getValue().path("borrowerSubject").asText()).isEqualTo("user-1");
+        assertThat(fields.getValue().path("expectedReturnDate").asText()).isEqualTo("2026-08-22");
     }
 
     @Test
@@ -46,6 +68,7 @@ class ApprovedAssetRequestExecutorTest {
         ApprovedAssetRequestExecutor executor = new ApprovedAssetRequestExecutor(assets, parties, mapper);
         ObjectNode request = baseRequest("资产交接", "A-1");
         request.put("receiverSubject", "user-2");
+        request.put("receiverName", "韩梅梅");
         request.put("handoverLocation", "二楼");
         request.put("handoverDate", "2026-07-21");
         request.put("handoverType", "员工交接");

@@ -36,6 +36,12 @@ class PortalDefaultConfigInitializerTest {
         assertThat(repository.find("assetCategoryTreeVersion")).isPresent();
         assertThat(repository.find("assetPortalAssetCodeRuleSettingsV1")).isPresent();
         assertThat(repository.find("assetPortalSelfServiceSettingsV9")).isPresent();
+        assertThat(repository.find("assetPortalSelfServiceSettingsV9").orElseThrow().value()
+            .path("handoverAsset").path("approvalRequired").asBoolean()).isTrue();
+        assertThat(repository.find("assetPortalSelfServiceSettingsV9").orElseThrow().value()
+            .path("receiveAsset").path("approvalRequired").asBoolean()).isTrue();
+        assertThat(repository.find("assetPortalSelfServiceSettingsV9").orElseThrow().value()
+            .path("borrowAsset").path("approvalRequired").asBoolean()).isTrue();
         assertThat(repository.find("assetLabelCustomTemplatesV1")).isPresent();
         assertThat(repository.find("assetLabelPrintSettingsV2")).isPresent();
     }

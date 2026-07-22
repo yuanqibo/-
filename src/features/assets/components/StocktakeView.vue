@@ -7,17 +7,13 @@ import type { BusinessRecord } from '../types/assets'
 
 const { state, assets, business, load, createStocktake, updateStocktake } = useAssets()
 const { user } = usePortalSession()
-const query = ref('')
 const detail = ref<BusinessRecord | null>(null)
 const createOpen = ref(false)
 const updateOpen = ref(false)
 const submitting = ref(false)
 const permissions = computed(() => new Set(user.value?.permissionCodes || []))
 const can = (code: string): boolean => permissions.value.has(code)
-const rows = computed(() => (business.value.stocktakes || []).filter((item) => {
-  const keyword = query.value.trim().toLowerCase()
-  return !keyword || [item.id, item.name, item.scope, item.owner].some((value) => String(value || '').toLowerCase().includes(keyword))
-}))
+const rows = computed(() => business.value.stocktakes || [])
 const createForm = reactive({ name: '', scope: '全部资产', owner: '', total: 1, date: new Date().toISOString().slice(0, 10) })
 const updateForm = reactive({ id: '', checked: 0, diff: 0, total: 0 })
 const openCreate = (): void => { Object.assign(createForm, { name: '', scope: '全部资产', owner: user.value?.name || '', total: Math.max(assets.value.length, 1), date: new Date().toISOString().slice(0, 10) }); createOpen.value = true }
@@ -41,8 +37,7 @@ onMounted(() => void load())
 
 <template>
   <section class="stocktake-view">
-    <section class="hero"><h1>资产盘点</h1><p>支持普通管理员扫码盘点、员工自助盘点、照片水印和盘盈盘亏处理。</p><div v-if="can('asset:stocktake:create')" class="quick-actions"><button class="btn primary" type="button" @click="openCreate">新建盘点</button></div></section>
-    <section class="panel"><div class="toolbar"><input v-model="query" class="local-search" type="search" placeholder="盘点任务名称"><select><option>状态</option></select><input type="search" placeholder="负责人"><button class="btn" type="button" @click="load(true)">查询</button></div><div v-loading="state.loading" class="table-wrap"><table><thead><tr><th>任务编号</th><th>盘点任务</th><th>范围</th><th>负责人</th><th>进度</th><th>差异</th><th>计划日期</th><th>操作</th></tr></thead><tbody><tr v-for="item in rows" :key="item.id"><td>{{ item.id }}</td><td>{{ item.name }}</td><td>{{ item.scope }}</td><td>{{ item.owner }}</td><td><span class="tag blue">{{ item.progress || '盘点中' }}</span><div class="panel-subtitle">{{ item.checked || 0 }}/{{ item.total || 0 }} · {{ item.total ? Math.round(Number(item.checked || 0) * 100 / Number(item.total)) : 0 }}%</div></td><td>{{ item.diff || 0 }}</td><td>{{ item.date || '-' }}</td><td><button class="btn" type="button" @click="detail = item">查看明细</button> <button v-if="can('asset:stocktake:update')" class="btn" type="button" @click="openUpdate(item)">登记进度</button></td></tr><tr v-if="!rows.length" class="empty-row"><td colspan="8">当前账号没有可查看的盘点任务。</td></tr></tbody></table></div></section>
+    <section class="panel stocktake-panel"><div class="toolbar stocktake-toolbar"><button v-if="can('asset:stocktake:create')" class="btn primary" type="button" @click="openCreate">新建盘点</button></div><div v-loading="state.loading" class="table-wrap"><table v-resizable-columns="'assets:stocktake'"><thead><tr><th>任务编号</th><th>盘点任务</th><th>范围</th><th>负责人</th><th>进度</th><th>差异</th><th>计划日期</th><th>操作</th></tr></thead><tbody><tr v-for="item in rows" :key="item.id"><td>{{ item.id }}</td><td>{{ item.name }}</td><td>{{ item.scope }}</td><td>{{ item.owner }}</td><td><span class="tag blue">{{ item.progress || '盘点中' }}</span><div class="panel-subtitle">{{ item.checked || 0 }}/{{ item.total || 0 }} · {{ item.total ? Math.round(Number(item.checked || 0) * 100 / Number(item.total)) : 0 }}%</div></td><td>{{ item.diff || 0 }}</td><td>{{ item.date || '-' }}</td><td><button class="btn" type="button" @click="detail = item">查看明细</button> <button v-if="can('asset:stocktake:update')" class="btn" type="button" @click="openUpdate(item)">登记进度</button></td></tr><tr v-if="!rows.length" class="empty-row"><td colspan="8">当前账号没有可查看的盘点任务。</td></tr></tbody></table></div></section>
     <el-empty v-if="!state.loading && !rows.length" description="暂无盘点任务" />
     <el-drawer :model-value="Boolean(detail)" size="min(620px, 92vw)" append-to-body @close="detail = null">
       <template #header><div><span class="eyebrow">盘点明细</span><h2>{{ detail?.name }}</h2></div></template>
