@@ -7570,6 +7570,12 @@ button.self-service-category-chip.more:hover {
   margin-bottom: 14px;
 }
 
+.approval-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .toolbar input,
 .toolbar select,
 .field input,

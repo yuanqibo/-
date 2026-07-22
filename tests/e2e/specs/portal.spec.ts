@@ -632,7 +632,8 @@ test.describe('登录后门户质量回归', () => {
     await expect(page.locator('.asset-label-template-left')).toContainText('标准资产标签')
 
     await page.goto('/requests')
-    await expect(page.locator('.approvals-view .hero')).toContainText('审批管理')
+    await expect(page.locator('.approvals-view .hero')).toHaveCount(0)
+    await expect(page.locator('.approvals-view .approval-toolbar-actions')).toContainText('新建申请')
     await expect(page.locator('.approvals-view .panel table')).toContainText('当前节点')
 
     await page.goto('/system/self-service')
