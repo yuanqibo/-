@@ -1133,6 +1133,42 @@ test.describe('登录后门户质量回归', () => {
     await expect(page.locator('.system-content .panel')).toContainText('表单管理')
   })
 
+  test('主要业务工作区铺满目录内容区并在内部滚动', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '桌面工作区高度在桌面项目执行')
+    await installApiMocks(page)
+
+    for (const [path, selector] of [
+      ['/assets', '.asset-list-page'],
+      ['/assets/inbound', '.asset-inbound-ledger'],
+      ['/assets/receive-return', '.receive-return-ledger'],
+      ['/assets/borrow-return', '.receive-return-ledger'],
+      ['/assets/stocktake', '.stocktake-view'],
+      ['/assets/settings/locations', '.location-settings-shell'],
+      ['/assets/settings/categories', '.asset-category-settings-shell'],
+      ['/assets/settings/code-rules', '.asset-code-rule-page'],
+      ['/assets/settings/label-templates', '.asset-label-template-page'],
+      ['/requests', '.approvals-view'],
+      ['/system/employees', '.employee-directory-feature'],
+      ['/system/integrations', '.standard-system-content > .system-content'],
+      ['/system/forms', '.standard-system-content > .system-content']
+    ] as const) {
+      await page.goto(path)
+      const workspace = page.locator(selector).first()
+      await expect(workspace).toBeVisible()
+      const bottomGap = await workspace.evaluate((element) => {
+        const content = element.closest('.standard-system-content, .standard-main-content, .page')
+        if (!(content instanceof HTMLElement)) throw new Error('缺少标准目录内容区')
+        return Math.round(content.getBoundingClientRect().bottom - element.getBoundingClientRect().bottom)
+      })
+      expect(bottomGap, path).toBeGreaterThanOrEqual(0)
+      expect(bottomGap, path).toBeLessThanOrEqual(26)
+    }
+
+    await page.goto('/assets')
+    await expect(page.locator('.asset-table-scroll')).toHaveCSS('max-height', 'none')
+    await expect(page.locator('.asset-table-scroll')).toHaveCSS('overflow-y', 'auto')
+  })
+
   test('资产分类树默认收起且超出可视区后可独立滚动', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '分类树的桌面滚动区域在桌面项目执行')
     const categoryTree = Array.from({ length: 32 }, (_, index) => ({
