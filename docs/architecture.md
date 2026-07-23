@@ -2,7 +2,7 @@
 
 ## 标准技术栈
 
-- 前端：Node.js 22.14.0、npm 10.9.2、Vue 3、TypeScript、Vite、Vue Router、Element Plus
+- 前端：Node.js 16.20.2、npm 8.19.4、Vue 3、TypeScript、Vite、Vue Router、Element Plus
 - 后端：Java 17、Spring Boot 3、Spring Web、Spring JDBC
 - 数据库：MySQL 8.4
 - 身份与权限：ECP 前端 SDK 与 Java SDK

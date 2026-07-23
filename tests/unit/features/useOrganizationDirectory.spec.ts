@@ -22,7 +22,7 @@ const organization: OrganizationConsole = {
 
 describe('useOrganizationDirectory', () => {
   beforeEach(() => { vi.useFakeTimers(); getOrganizationConsole.mockResolvedValue(organization) })
-  afterEach(() => vi.useRealTimers())
+  afterEach(() => { vi.useRealTimers() })
 
   it('loads hierarchy, filters status and supports pinyin search', async () => {
     let directory!: ReturnType<typeof useOrganizationDirectory>

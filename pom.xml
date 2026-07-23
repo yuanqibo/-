@@ -27,8 +27,8 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <java.version>17</java.version>
     <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
-    <node.version>v22.14.0</node.version>
-    <npm.version>10.9.2</npm.version>
+    <node.version>v16.20.2</node.version>
+    <npm.version>8.19.4</npm.version>
     <ecp-sdk-java.version>1.0.3-release</ecp-sdk-java.version>
     <vite.ecp.app-code>WLY5YG</vite.ecp.app-code>
     <vite.ecp.api-base-url>/api/v1</vite.ecp.api-base-url>

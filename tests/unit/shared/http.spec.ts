@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, apiRequest } from '../../../src/shared/api/http'
 import type { PortalEcpContext } from '../../../src/core/auth/portal-context'
 
-const fetchMock = vi.fn<typeof fetch>()
+const fetchMock = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>()
 
 const response = (body: unknown, status = 200): Response => new Response(
   body === null ? null : JSON.stringify(body),

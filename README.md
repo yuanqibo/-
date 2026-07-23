@@ -4,7 +4,7 @@
 
 ## 环境要求
 
-- Node.js 22.14.0、npm 10.9.2（本地、Maven 与 Docker 前端构建统一版本）
+- Node.js 16.20.2、npm 8.19.4（兼容 CentOS 7，本地、Maven 与 Docker 前端构建统一版本）
 - Java 17
 - Maven 3.9
 - MySQL 8.4（生产环境）

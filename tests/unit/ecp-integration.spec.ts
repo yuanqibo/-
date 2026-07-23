@@ -3,7 +3,7 @@ import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 describe('ECP local integration', () => {
-  afterEach(() => vi.unstubAllEnvs())
+  afterEach(() => { vi.unstubAllEnvs() })
 
   it('passes the real SDK local doctor with strict app-code matching', async () => {
     vi.stubEnv('VITE_ECP_AUTH_CONFIG_SOURCE_MODE', 'local')
