@@ -1167,6 +1167,20 @@ test.describe('登录后门户质量回归', () => {
     await page.goto('/assets')
     await expect(page.locator('.asset-table-scroll')).toHaveCSS('max-height', 'none')
     await expect(page.locator('.asset-table-scroll')).toHaveCSS('overflow-y', 'auto')
+
+    for (const path of ['/assets', '/assets/inbound']) {
+      await page.goto(path)
+      const pageSizeSelect = page.locator('.asset-list-pagination .asset-page-size-select').first()
+      const selectBox = await pageSizeSelect.boundingBox()
+      expect(selectBox, path).not.toBeNull()
+      await pageSizeSelect.click()
+      const popper = page.locator('.el-select__popper:visible').last()
+      await expect(popper).toBeVisible()
+      const popperBox = await popper.boundingBox()
+      expect(popperBox, path).not.toBeNull()
+      expect(popperBox!.y + popperBox!.height, path).toBeLessThanOrEqual(selectBox!.y + 1)
+      await page.keyboard.press('Escape')
+    }
   })
 
   test('资产分类树默认收起且超出可视区后可独立滚动', async ({ page, isMobile }) => {
