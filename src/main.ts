@@ -69,12 +69,15 @@ selectProps.popperOptions.default = () => ({
   ]
 })
 
-const fitSelectMenuBelowTrigger = (select: Element, combobox: Element): void => {
+const fitSelectMenuToViewport = (select: Element, combobox: Element): void => {
   requestAnimationFrame(() => requestAnimationFrame(() => {
     const listboxId = combobox.getAttribute('aria-controls')
     const popper = listboxId ? document.getElementById(listboxId)?.closest<HTMLElement>('.el-popper') : null
     if (!popper) return
-    const availableHeight = window.innerHeight - select.getBoundingClientRect().bottom - 18
+    const selectRect = select.getBoundingClientRect()
+    const availableHeight = select.classList.contains('asset-page-size-select')
+      ? selectRect.top - 18
+      : window.innerHeight - selectRect.bottom - 18
     popper.style.setProperty('--portal-select-max-height', `${Math.min(240, Math.max(48, availableHeight))}px`)
   }))
 }
@@ -86,7 +89,7 @@ const closeExpandedSelectOnSecondClick = (event: MouseEvent): void => {
   const combobox = select?.querySelector<HTMLElement>('[role="combobox"]')
   if (!select || !combobox) return
   if (combobox.getAttribute('aria-expanded') !== 'true') {
-    fitSelectMenuBelowTrigger(select, combobox)
+    fitSelectMenuToViewport(select, combobox)
     return
   }
   event.preventDefault()

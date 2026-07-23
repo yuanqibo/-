@@ -1179,6 +1179,10 @@ test.describe('登录后门户质量回归', () => {
       const popperBox = await popper.boundingBox()
       expect(popperBox, path).not.toBeNull()
       expect(popperBox!.y + popperBox!.height, path).toBeLessThanOrEqual(selectBox!.y + 1)
+      const lastOptionBox = await popper.getByRole('option', { name: '50 条/页' }).boundingBox()
+      expect(lastOptionBox, path).not.toBeNull()
+      expect(lastOptionBox!.y, path).toBeGreaterThanOrEqual(popperBox!.y)
+      expect(lastOptionBox!.y + lastOptionBox!.height, path).toBeLessThanOrEqual(popperBox!.y + popperBox!.height)
       await page.keyboard.press('Escape')
     }
   })

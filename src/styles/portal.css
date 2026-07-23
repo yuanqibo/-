@@ -5179,15 +5179,22 @@ button.asset-code-rule-field-name {
   transform-origin: center top !important;
 }
 
-.portal-downward-select-popper > .el-popper__arrow {
+.portal-upward-select-popper.el-popper {
+  transform-origin: center bottom !important;
+}
+
+.portal-downward-select-popper > .el-popper__arrow,
+.portal-upward-select-popper > .el-popper__arrow {
   display: none;
 }
 
-.portal-downward-select-popper .el-select-dropdown__wrap {
+.portal-downward-select-popper .el-select-dropdown__wrap,
+.portal-upward-select-popper .el-select-dropdown__wrap {
   max-height: var(--portal-select-max-height, min(240px, calc(100vh - 32px)));
 }
 
-.portal-downward-select-popper .el-select-dropdown__item {
+.portal-downward-select-popper .el-select-dropdown__item,
+.portal-upward-select-popper .el-select-dropdown__item {
   min-height: 34px;
   height: auto;
   padding-top: 7px;

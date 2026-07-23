@@ -973,7 +973,7 @@ onMounted(() => void load())
         <button class="page-btn" type="button" aria-label="上一页" :disabled="page <= 1" @click="page--">‹</button>
         <template v-for="(item, index) in paginationItems" :key="`${item}-${index}`"><span v-if="item === 'ellipsis'" class="page-ellipsis">…</span><button v-else class="page-btn" :class="{ active: item === page }" type="button" :aria-current="item === page ? 'page' : undefined" @click="page = item">{{ item }}</button></template>
         <button class="page-btn" type="button" aria-label="下一页" :disabled="page >= pageCount" @click="page++">›</button>
-        <el-select v-model="pageSize" class="asset-page-size-select" aria-label="每页条数" placement="top-start" :fallback-placements="['top-start']"><el-option label="20 条/页" :value="20" /><el-option label="50 条/页" :value="50" /></el-select>
+        <el-select v-model="pageSize" class="asset-page-size-select" aria-label="每页条数" placement="top-start" :fallback-placements="['top-start']" popper-class="portal-upward-select-popper"><el-option label="20 条/页" :value="20" /><el-option label="50 条/页" :value="50" /></el-select>
         <span>跳至</span><input v-model.number="jumpPage" aria-label="跳转页码" inputmode="numeric" @keydown.enter="goToJumpPage"><span>页</span>
       </div>
     </template>
@@ -1015,7 +1015,7 @@ onMounted(() => void load())
       </tbody></table></div></div>
     </template>
 
-    <div v-if="mode !== 'list'" class="asset-list-pagination"><span>共 {{ modeRows.length }} 条</span><button class="page-btn" type="button" aria-label="上一页" :disabled="page <= 1" @click="page--">‹</button><template v-for="(item, index) in paginationItems" :key="`${item}-${index}`"><span v-if="item === 'ellipsis'" class="page-ellipsis">…</span><button v-else class="page-btn" :class="{ active: item === page }" type="button" @click="page = item">{{ item }}</button></template><button class="page-btn" type="button" aria-label="下一页" :disabled="page >= pageCount" @click="page++">›</button><el-select v-model="pageSize" class="asset-page-size-select" aria-label="每页条数" placement="top-start" :fallback-placements="['top-start']"><el-option label="20 条/页" :value="20" /><el-option label="50 条/页" :value="50" /></el-select><span>跳至</span><input v-model.number="jumpPage" aria-label="跳转页码" @keydown.enter="goToJumpPage"><span>页</span></div>
+    <div v-if="mode !== 'list'" class="asset-list-pagination"><span>共 {{ modeRows.length }} 条</span><button class="page-btn" type="button" aria-label="上一页" :disabled="page <= 1" @click="page--">‹</button><template v-for="(item, index) in paginationItems" :key="`${item}-${index}`"><span v-if="item === 'ellipsis'" class="page-ellipsis">…</span><button v-else class="page-btn" :class="{ active: item === page }" type="button" @click="page = item">{{ item }}</button></template><button class="page-btn" type="button" aria-label="下一页" :disabled="page >= pageCount" @click="page++">›</button><el-select v-model="pageSize" class="asset-page-size-select" aria-label="每页条数" placement="top-start" :fallback-placements="['top-start']" popper-class="portal-upward-select-popper"><el-option label="20 条/页" :value="20" /><el-option label="50 条/页" :value="50" /></el-select><span>跳至</span><input v-model.number="jumpPage" aria-label="跳转页码" @keydown.enter="goToJumpPage"><span>页</span></div>
 
     <el-drawer v-model="advancedOpen" class="asset-advanced-search-drawer" :size="advancedDrawerSize" :show-close="false" append-to-body>
       <template #header="{ close, titleId, titleClass }">
