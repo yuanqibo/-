@@ -2,3 +2,6 @@ include:
   - project: "ops/cicd"
     ref: master
     file: /templates/Maven.gitlab-ci.yml
+
+variables:
+  JDK_VERSION: "17.0.10"
