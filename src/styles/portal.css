@@ -1540,7 +1540,8 @@ button {
 }
 
 .asset-category-settings-shell {
-  min-height: calc(100vh - 120px);
+  height: calc(100vh - 120px);
+  min-height: 520px;
   grid-template-columns: 250px minmax(0, 1fr);
   gap: 0;
   margin: 0;
@@ -1560,6 +1561,10 @@ button {
 .asset-category-tree-panel {
   padding: 18px 16px;
   border-right: 1px solid #dce4ef;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .asset-category-tree-panel h2 {
@@ -1583,8 +1588,13 @@ button {
 }
 
 .asset-category-tree-list {
-  gap: 8px;
+  flex: 1;
+  min-height: 0;
   margin-top: 20px;
+  padding-right: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   color: #667085;
   font-size: 15px;
 }
@@ -1720,10 +1730,13 @@ button {
 
 @media (max-width: 900px) {
   .asset-category-settings-shell {
+    height: auto;
+    min-height: 0;
     grid-template-columns: 1fr;
   }
 
   .asset-category-tree-panel {
+    max-height: min(52vh, 420px);
     border-right: 0;
     border-bottom: 1px solid #dce4ef;
   }

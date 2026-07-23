@@ -1133,6 +1133,34 @@ test.describe('登录后门户质量回归', () => {
     await expect(page.locator('.system-content .panel')).toContainText('表单管理')
   })
 
+  test('资产分类树默认收起且超出可视区后可独立滚动', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '分类树的桌面滚动区域在桌面项目执行')
+    const categoryTree = Array.from({ length: 32 }, (_, index) => ({
+      id: `cat-${index}`,
+      code: String(index + 1).padStart(2, '0'),
+      name: index === 0 ? 'IT设备' : `分类${index + 1}`,
+      enabled: true,
+      children: index === 0 ? [{ id: 'cat-child', code: '0101', name: '笔记本电脑', enabled: true, children: [] }] : []
+    }))
+    await openApp(page, '/assets/settings/categories', { categoryTree })
+
+    const tree = page.locator('.asset-category-tree-list')
+    await expect(tree.locator('.el-tree-node.is-expanded')).toHaveCount(0)
+    const overflow = await tree.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      overflowY: getComputedStyle(element).overflowY
+    }))
+    expect(overflow.overflowY).toBe('auto')
+    expect(overflow.scrollHeight).toBeGreaterThan(overflow.clientHeight)
+
+    const firstNode = tree.locator('.el-tree-node').first()
+    await firstNode.locator(':scope > .el-tree-node__content .el-tree-node__expand-icon').click()
+    await expect(firstNode).toHaveClass(/is-expanded/)
+    await firstNode.locator(':scope > .el-tree-node__content .el-tree-node__expand-icon').click()
+    await expect(firstNode).not.toHaveClass(/is-expanded/)
+  })
+
   test('盘点与资产设置表单保留迁移前结构和层级逻辑', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '密集设置表单在桌面项目执行')
     const state = await openApp(page, '/assets/stocktake')
