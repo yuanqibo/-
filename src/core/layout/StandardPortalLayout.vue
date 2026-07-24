@@ -93,6 +93,9 @@ const preloadPath = (path: string): Promise<void> => {
   return preload
 }
 const preloadMenuRoute = (item: PortalMenuItem): void => { void preloadPath(routePathForMenu(item)) }
+const primaryTarget = (item: PortalMenuItem): PortalMenuItem =>
+  item.id === 'settings' ? systemMenus.value[0] || item : item
+const preloadPrimaryMenuRoute = (item: PortalMenuItem): void => preloadMenuRoute(primaryTarget(item))
 const scheduleRoutePreload = (): void => {
   if (idlePreloadScheduled) return
   idlePreloadScheduled = true
@@ -128,7 +131,7 @@ const navigate = (item: PortalMenuItem): void => {
 
 const navigatePrimary = (item: PortalMenuItem): void => {
   if (primaryActive(item)) return
-  navigate(item)
+  navigate(primaryTarget(item))
 }
 
 const openApprovalNotifications = (): void => {
@@ -293,7 +296,7 @@ onUnmounted(() => {
             <button class="nav-item" :class="{ active: primaryActive(item) }" type="button"
               :title="item.id === 'requests' ? (isEmployeeTerminal ? '申请' : '审批') : item.title"
               :aria-current="primaryActive(item) ? 'page' : undefined" :disabled="primaryActive(item)"
-              @pointerenter="preloadMenuRoute(item)" @focus="preloadMenuRoute(item)" @click="navigatePrimary(item)">
+              @pointerenter="preloadPrimaryMenuRoute(item)" @focus="preloadPrimaryMenuRoute(item)" @click="navigatePrimary(item)">
               <span class="nav-icon"><PortalNavIcon :kind="item.id" /></span>
               <span class="nav-label">{{ item.id === 'requests' ? (isEmployeeTerminal ? '申请' : '审批') : item.title }}</span>
             </button>

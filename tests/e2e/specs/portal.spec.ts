@@ -132,6 +132,41 @@ test.describe('登录后门户质量回归', () => {
     }
   })
 
+  test('系统主导航直接进入首个系统页面且不经过全屏中转状态', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '主导航切换在桌面项目执行')
+    await openApp(page, '/assets')
+    await page.evaluate(() => {
+      const routeTransitions: string[] = []
+      const pushState = history.pushState.bind(history)
+      const replaceState = history.replaceState.bind(history)
+      const record = (): void => { routeTransitions.push(window.location.pathname) }
+      history.pushState = (...args) => { pushState(...args); record() }
+      history.replaceState = (...args) => { replaceState(...args); record() }
+      const fullScreenStates: string[] = []
+      const observer = new MutationObserver(() => {
+        if (document.querySelector('.standard-route-state')) fullScreenStates.push(window.location.pathname)
+      })
+      observer.observe(document.body, { childList: true, subtree: true })
+      ;(window as typeof window & {
+        __systemNavigationProbe?: { routeTransitions: string[]; fullScreenStates: string[]; observer: MutationObserver }
+      }).__systemNavigationProbe = { routeTransitions, fullScreenStates, observer }
+    })
+
+    await page.getByRole('button', { name: '系统', exact: true }).click()
+    await expect(page).toHaveURL('/system/employees')
+    await expect(page.getByText('员工信息', { exact: true }).first()).toBeVisible()
+    const probe = await page.evaluate(() => {
+      const value = (window as typeof window & {
+        __systemNavigationProbe?: { routeTransitions: string[]; fullScreenStates: string[]; observer: MutationObserver }
+      }).__systemNavigationProbe
+      value?.observer.disconnect()
+      return { routeTransitions: value?.routeTransitions || [], fullScreenStates: value?.fullScreenStates || [] }
+    })
+    expect(probe.routeTransitions).not.toContain('/system')
+    expect(probe.routeTransitions.at(-1)).toBe('/system/employees')
+    expect(probe.fullScreenStates).toEqual([])
+  })
+
   test('成员授权保持在系统目录内且不再使用全屏 iframe', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '成员授权工作区布局在桌面项目执行')
     await openApp(page, '/system/member-authorization')
