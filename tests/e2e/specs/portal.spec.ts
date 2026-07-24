@@ -167,6 +167,36 @@ test.describe('登录后门户质量回归', () => {
     expect(probe.fullScreenStates).toEqual([])
   })
 
+  test('员工信息使用无框列表和紧凑分页', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '员工目录密集表格在桌面项目执行')
+    await openApp(page, '/system/employees')
+    const geometry = await page.locator('.employee-directory-feature').evaluate((element) => {
+      const panel = getComputedStyle(element)
+      const table = element.querySelector('.el-table')
+      const firstCell = element.querySelector('.el-table__cell')
+      const pagination = element.querySelector('.el-pagination')
+      const paginationButton = element.querySelector('.el-pagination .number')
+      return {
+        panelBorder: panel.borderTopWidth,
+        panelRadius: panel.borderTopLeftRadius,
+        borderedTable: table?.classList.contains('el-table--border') || false,
+        cellRightBorder: firstCell ? getComputedStyle(firstCell).borderRightWidth : '',
+        paginationFontSize: pagination ? getComputedStyle(pagination).fontSize : '',
+        paginationButtonHeight: paginationButton?.getBoundingClientRect().height || 0,
+        paginationButtonWidth: paginationButton?.getBoundingClientRect().width || 0
+      }
+    })
+    expect(geometry).toMatchObject({
+      panelBorder: '0px',
+      panelRadius: '0px',
+      borderedTable: false,
+      cellRightBorder: '0px',
+      paginationFontSize: '12px'
+    })
+    expect(geometry.paginationButtonHeight).toBeLessThanOrEqual(24)
+    expect(geometry.paginationButtonWidth).toBeLessThanOrEqual(24)
+  })
+
   test('成员授权保持在系统目录内且不再使用全屏 iframe', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '成员授权工作区布局在桌面项目执行')
     await openApp(page, '/system/member-authorization')

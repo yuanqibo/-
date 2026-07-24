@@ -4675,9 +4675,14 @@ button.asset-code-rule-field-name {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  padding: 16px 18px 10px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: #ffffff;
 }
 
 .employee-directory-feature > .panel-header,
@@ -4720,17 +4725,21 @@ button.asset-code-rule-field-name {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 0;
+  border-radius: 0;
   background: #ffffff;
 }
 
 .employee-directory-table-wrap .el-table {
-  --el-table-border-color: var(--line);
+  --el-table-border-color: #edf0f5;
   --el-table-header-bg-color: #f8fafc;
   --el-table-header-text-color: #475569;
   --el-table-text-color: #111827;
   font-size: 13px;
+}
+
+.employee-directory-table-wrap .el-table::before {
+  display: none;
 }
 
 .employee-directory-message {
@@ -4750,6 +4759,22 @@ button.asset-code-rule-field-name {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+}
+
+.employee-directory-pagination .el-pagination {
+  --el-pagination-font-size: 12px;
+  --el-pagination-button-width: 24px;
+  --el-pagination-button-height: 24px;
+  gap: 2px;
+}
+
+.employee-directory-pagination .el-pagination .btn-prev,
+.employee-directory-pagination .el-pagination .btn-next,
+.employee-directory-pagination .el-pagination .el-pager li {
+  min-width: 24px;
+  height: 24px;
+  margin: 0 1px;
+  font-size: 12px;
 }
 
 @media (max-width: 720px) {

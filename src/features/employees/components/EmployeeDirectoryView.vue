@@ -75,7 +75,6 @@ onMounted(() => void load())
         v-loading="loading"
         :data="employees"
         height="100%"
-        border
         stripe
         empty-text="当前范围内没有员工目录数据"
         row-key="subject"
@@ -109,6 +108,7 @@ onMounted(() => void load())
     <footer v-if="!errorMessage && page.total > 0" class="employee-directory-pagination">
       <el-pagination
         background
+        small
         layout="total, prev, pager, next"
         :current-page="currentPage"
         :page-size="page.size"
