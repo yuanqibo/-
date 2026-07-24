@@ -1213,6 +1213,16 @@ test.describe('登录后门户质量回归', () => {
     await expect(firstNode).toHaveClass(/is-expanded/)
     await firstNode.locator(':scope > .el-tree-node__content .el-tree-node__expand-icon').click()
     await expect(firstNode).not.toHaveClass(/is-expanded/)
+
+    const tableWrap = page.locator('.asset-category-table-wrap')
+    await tableWrap.evaluate((element) => { element.scrollTop = 80 })
+    const headerLayer = await tableWrap.locator('thead th').first().evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { position: style.position, top: style.top, zIndex: Number(style.zIndex), backgroundColor: style.backgroundColor }
+    })
+    expect(headerLayer).toMatchObject({ position: 'sticky', top: '0px' })
+    expect(headerLayer.zIndex).toBeGreaterThanOrEqual(3)
+    expect(headerLayer.backgroundColor).not.toBe('rgba(0, 0, 0, 0)')
   })
 
   test('资产分类编码开关可保存状态并提交真实目录节点', async ({ page, isMobile }) => {

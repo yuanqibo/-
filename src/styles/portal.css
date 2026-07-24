@@ -1301,6 +1301,18 @@ button {
   background: #fbfdff;
 }
 
+.location-settings-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #ffffff;
+}
+
+.location-settings-table thead th:last-child {
+  z-index: 4;
+  background: #fbfdff;
+}
+
 .asset-code-switch {
   width: 52px;
   height: 26px;
