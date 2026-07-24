@@ -46,6 +46,7 @@ class SelfServiceRequestPolicyWebTest {
     @BeforeEach
     void resetData() {
         jdbc.update("DELETE FROM business_snapshot");
+        jdbc.update("DELETE FROM approval_request_record");
         jdbc.update("DELETE FROM asset_operation_record");
         jdbc.update("DELETE FROM asset_record");
         useIdentity(employee());

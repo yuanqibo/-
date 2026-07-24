@@ -66,6 +66,11 @@ public class BusinessDataRepository {
         return changed == 0 ? Optional.empty() : Optional.of(new Snapshot(document, expectedVersion + 1, now));
     }
 
+    public boolean delete(String type, long expectedVersion) {
+        return jdbc.update("DELETE FROM business_snapshot WHERE snapshot_type = ? AND version = ?",
+            type, expectedVersion) == 1;
+    }
+
     private JsonNode read(String value) {
         try {
             return mapper.readTree(value);

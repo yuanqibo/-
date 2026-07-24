@@ -12,8 +12,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import team.acg.access.assets.auth.RequestIdentityService;
 
-import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 
@@ -35,14 +33,10 @@ class BusinessDataSubjectScopeTest {
     @BeforeEach
     void setUp() {
         jdbc.update("DELETE FROM business_snapshot");
-        jdbc.update("INSERT INTO business_snapshot (snapshot_type, document, version, updated_at) VALUES (?, ?, ?, ?)",
-            "requests", """
-                [
-                  {"id":"REQ-OWNED","applicant":"李雷","applicantSubject":"user-1"},
-                  {"id":"REQ-LEGACY-NAME","applicant":"李雷"},
-                  {"id":"REQ-OTHER","applicant":"韩梅梅","applicantSubject":"user-2"}
-                ]
-                """, 1L, Timestamp.from(Instant.now()));
+        jdbc.update("DELETE FROM approval_request_record");
+        insertRequest("REQ-OWNED", "李雷", "user-1");
+        insertRequest("REQ-LEGACY-NAME", "李雷", "");
+        insertRequest("REQ-OTHER", "韩梅梅", "user-2");
         var identity = new RequestIdentityService.Identity(
             "李雷", "lilei", "user-1", "directory-user-1", "tenant-1", "销售部", Set.of("dept-sales"),
             "employee", Set.of("asset:request:view"));
@@ -55,5 +49,15 @@ class BusinessDataSubjectScopeTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.values.requests.length()").value(1))
             .andExpect(jsonPath("$.values.requests[0].id").value("REQ-OWNED"));
+    }
+
+    private void insertRequest(String id, String applicant, String subject) {
+        var now = java.sql.Timestamp.from(java.time.Instant.now());
+        String document = "{\"id\":\"" + id + "\",\"applicant\":\"" + applicant
+            + "\",\"applicantSubject\":\"" + subject + "\"}";
+        jdbc.update("INSERT INTO approval_request_record (request_id, request_type, request_status, "
+                + "applicant_subject, applicant_directory_subject, approval_no, biz_no, document, version, "
+                + "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            id, "资产领用", "审批中", subject, "", "", id, document, 1L, now, now);
     }
 }

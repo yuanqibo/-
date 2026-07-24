@@ -2,13 +2,12 @@ package team.acg.access.assets.approval;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import team.acg.access.assets.business.BusinessDataRepository;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -16,10 +15,10 @@ import java.util.Set;
 public class ApprovalRequestStateService {
     private static final Set<String> OPEN_STATUSES = Set.of("审批中", "待审批", "待执行");
     private static final Set<String> TERMINAL_STATUSES = Set.of("已完成", "已同意", "已拒绝", "已驳回", "已取消");
-    private final BusinessDataRepository repository;
+    private final ApprovalRequestRepository repository;
     private final ApprovedAssetRequestExecutor executor;
 
-    public ApprovalRequestStateService(BusinessDataRepository repository, ApprovedAssetRequestExecutor executor) {
+    public ApprovalRequestStateService(ApprovalRequestRepository repository, ApprovedAssetRequestExecutor executor) {
         this.repository = repository;
         this.executor = executor;
     }
@@ -27,9 +26,8 @@ public class ApprovalRequestStateService {
     @Transactional
     public JsonNode decideLocally(String requestId, String decision, ApprovedAssetRequestExecutor.Operator operator,
                                   String reason) {
-        BusinessDataRepository.Snapshot snapshot = lockedRequests();
-        ArrayNode items = copyItems(snapshot);
-        ObjectNode target = findById(items, requestId);
+        ApprovalRequestRepository.RequestRecord record = lockedRequest(requestId);
+        ObjectNode target = record.document().deepCopy();
         requireOpen(target);
         if ("approve".equals(decision)) {
             if (executor.supports(target.path("type").asText())) {
@@ -47,21 +45,20 @@ public class ApprovalRequestStateService {
         }
         target.put("currentNode", "待执行".equals(target.path("status").asText()) ? "普通管理员执行" : "已归档");
         recordDecision(target, operator, reason);
-        return save(items, snapshot.version());
+        return save(record, target);
     }
 
     @Transactional
     public JsonNode markExternalDecisionSubmitted(String requestId, String decision,
                                                   ApprovedAssetRequestExecutor.Operator operator, String reason) {
-        BusinessDataRepository.Snapshot snapshot = lockedRequests();
-        ArrayNode items = copyItems(snapshot);
-        ObjectNode target = findById(items, requestId);
+        ApprovalRequestRepository.RequestRecord record = lockedRequest(requestId);
+        ObjectNode target = record.document().deepCopy();
         requireOpen(target);
         target.put("decisionSubmitted", decision);
         target.put("decisionSubmittedAt", Instant.now().toString());
         target.put("currentNode", "等待审批平台同步");
         recordDecision(target, operator, reason);
-        return save(items, snapshot.version());
+        return save(record, target);
     }
 
     @Transactional
@@ -75,9 +72,10 @@ public class ApprovalRequestStateService {
         String remoteStatus = remoteStatus(detail);
         if (remoteStatus.isEmpty()) throw new IllegalArgumentException("ECP approval detail has no process status");
 
-        BusinessDataRepository.Snapshot snapshot = lockedRequests();
-        ArrayNode items = copyItems(snapshot);
-        ObjectNode target = findByApproval(items, approvalNo, bizNo);
+        ApprovalRequestRepository.RequestRecord record = repository.findByApprovalForUpdate(approvalNo, bizNo)
+            .orElseThrow(() -> new IllegalArgumentException(
+                "Business request was not found for ECP approval " + approvalNo));
+        ObjectNode target = record.document().deepCopy();
         String localStatus = target.path("status").asText();
         target.put("approvalNo", approvalNo.isEmpty() ? target.path("approvalNo").asText() : approvalNo);
         target.put("bizNo", bizNo.isEmpty() ? target.path("bizNo").asText() : bizNo);
@@ -87,7 +85,7 @@ public class ApprovalRequestStateService {
 
         if (TERMINAL_STATUSES.contains(localStatus) && !matchesRemoteFinalState(localStatus, remoteStatus)) {
             target.put("approvalSyncError", "Local final state conflicts with ECP status " + remoteStatus);
-            return save(items, snapshot.version());
+            return save(record, target);
         }
         target.remove("approvalSyncError");
         switch (remoteStatus) {
@@ -119,54 +117,23 @@ public class ApprovalRequestStateService {
             }
             default -> throw new IllegalArgumentException("Unsupported ECP approval status: " + remoteStatus);
         }
-        return save(items, snapshot.version());
+        return save(record, target);
     }
 
     public List<String> pendingApprovalNos(int limit) {
-        if (limit <= 0) return List.of();
-        JsonNode document = repository.find("requests").map(BusinessDataRepository.Snapshot::document).orElse(null);
-        if (document == null || !document.isArray()) return List.of();
-        List<String> result = new ArrayList<>();
-        for (JsonNode item : document) {
-            if (result.size() >= limit) break;
-            String approvalNo = text(item.path("approvalNo").asText());
-            if (!approvalNo.isEmpty() && OPEN_STATUSES.contains(item.path("status").asText())) result.add(approvalNo);
-        }
-        return List.copyOf(result);
+        return repository.pendingApprovalNos(limit);
     }
 
-    private BusinessDataRepository.Snapshot lockedRequests() {
-        return repository.findForUpdate("requests")
-            .orElseThrow(() -> new IllegalArgumentException("Business request data was not found"));
+    private ApprovalRequestRepository.RequestRecord lockedRequest(String requestId) {
+        return repository.findForUpdate(requestId)
+            .orElseThrow(() -> new IllegalArgumentException("Business item not found: " + requestId));
     }
 
-    private ArrayNode copyItems(BusinessDataRepository.Snapshot snapshot) {
-        if (!snapshot.document().isArray()) throw new IllegalStateException("Business request snapshot is invalid");
-        return (ArrayNode) snapshot.document().deepCopy();
-    }
-
-    private JsonNode save(ArrayNode items, long version) {
-        return repository.update("requests", items, version)
-            .orElseThrow(() -> new IllegalStateException("Business request changed while it was locked"))
-            .document();
-    }
-
-    private ObjectNode findById(ArrayNode items, String id) {
-        for (JsonNode item : items) {
-            if (item.isObject() && id.equals(item.path("id").asText())) return (ObjectNode) item;
-        }
-        throw new IllegalArgumentException("Business item not found: " + id);
-    }
-
-    private ObjectNode findByApproval(ArrayNode items, String approvalNo, String bizNo) {
-        for (JsonNode item : items) {
-            if (!item.isObject()) continue;
-            if (!approvalNo.isEmpty() && approvalNo.equals(item.path("approvalNo").asText())) return (ObjectNode) item;
-            if (!bizNo.isEmpty() && (bizNo.equals(item.path("bizNo").asText()) || bizNo.equals(item.path("id").asText()))) {
-                return (ObjectNode) item;
-            }
-        }
-        throw new IllegalArgumentException("Business request was not found for ECP approval " + approvalNo);
+    private JsonNode save(ApprovalRequestRepository.RequestRecord record, ObjectNode target) {
+        repository.update(record, target);
+        ArrayNode items = JsonNodeFactory.instance.arrayNode();
+        repository.findAll().forEach(items::add);
+        return items;
     }
 
     private void requireOpen(ObjectNode item) {

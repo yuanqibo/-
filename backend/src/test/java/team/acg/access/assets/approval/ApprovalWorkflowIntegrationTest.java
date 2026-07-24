@@ -1,7 +1,6 @@
 package team.acg.access.assets.approval;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,7 +10,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import team.acg.access.assets.business.BusinessDataRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
@@ -26,7 +24,7 @@ import static org.mockito.Mockito.when;
 class ApprovalWorkflowIntegrationTest {
     @Autowired ApprovalRequestStateService state;
     @Autowired ApprovalCallbackRepository callbacks;
-    @Autowired BusinessDataRepository businessData;
+    @Autowired ApprovalRequestRepository approvalRequests;
     @Autowired ObjectMapper mapper;
     @Autowired JdbcTemplate jdbc;
     @MockitoBean ApprovedAssetRequestExecutor executor;
@@ -35,7 +33,7 @@ class ApprovalWorkflowIntegrationTest {
     void resetState() {
         reset(executor);
         org.springframework.test.jdbc.JdbcTestUtils.deleteFromTables(
-            jdbc, "approval_callback_event", "business_snapshot");
+            jdbc, "approval_callback_event", "approval_request_record", "business_snapshot");
     }
 
     @Test
@@ -95,16 +93,11 @@ class ApprovalWorkflowIntegrationTest {
         item.put("approvalNo", approvalNo);
         item.put("type", type);
         item.put("status", "审批中");
-        ArrayNode items = mapper.createArrayNode().add(item);
-        businessData.create("requests", items);
+        approvalRequests.create(item);
     }
 
     private JsonNodeView request(String id) {
-        var document = businessData.find("requests").orElseThrow().document();
-        for (var item : document) {
-            if (id.equals(item.path("id").asText())) return new JsonNodeView(item);
-        }
-        throw new AssertionError("Request not found: " + id);
+        return new JsonNodeView(approvalRequests.find(id).orElseThrow());
     }
 
     private record JsonNodeView(com.fasterxml.jackson.databind.JsonNode value) {

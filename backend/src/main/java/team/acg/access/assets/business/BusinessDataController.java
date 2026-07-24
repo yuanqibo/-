@@ -9,6 +9,7 @@ import com.idanchuang.ecp.sdk.spring.annotation.RequireAnyPermission;
 import com.idanchuang.ecp.sdk.spring.annotation.RequirePermission;
 import jakarta.servlet.http.HttpServletRequest;
 import team.acg.access.assets.approval.ApprovalIntegrationService;
+import team.acg.access.assets.approval.ApprovalRequestRepository;
 import team.acg.access.assets.approval.ApprovalRequestStateService;
 import team.acg.access.assets.approval.ApprovedAssetRequestExecutor;
 import team.acg.access.assets.auth.RequestIdentityService;
@@ -50,6 +51,7 @@ public class BusinessDataController {
         "资产退还", "returnLocation",
         "资产交接", "handoverLocation");
     private final BusinessDataRepository repository;
+    private final ApprovalRequestRepository approvalRequests;
     private final ObjectMapper mapper;
     private final RequestIdentityService identityService;
     private final SelfServiceRequestPolicy selfServiceRequestPolicy;
@@ -59,7 +61,8 @@ public class BusinessDataController {
     private final ApprovedAssetRequestExecutor requestExecutor;
     private final PortalReferenceCatalog referenceCatalog;
 
-    public BusinessDataController(BusinessDataRepository repository, ObjectMapper mapper,
+    public BusinessDataController(BusinessDataRepository repository, ApprovalRequestRepository approvalRequests,
+                                  ObjectMapper mapper,
                                   RequestIdentityService identityService,
                                   SelfServiceRequestPolicy selfServiceRequestPolicy,
                                   AssetService assetService,
@@ -68,6 +71,7 @@ public class BusinessDataController {
                                   ApprovedAssetRequestExecutor requestExecutor,
                                   PortalReferenceCatalog referenceCatalog) {
         this.repository = repository;
+        this.approvalRequests = approvalRequests;
         this.mapper = mapper;
         this.identityService = identityService;
         this.selfServiceRequestPolicy = selfServiceRequestPolicy;
@@ -101,25 +105,24 @@ public class BusinessDataController {
             versions.put(type, 0L);
         });
         repository.findAll().forEach((type, snapshot) -> {
-            if (visibleTypes.contains(type)) {
+            if (visibleTypes.contains(type) && !"requests".equals(type)) {
                 JsonNode document = snapshot.document();
-                if (identity.isPresent() && "requests".equals(type)
-                    && !identity.get().manager()
-                    && !"auditor".equals(identity.get().roleCode())) {
-                    if (!document.isArray()) return;
-                    ArrayNode scoped = mapper.createArrayNode();
-                    document.forEach(item -> {
-                        String applicantSubject = item.path("applicantSubject").asText();
-                        boolean sameSubject = !identity.get().subject().isBlank()
-                            && identity.get().subject().equals(applicantSubject);
-                        if (sameSubject) scoped.add(item);
-                    });
-                    document = scoped;
-                }
                 values.put(type, document);
                 versions.put(type, snapshot.version());
             }
         });
+        if (visibleTypes.contains("requests")) {
+            ArrayNode requests = mapper.createArrayNode();
+            approvalRequests.findAll().forEach(item -> {
+                boolean scopedEmployee = identity.isPresent() && !identity.get().manager()
+                    && !"auditor".equals(identity.get().roleCode());
+                boolean sameSubject = identity.isPresent() && !identity.get().subject().isBlank()
+                    && identity.get().subject().equals(item.path("applicantSubject").asText());
+                if (!scopedEmployee || sameSubject) requests.add(item);
+            });
+            values.put("requests", requests);
+            versions.put("requests", approvalRequests.revision());
+        }
         return Map.of("values", values, "versions", versions);
     }
 
@@ -195,27 +198,12 @@ public class BusinessDataController {
             item.put("approvalCreatedAt", started.createdAt());
         }
 
-        for (int attempt = 0; attempt < 3; attempt++) {
-            BusinessDataRepository.Snapshot current = repository.find("requests").orElse(null);
-            ArrayNode items = current == null || !current.document().isArray()
-                ? mapper.createArrayNode() : (ArrayNode) current.document().deepCopy();
-            if (items.size() >= MAX_BUSINESS_ITEMS) {
-                throw new IllegalStateException("Business request storage has reached its item limit");
-            }
-            items.insert(0, item);
-            validateSnapshot("requests", items);
-            if (current == null) {
-                try {
-                    BusinessDataRepository.Snapshot created = repository.create("requests", items);
-                    return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("item", item, "version", created.version()));
-                } catch (DuplicateKeyException ignored) {
-                    continue;
-                }
-            }
-            var updated = repository.update("requests", items, current.version());
-            if (updated.isPresent()) return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("item", item, "version", updated.get().version()));
+        if (approvalRequests.count() >= MAX_BUSINESS_ITEMS) {
+            throw new IllegalStateException("Business request storage has reached its item limit");
         }
-        return conflict("requests");
+        validateSnapshot("requests", mapper.createArrayNode().add(item));
+        ApprovalRequestRepository.RequestRecord created = approvalRequests.create(item);
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("item", item, "version", created.version()));
     }
 
     @PostMapping("/requests/{id}/decision")
@@ -230,10 +218,8 @@ public class BusinessDataController {
             currentIdentity == null ? "" : currentIdentity.account(),
             currentIdentity == null ? "" : currentIdentity.directorySubject(),
             currentIdentity == null ? "" : currentIdentity.subject());
-        JsonNode document = repository.find("requests").map(BusinessDataRepository.Snapshot::document)
+        ObjectNode target = approvalRequests.find(id)
             .orElseThrow(() -> new IllegalArgumentException("Business item not found: " + id));
-        if (!document.isArray()) throw new IllegalStateException("Business request snapshot is invalid");
-        ObjectNode target = findRequest((ArrayNode) document, id);
         if (approvalIntegration.enabled() && !target.path("approvalNo").asText("").isBlank()) {
             if (currentIdentity == null) throw new IllegalStateException("ECP identity is required to decide an approval");
             if (!Set.of("审批中", "待审批", "待执行").contains(target.path("status").asText())) {
@@ -246,13 +232,6 @@ public class BusinessDataController {
         }
         return ResponseEntity.ok(Map.of("items",
             approvalState.decideLocally(id, command.decision(), actor, command.reason())));
-    }
-
-    private ObjectNode findRequest(ArrayNode items, String id) {
-        for (JsonNode item : items) {
-            if (item.isObject() && id.equals(item.path("id").asText())) return (ObjectNode) item;
-        }
-        throw new IllegalArgumentException("Business item not found: " + id);
     }
 
     @PostMapping("/stocktakes")
