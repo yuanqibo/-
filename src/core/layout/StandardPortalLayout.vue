@@ -174,12 +174,12 @@ const switchTerminal = (mode: PortalTerminalMode): void => {
 }
 const reload = (): void => window.location.reload()
 const avatarText = computed(() => String(user.value?.name || user.value?.account || '用').trim().slice(0, 1))
-const documentTitle = computed(() => route.meta.title as string || props.pageTitle || '资产云管家')
+const documentTitle = computed(() => route.meta.title as string || props.pageTitle || '资产管理平台')
 const syncActiveLayout = (): void => {
   document.body.classList.remove('auth-view', 'has-secondary-nav', 'self-service-view')
   document.body.classList.add('standard-vue-route')
   document.body.classList.toggle('employee-terminal-view', ready.value && isEmployeeTerminal.value)
-  document.title = `资产云管家 - ${documentTitle.value}`
+  document.title = `资产管理平台 - ${documentTitle.value}`
   void restoreSubnavScroll()
 }
 
@@ -246,7 +246,7 @@ onDeactivated(() => {
   document.body.classList.remove('standard-vue-route', 'employee-terminal-view')
 })
 
-watch(documentTitle, (title) => { if (layoutActive.value) document.title = `资产云管家 - ${title}` })
+watch(documentTitle, (title) => { if (layoutActive.value) document.title = `资产管理平台 - ${title}` })
 watch([ready, isEmployeeTerminal], ([sessionReady, employee]) => {
   if (layoutActive.value) document.body.classList.toggle('employee-terminal-view', sessionReady && employee)
 })
