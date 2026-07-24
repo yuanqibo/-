@@ -7,7 +7,7 @@ services:
       MYSQL_DATABASE: "${MYSQL_DATABASE:-asset_portal}"
       MYSQL_USER: "${DATABASE_USER:-asset_portal}"
       MYSQL_PASSWORD: "${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}"
-      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}}"
       TZ: Asia/Shanghai
     command:
       - --character-set-server=utf8mb4
