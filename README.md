@@ -104,7 +104,7 @@ GET /actuator/health
 docker compose up -d --build
 ```
 
-Compose 使用根目录的 `dist` 可执行 JAR 构建应用镜像，不会在服务器重复执行前端和 Maven 编译。它会创建 MySQL 8 数据库 `asset_portal`，数据保存在 `mysql-data` 卷中；Java 服务会在首次启动时自动创建业务表。生产部署必须在 `.env` 中提供数据库、ECP 和系统配置加密密钥。Compose 默认通过 `mysql` 服务名连接数据库；仅在使用外部数据库时设置 `COMPOSE_DATABASE_URL`。
+Compose 使用根目录的 `dist` 可执行 JAR 构建应用镜像，不会在服务器重复执行前端和 Maven 编译。服务器版 Compose 使用 host 网络连接 `DATABASE_URL` 指向的现有 MySQL，避免创建空数据库或迁移数据卷；Java 服务会在首次启动时自动创建缺失的业务表。生产部署必须在 `.env` 中提供数据库、ECP 和系统配置加密密钥。
 
 ## 目录
 
