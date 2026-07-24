@@ -28,7 +28,7 @@ COPY backend/src ./backend/src
 COPY --from=frontend-build /build/frontend-dist ./frontend-dist
 RUN mvn -B -f backend/pom.xml package
 
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre-jammy
 WORKDIR /opt/asset-portal
 ENV HOST=0.0.0.0 PORT=5387 ECP_SDK_ENABLED=true
 COPY --from=backend-build /build/backend/target/access-assets-server-1.0.0.jar ./app.jar
