@@ -1,13 +1,13 @@
 services:
   mysql:
-    image: mysql:8.4
+    image: "${MYSQL_IMAGE:-mysql:8.4}"
     container_name: asset-portal-mysql
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: "${MYSQL_DATABASE:-asset_portal}"
       MYSQL_USER: "${DATABASE_USER:-asset_portal}"
-      MYSQL_PASSWORD: "${DATABASE_PASSWORD:-asset_portal_change_me}"
-      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-asset_portal_root_change_me}"
+      MYSQL_PASSWORD: "${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}"
       TZ: Asia/Shanghai
     command:
       - --character-set-server=utf8mb4
@@ -25,14 +25,11 @@ services:
 
   asset-portal:
     container_name: asset-portal
-    image: asset-platform:latest
+    image: "${ASSET_PORTAL_IMAGE:-asset-platform:latest}"
     build:
       context: .
-      dockerfile: Dockerfile.build
-      args:
-        VITE_ECP_APP_CODE: "${VITE_ECP_APP_CODE:-WLY5YG}"
-        VITE_ECP_API_BASE_URL: "${VITE_ECP_API_BASE_URL:-/api/v1}"
-        VITE_ECP_AUTH_CONFIG_SOURCE_MODE: "${VITE_ECP_AUTH_CONFIG_SOURCE_MODE:-remote-first}"
+      dockerfile: Dockerfile
+    init: true
     restart: unless-stopped
     ports:
       - "${ASSET_PORTAL_PORT:-5387}:5387"
@@ -40,14 +37,14 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 5387
-      DATABASE_URL: "${DATABASE_URL:-jdbc:mysql://mysql:3306/asset_portal?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}"
+      DATABASE_URL: "${COMPOSE_DATABASE_URL:-jdbc:mysql://mysql:3306/asset_portal?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}"
       DATABASE_USER: "${DATABASE_USER:-asset_portal}"
-      DATABASE_PASSWORD: "${DATABASE_PASSWORD:-asset_portal_change_me}"
+      DATABASE_PASSWORD: "${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}"
       PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://localhost:5387}"
       ECP_API_BASE_URL: "${ECP_API_BASE_URL:-https://access.acg.team/api/v1}"
       ECP_SDK_ENABLED: "${ECP_SDK_ENABLED:-true}"
       ECP_SDK_BASE_URL: "${ECP_SDK_BASE_URL:-https://access.acg.team/api/v1}"
-      ECP_APP_SECRET: "${ECP_APP_SECRET:-}"
+      ECP_APP_SECRET: "${ECP_APP_SECRET:?ECP_APP_SECRET is required}"
       APPROVAL_INTEGRATION_ENABLED: "${APPROVAL_INTEGRATION_ENABLED:-false}"
       APPROVAL_TEMPLATE_CODE: "${APPROVAL_TEMPLATE_CODE:-}"
       APPROVAL_MAIN_TABLE_CODE: "${APPROVAL_MAIN_TABLE_CODE:-MAIN}"
@@ -55,14 +52,13 @@ services:
       ECP_SDK_PERMISSION_ENABLED: "${ECP_SDK_PERMISSION_ENABLED:-false}"
       ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET: "${ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET:-}"
       ECP_TENANT_ID: "${ECP_TENANT_ID:-}"
-      ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY: "${ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY:-}"
+      ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY: "${ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY:?ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY is required}"
       ALLOW_UNAUTHENTICATED_TEST_MODE: "false"
     depends_on:
       mysql:
         condition: service_healthy
     healthcheck:
-      test: >
-        wget -qO- http://127.0.0.1:5387/actuator/health >/dev/null || exit 1
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5387/actuator/health >/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
