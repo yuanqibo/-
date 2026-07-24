@@ -12,11 +12,9 @@ export default defineConfig({
           // The ECP workspace web component is a prebundled, lazy-only artifact.
           // Keep it outside the eager SDK chunk so normal portal routes never download it.
           if (id.includes('/@acg/ecp-auth-vue/dist/workspace/element.js')) return undefined
-          if (id.includes('/@acg/ecp-auth-vue/')) return 'ecp-auth-vue'
-          if (id.includes('/@acg/ecp-auth/')) return 'ecp-auth'
-          if (id.includes('/@acg/ecp-core/')) return 'ecp-core'
-          if (id.includes('/@acg/ecp-ui/')) return 'ecp-ui'
-          if (id.includes('/@acg/ecp-sdk/')) return 'ecp-sdk'
+          // ECP packages have cross-package imports; keeping them together avoids
+          // circular chunk initialization failures in production builds.
+          if (['ecp-auth-vue', 'ecp-auth', 'ecp-core', 'ecp-ui', 'ecp-sdk'].some((dependency) => id.includes(`/@acg/${dependency}/`))) return 'ecp'
           if (['jszip', 'lie', 'pako', 'readable-stream', 'setimmediate', 'core-util-is', 'inherits', 'safe-buffer', 'string_decoder', 'util-deprecate'].some((dependency) => id.includes(`/node_modules/${dependency}/`))) return 'asset-workbook'
           if (id.includes('/element-plus/') || id.includes('/@element-plus/')) return 'element-plus'
           if (id.includes('/vue/') || id.includes('/vue-router/')) return 'vue-runtime'
