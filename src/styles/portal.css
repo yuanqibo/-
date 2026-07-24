@@ -4762,19 +4762,25 @@ button.asset-code-rule-field-name {
 }
 
 .employee-directory-pagination .el-pagination {
-  --el-pagination-font-size: 12px;
-  --el-pagination-button-width: 24px;
-  --el-pagination-button-height: 24px;
+  --el-pagination-font-size: 13px;
+  --el-pagination-button-width: 28px;
+  --el-pagination-button-height: 28px;
   gap: 2px;
 }
 
 .employee-directory-pagination .el-pagination .btn-prev,
 .employee-directory-pagination .el-pagination .btn-next,
 .employee-directory-pagination .el-pagination .el-pager li {
-  min-width: 24px;
-  height: 24px;
+  min-width: 28px;
+  height: 28px;
   margin: 0 1px;
-  font-size: 12px;
+  font-size: 13px;
+}
+
+.employee-directory-pagination-total {
+  margin-right: 8px;
+  color: #64748b;
+  font-size: 13px;
 }
 
 @media (max-width: 720px) {

@@ -109,13 +109,15 @@ onMounted(() => void load())
       <el-pagination
         background
         small
-        layout="total, prev, pager, next"
+        layout="slot, prev, pager, next"
         :current-page="currentPage"
         :page-size="page.size"
         :total="page.total"
         :disabled="loading"
         @current-change="goToPage"
-      />
+      >
+        <span class="employee-directory-pagination-total">共 {{ page.total }} 条</span>
+      </el-pagination>
     </footer>
   </section>
 </template>

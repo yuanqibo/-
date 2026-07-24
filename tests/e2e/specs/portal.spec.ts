@@ -186,15 +186,17 @@ test.describe('登录后门户质量回归', () => {
         paginationButtonWidth: paginationButton?.getBoundingClientRect().width || 0
       }
     })
+    await expect(page.locator('.employee-directory-pagination-total')).toHaveText('共 60 条')
+    await expect(page.locator('.employee-directory-pagination')).not.toContainText('Total')
     expect(geometry).toMatchObject({
       panelBorder: '0px',
       panelRadius: '0px',
       borderedTable: false,
       cellRightBorder: '0px',
-      paginationFontSize: '12px'
+      paginationFontSize: '13px'
     })
-    expect(geometry.paginationButtonHeight).toBeLessThanOrEqual(24)
-    expect(geometry.paginationButtonWidth).toBeLessThanOrEqual(24)
+    expect(geometry.paginationButtonHeight).toBe(28)
+    expect(geometry.paginationButtonWidth).toBe(28)
   })
 
   test('成员授权保持在系统目录内且不再使用全屏 iframe', async ({ page, isMobile }) => {
