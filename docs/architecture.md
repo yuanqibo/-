@@ -11,7 +11,7 @@ Vite 只负责前端开发和构建。业务规则、权限校验和持久化必
 
 Node.js 与 npm 版本由 `.nvmrc`、`.node-version`、`package.json`、根目录 `pom.xml` 和 `Dockerfile.build` 共同约束。修改版本时必须一次性同步这些文件，禁止不同构建入口使用不同运行时。
 
-根目录 `pom.xml` 同时是 Maven 父工程和聚合工程。标准发布构建必须按“Vite 生成 `dist` → Spring Boot 复制静态资源 → JAR 打包”的顺序执行，禁止让后端打包依赖工作区里上一次残留的 `dist`。
+根目录 `pom.xml` 同时是 Maven 父工程和聚合工程。标准发布构建必须按“Vite 生成 `frontend-dist` → Spring Boot 复制静态资源 → JAR 打包 → 复制为根目录 `dist` 文件”的顺序执行，禁止让后端打包依赖工作区里上一次残留的前端产物。
 
 ## 前端分层
 

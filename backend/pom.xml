@@ -53,7 +53,7 @@
         <directory>src/main/resources</directory>
       </resource>
       <resource>
-        <directory>${project.basedir}/../dist</directory>
+        <directory>${project.basedir}/../frontend-dist</directory>
         <targetPath>static</targetPath>
         <filtering>false</filtering>
       </resource>
@@ -62,6 +62,24 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>stage-devops-artifact</id>
+            <phase>package</phase>
+            <configuration>
+              <target>
+                <copy file="${project.build.directory}/${project.build.finalName}.jar"
+                      tofile="${project.basedir}/../dist" overwrite="true"/>
+              </target>
+            </configuration>
+            <goals>
+              <goal>run</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

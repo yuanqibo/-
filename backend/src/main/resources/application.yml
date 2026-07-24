@@ -21,7 +21,7 @@ spring:
       maximum-pool-size: ${DATABASE_POOL_SIZE:10}
   web:
     resources:
-      static-locations: classpath:/static/,file:./dist/
+      static-locations: classpath:/static/,file:./frontend-dist/
       cache:
         cachecontrol:
           no-store: true

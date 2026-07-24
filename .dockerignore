@@ -5,11 +5,12 @@
 !.env.example
 .DS_Store
 node_modules
-dist
+frontend-dist
 data
 target
 backend/target/*
 !backend/target/access-assets-server-1.0.0.jar
+!dist
 *.log
 *.pid
 codex-clipboard-*.png

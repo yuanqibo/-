@@ -11,13 +11,13 @@
 
 公司 ECP 前端与 Java SDK 制品保存在 `vendor/`，构建时不依赖浏览器登录态或外部 Nexus 凭据。
 
-仓库根目录的 `pom.xml` 用于公司 GitLab Maven 发布模板，并在 Maven `package` 阶段生成前端 `dist/` 与 `backend/target/access-assets-server-1.0.0.jar`。后端工程位于 `backend/pom.xml`，生产 Dockerfile 使用公司 Java 17 运行镜像加载该 jar。
+仓库根目录的 `pom.xml` 用于公司 GitLab Maven 发布模板。Maven 在 `package` 阶段生成前端 `frontend-dist/`，将其打入 Spring Boot JAR，并把最终可执行 JAR 复制为仓库根目录的 `dist` 文件，以兼容公司发布平台的默认目标文件。后端工程位于 `backend/pom.xml`，生产 Dockerfile 使用公司 Java 17 运行镜像加载该文件。
 
 GitLab 项目变量需要与公司 Maven 模板匹配：
 
 ```text
 JDK_VERSION=17.0.10
-ARTIFACT_PATH=backend/target/access-assets-server-1.0.0.jar
+ARTIFACT_PATH=dist
 ```
 
 如果 Runner 仍固定为 JDK 8，Spring Boot 3 / Java 17 后端无法在 Maven 阶段编译。
