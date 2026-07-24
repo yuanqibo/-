@@ -1304,28 +1304,31 @@ button {
 .asset-code-switch {
   width: 52px;
   height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
+  display: inline-block;
+  position: relative;
   border-radius: 999px;
-  padding: 0 4px 0 12px;
-  color: #ffffff;
-  font-size: 13px;
   background: #1296db;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
 }
 
 .asset-code-switch i {
   width: 20px;
   height: 20px;
+  position: absolute;
+  top: 3px;
+  left: 28px;
   border-radius: 50%;
   background: #ffffff;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
+  transition: transform 0.2s ease;
 }
 
 .asset-code-switch.off {
-  flex-direction: row-reverse;
-  padding: 0 12px 0 4px;
   background: #c7cbd1;
+}
+
+.asset-code-switch.off i {
+  transform: translateX(-24px);
 }
 
 .asset-code-switch-button {
@@ -1334,6 +1337,24 @@ button {
   background: transparent;
   cursor: pointer;
   font: inherit;
+}
+
+.asset-code-switch-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+.asset-code-switch-button:disabled {
+  cursor: not-allowed;
+}
+
+.asset-code-switch-button:disabled .asset-code-switch {
+  opacity: 0.55;
+}
+
+.asset-code-switch.saving {
+  opacity: 0.65;
 }
 
 .location-form {

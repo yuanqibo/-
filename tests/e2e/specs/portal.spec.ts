@@ -1215,6 +1215,22 @@ test.describe('登录后门户质量回归', () => {
     await expect(firstNode).not.toHaveClass(/is-expanded/)
   })
 
+  test('资产分类编码开关可保存状态并提交真实目录节点', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '资产分类设置在桌面项目执行')
+    const state = await openApp(page, '/assets/settings/categories')
+    const toggle = page.getByRole('button', { name: '关闭IT设备分类编码', exact: true })
+
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    await toggle.click()
+    const disabledToggle = page.getByRole('button', { name: '开启IT设备分类编码', exact: true })
+    await expect(disabledToggle).toHaveAttribute('aria-pressed', 'false')
+    await expect(disabledToggle.locator('.asset-code-switch')).toHaveClass(/off/)
+    await expect(page.getByText('已关闭“IT设备”的资产编码', { exact: true })).toBeVisible()
+
+    const request = [...state.requests].reverse().find((item) => item.method === 'PUT' && item.path === '/api/config/catalog/categories')
+    expect(request?.body).toMatchObject({ value: [{ id: 'cat-it', name: 'IT设备', enabled: false }] })
+  })
+
   test('盘点与资产设置表单保留迁移前结构和层级逻辑', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '密集设置表单在桌面项目执行')
     const state = await openApp(page, '/assets/stocktake')

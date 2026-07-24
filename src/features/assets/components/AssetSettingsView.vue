@@ -25,6 +25,7 @@ const templateDialog = ref(false)
 const templateForm = reactive({ key: '', name: '' })
 const catalogQuery = ref('')
 const labelLogoInput = ref<HTMLInputElement>()
+const togglingNodeIds = ref<Set<string>>(new Set())
 
 const kind = computed<'locations' | 'categories' | 'code-rules' | 'labels'>(() => {
   if (route.path.endsWith('/locations')) return 'locations'
@@ -291,11 +292,24 @@ const removeNode = async (node: CatalogNode): Promise<void> => {
   catch (error) { catalog.value = previous; ElMessage.error(error instanceof Error ? error.message : '删除失败') }
 }
 const toggleNode = async (node: CatalogNode): Promise<void> => {
-  if (!canCatalog('toggleCode')) return
-  const previous = node.enabled
-  node.enabled = node.enabled === false
-  try { await saveCatalogValue(kind.value as 'categories' | 'locations', clone(catalog.value)) }
-  catch (error) { node.enabled = previous; ElMessage.error(error instanceof Error ? error.message : '状态更新失败') }
+  if (!canCatalog('toggleCode') || togglingNodeIds.value.has(node.id)) return
+  const target = findNode(catalog.value, node.id)
+  if (!target) { ElMessage.error('未找到对应配置，请刷新页面后重试'); return }
+  const previous = target.enabled
+  const enabled = target.enabled === false
+  target.enabled = enabled
+  togglingNodeIds.value = new Set(togglingNodeIds.value).add(node.id)
+  try {
+    await saveCatalogValue(kind.value as 'categories' | 'locations', clone(catalog.value))
+    ElMessage.success(`已${enabled ? '开启' : '关闭'}“${target.name}”的资产编码`)
+  } catch (error) {
+    target.enabled = previous
+    ElMessage.error(error instanceof Error ? error.message : '状态更新失败')
+  } finally {
+    const next = new Set(togglingNodeIds.value)
+    next.delete(node.id)
+    togglingNodeIds.value = next
+  }
 }
 
 const triggerDownload = async (blob: Blob, name: string): Promise<void> => {
@@ -394,7 +408,7 @@ onMounted(async () => { await load(); syncFromStore() })
     <section v-else-if="kind === 'locations' || kind === 'categories'" v-loading="catalogBusy" class="location-settings-shell" :class="{ 'asset-category-settings-shell': kind === 'categories' }">
       <aside class="location-settings-tree-panel" :class="{ 'asset-category-tree-panel': kind === 'categories' }"><h2>{{ kind === 'locations' ? '位置' : '分类' }}</h2><label class="location-search"><input v-model="catalogQuery" type="search" :placeholder="kind === 'locations' ? '模糊查询' : '模糊搜索'"><span aria-hidden="true">⌕</span></label><div class="location-tree-list" :class="{ 'asset-category-tree-list': kind === 'categories' }"><el-tree :data="catalog" node-key="id" :default-expand-all="kind === 'locations'" highlight-current :expand-on-click-node="false" @current-change="selectedNode = $event"><template #default="{ data }"><span>{{ data.name }}</span></template></el-tree></div></aside>
       <article class="location-settings-table-panel" :class="{ 'asset-category-table-panel': kind === 'categories' }"><div class="location-settings-toolbar" :class="{ 'asset-category-toolbar': kind === 'categories' }"><div class="asset-list-actions"><button v-if="canCatalog('create')" class="table-action primary" type="button" @click="openCatalogDialog()">＋ 新增{{ kind === 'locations' ? '位置' : '分类' }}</button><el-dropdown v-if="canCatalog('template') || canCatalog('import') || canCatalog('export')" placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">导入/导出<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item v-if="canCatalog('template')" @click="downloadCatalogTemplate">下载模板</el-dropdown-item><el-dropdown-item v-if="canCatalog('import')"><label><input type="file" accept=".xlsx" hidden @change="importCatalog">导入{{ kind === 'locations' ? '位置' : '分类' }}</label></el-dropdown-item><el-dropdown-item v-if="canCatalog('export')" @click="exportCatalog">导出{{ kind === 'locations' ? '位置' : '分类' }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div></div>
-        <div class="location-table-wrap" :class="{ 'asset-category-table-wrap': kind === 'categories' }"><table v-resizable-columns="`assets:settings:${kind}`" class="location-settings-table" :class="{ 'asset-category-settings-table': kind === 'categories' }"><thead><tr v-if="kind === 'locations'"><th>位置名称</th><th>位置编码</th><th>上级位置</th><th>资产编码开关</th><th>操作</th></tr><tr v-else><th>分类编码</th><th>分类名称</th><th>上级分类</th><th>使用期限</th><th>计量单位</th><th>资产编码开关 ⓘ</th><th>操作</th></tr></thead><tbody><tr v-for="row in catalogRows" :key="row.id"><template v-if="kind === 'locations'"><td>{{ row.name }}</td><td>{{ row.code || '-' }}</td><td>{{ row.parentName }}</td><td><button class="asset-code-switch-button" type="button" @click="toggleNode(row)"><span class="asset-code-switch" :class="{ on: row.enabled !== false }"><i></i></span></button></td><td><button class="link" type="button" @click="openCatalogDialog(row)">编辑</button><span class="action-separator">|</span><button class="link" type="button" @click="removeNode(row)">删除</button></td></template><template v-else><td>{{ row.code || '-' }}</td><td>{{ row.name }}</td><td>{{ row.parentName }}</td><td>{{ row.usefulLife || '0' }}</td><td>{{ row.unit || '台' }}</td><td><button class="asset-code-switch-button" type="button" @click="toggleNode(row)"><span class="asset-code-switch" :class="{ on: row.enabled !== false }"><i></i></span></button></td><td><button class="link" type="button" @click="openCatalogDialog(row)">编辑</button><span class="action-separator">|</span><button class="link" type="button" @click="removeNode(row)">删除</button></td></template></tr><tr v-if="!catalogRows.length"><td :colspan="kind === 'locations' ? 5 : 7" class="empty-cell">暂无匹配{{ kind === 'locations' ? '位置' : '分类' }}</td></tr></tbody></table></div>
+        <div class="location-table-wrap" :class="{ 'asset-category-table-wrap': kind === 'categories' }"><table v-resizable-columns="`assets:settings:${kind}`" class="location-settings-table" :class="{ 'asset-category-settings-table': kind === 'categories' }"><thead><tr v-if="kind === 'locations'"><th>位置名称</th><th>位置编码</th><th>上级位置</th><th>资产编码开关</th><th>操作</th></tr><tr v-else><th>分类编码</th><th>分类名称</th><th>上级分类</th><th>使用期限</th><th>计量单位</th><th>资产编码开关 ⓘ</th><th>操作</th></tr></thead><tbody><tr v-for="row in catalogRows" :key="row.id"><template v-if="kind === 'locations'"><td>{{ row.name }}</td><td>{{ row.code || '-' }}</td><td>{{ row.parentName }}</td><td><button class="asset-code-switch-button" type="button" :disabled="!canCatalog('toggleCode') || togglingNodeIds.has(row.id)" :aria-label="`${row.enabled === false ? '开启' : '关闭'}${row.name}位置编码`" :aria-pressed="row.enabled !== false" :aria-busy="togglingNodeIds.has(row.id)" :title="canCatalog('toggleCode') ? `${row.enabled === false ? '开启' : '关闭'}${row.name}位置编码` : '无切换位置编码权限'" @click="toggleNode(row)"><span class="asset-code-switch" :class="{ off: row.enabled === false, saving: togglingNodeIds.has(row.id) }"><i></i></span></button></td><td><button class="link" type="button" @click="openCatalogDialog(row)">编辑</button><span class="action-separator">|</span><button class="link" type="button" @click="removeNode(row)">删除</button></td></template><template v-else><td>{{ row.code || '-' }}</td><td>{{ row.name }}</td><td>{{ row.parentName }}</td><td>{{ row.usefulLife || '0' }}</td><td>{{ row.unit || '台' }}</td><td><button class="asset-code-switch-button" type="button" :disabled="!canCatalog('toggleCode') || togglingNodeIds.has(row.id)" :aria-label="`${row.enabled === false ? '开启' : '关闭'}${row.name}分类编码`" :aria-pressed="row.enabled !== false" :aria-busy="togglingNodeIds.has(row.id)" :title="canCatalog('toggleCode') ? `${row.enabled === false ? '开启' : '关闭'}${row.name}分类编码` : '无切换分类编码权限'" @click="toggleNode(row)"><span class="asset-code-switch" :class="{ off: row.enabled === false, saving: togglingNodeIds.has(row.id) }"><i></i></span></button></td><td><button class="link" type="button" @click="openCatalogDialog(row)">编辑</button><span class="action-separator">|</span><button class="link" type="button" @click="removeNode(row)">删除</button></td></template></tr><tr v-if="!catalogRows.length"><td :colspan="kind === 'locations' ? 5 : 7" class="empty-cell">暂无匹配{{ kind === 'locations' ? '位置' : '分类' }}</td></tr></tbody></table></div>
       </article>
     </section>
 

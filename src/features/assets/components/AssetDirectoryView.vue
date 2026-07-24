@@ -5,9 +5,10 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type TableI
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { searchDirectoryPeople } from '../api/assets.api'
+import { flattenManagedCatalog, type ManagedCatalogOption } from '../composables/managedCatalog'
 import { parseAssetWorkbook, type AssetImportMode } from '../composables/parseAssetWorkbook'
 import { useAssets } from '../composables/useAssets'
-import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, AssetRecord, CatalogNode, DirectoryPerson } from '../types/assets'
+import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, AssetRecord, DirectoryPerson } from '../types/assets'
 import AssetLabelPrintPreview from './AssetLabelPrintPreview.vue'
 import AssetOrderPrintPreview, { type AssetOrderPrintKind } from './AssetOrderPrintPreview.vue'
 
@@ -54,7 +55,7 @@ type EditForm = {
   rent?: number
   note: string
 }
-type ManagedOption = { value: string; label: string; unit?: string; usefulLife?: string }
+type ManagedOption = ManagedCatalogOption
 
 const props = withDefaults(defineProps<{ mode?: Mode }>(), { mode: 'list' })
 const router = useRouter()
@@ -174,23 +175,15 @@ const toggleListColumn = (key: ListColumnKey, checked: boolean): void => {
 const resetListSettings = (): void => { listVisibleColumns.value = [...listColumnKeys]; listDensity.value = 'compact' }
 
 const categories = computed(() => Array.from(new Set(assets.value.map((item) => item.category).filter(Boolean))).sort())
-const flattenCatalog = (nodes: CatalogNode[], parentPath: string[] = [], leafOnly = false): ManagedOption[] => nodes.flatMap((node) => {
-  if (node.enabled === false) return []
-  const path = [...parentPath, node.name]
-  const enabledChildren = (node.children || []).filter((child) => child.enabled !== false)
-  const children = flattenCatalog(enabledChildren, path, leafOnly)
-  if (leafOnly && enabledChildren.length) return children
-  return [{ value: leafOnly ? node.name : path.join(' / '), label: path.join(' / '), unit: node.unit, usefulLife: node.usefulLife }, ...children]
-})
 const managedCategories = computed<ManagedOption[]>(() => {
-  const configured = flattenCatalog(store.value.assetCategoryTree || [], [], true)
+  const configured = flattenManagedCatalog(store.value.assetCategoryTree || [], [], true)
   const values = configured.length ? configured : categories.value.map((value) => ({ value, label: value }))
   const selected = [String(createDraft.category || ''), String(editForm.category || '')].filter(Boolean)
   selected.forEach((value) => { if (!values.some((item) => item.value === value)) values.push({ value, label: value }) })
   return values
 })
 const managedLocations = computed<ManagedOption[]>(() => {
-  const configured = flattenCatalog(store.value.assetLocationTree || [])
+  const configured = flattenManagedCatalog(store.value.assetLocationTree || [])
   const fallback = Array.from(new Set(assets.value.map((item) => item.location).filter(Boolean))).sort().map((value) => ({ value, label: value }))
   const values = configured.length ? configured : fallback
   const selected = [String(createDraft.location || ''), editForm.location, actionForm.location].filter(Boolean)
