@@ -855,6 +855,37 @@ test.describe('登录后门户质量回归', () => {
     expect(createRequest?.body).toMatchObject({ item: { name: '新测试设备', category: 'IT设备', type: 'IT设备', brand: '测试品牌', condition: '正常', location: '杭州仓库', purchaseMethod: '采购' } })
   })
 
+  test('新增资产的分类和位置树默认收起并可按需展开', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '表单业务流在桌面项目执行')
+    await openApp(page, '/assets/inbound', {
+      categoryTree: [{ id: 'cat-it', code: '01', name: 'IT设备', enabled: true, children: [{ id: 'cat-laptop', code: '0101', name: '笔记本电脑', enabled: true, unit: '台', usefulLife: '36', children: [] }] }],
+      locationTree: [{ id: 'loc-hz', code: 'HZ', name: '杭州公司', enabled: true, children: [{ id: 'loc-store', code: 'STORE', name: '封存仓库', enabled: true, children: [] }] }]
+    })
+    await page.getByRole('button', { name: /^新增/ }).click()
+    await page.getByRole('menuitem', { name: '新增资产', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '新增资产' })
+
+    const categoryField = dialog.locator('.el-form-item').filter({ hasText: '资产分类' })
+    await categoryField.locator('.el-select').click()
+    let tree = page.locator('.el-select-dropdown:visible .el-tree').last()
+    await expect(tree.getByText('IT设备', { exact: true })).toBeVisible()
+    await expect(tree.getByText('笔记本电脑', { exact: true })).not.toBeVisible()
+    await tree.locator('.el-tree-node__content').filter({ hasText: 'IT设备' }).first().locator('.el-tree-node__expand-icon').click()
+    await expect(tree.getByText('笔记本电脑', { exact: true })).toBeVisible()
+    await tree.getByText('笔记本电脑', { exact: true }).click()
+    await expect(categoryField.locator('.el-select__selected-item').last()).toContainText('笔记本电脑')
+
+    const locationField = dialog.locator('.el-form-item').filter({ hasText: '所在位置' })
+    await locationField.locator('.el-select').click()
+    tree = page.locator('.el-select-dropdown:visible .el-tree').last()
+    await expect(tree.getByText('杭州公司', { exact: true })).toBeVisible()
+    await expect(tree.getByText('封存仓库', { exact: true })).not.toBeVisible()
+    await tree.locator('.el-tree-node__content').filter({ hasText: '杭州公司' }).first().locator('.el-tree-node__expand-icon').click()
+    await expect(tree.getByText('封存仓库', { exact: true })).toBeVisible()
+    await tree.getByText('封存仓库', { exact: true }).click()
+    await expect(locationField.locator('.el-select__selected-item').last()).toContainText('封存仓库')
+  })
+
   test('资产编辑、批量修改和导入保留迁移前结构', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '密集表单在桌面项目执行')
     await openApp(page, '/assets')

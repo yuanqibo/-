@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type TableI
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { searchDirectoryPeople } from '../api/assets.api'
-import { flattenManagedCatalog, type ManagedCatalogOption } from '../composables/managedCatalog'
+import { buildManagedCatalogTree, flattenManagedCatalog, type ManagedCatalogOption, type ManagedCatalogTreeOption } from '../composables/managedCatalog'
 import { parseAssetWorkbook, type AssetImportMode } from '../composables/parseAssetWorkbook'
 import { useAssets } from '../composables/useAssets'
 import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, AssetRecord, DirectoryPerson } from '../types/assets'
@@ -189,6 +189,26 @@ const managedLocations = computed<ManagedOption[]>(() => {
   const selected = [String(createDraft.location || ''), editForm.location, actionForm.location].filter(Boolean)
   selected.forEach((value) => { if (!values.some((item) => item.value === value)) values.push({ value, label: value }) })
   return values
+})
+const treeContainsValue = (nodes: ManagedCatalogTreeOption[], value: string): boolean => nodes.some((node) => (
+  node.value === value || treeContainsValue(node.children || [], value)
+))
+const includeSelectedTreeValues = (nodes: ManagedCatalogTreeOption[], values: string[]): ManagedCatalogTreeOption[] => {
+  const result = [...nodes]
+  values.filter(Boolean).forEach((value) => {
+    if (!treeContainsValue(result, value)) result.push({ value, label: value })
+  })
+  return result
+}
+const managedCategoryTree = computed<ManagedCatalogTreeOption[]>(() => {
+  const configured = buildManagedCatalogTree(store.value.assetCategoryTree || [], [], true)
+  const fallback = categories.value.map((value) => ({ value, label: value }))
+  return includeSelectedTreeValues(configured.length ? configured : fallback, [String(createDraft.category || ''), String(editForm.category || '')])
+})
+const managedLocationTree = computed<ManagedCatalogTreeOption[]>(() => {
+  const configured = buildManagedCatalogTree(store.value.assetLocationTree || [])
+  const fallback = Array.from(new Set(assets.value.map((item) => item.location).filter(Boolean))).sort().map((value) => ({ value, label: value }))
+  return includeSelectedTreeValues(configured.length ? configured : fallback, [String(createDraft.location || ''), editForm.location])
 })
 const formCompanies = computed(() => Array.from(new Set([
   user.value?.company,
@@ -1174,13 +1194,13 @@ onMounted(() => void load())
           <div class="asset-form-grid">
             <el-form-item class="field" label="资产编码"><el-input v-model="createDraft.id" placeholder="未填写按自动编码规则生成" /></el-form-item>
             <el-form-item class="field" label="资产名称" prop="name"><el-input v-model="createDraft.name" placeholder="请输入" /></el-form-item>
-            <el-form-item class="field" label="资产分类" prop="category"><el-select v-model="createDraft.category" filterable placement="bottom-start" placeholder="资产分类" @change="applyCategoryDefaults($event, createDraft)"><el-option v-for="item in managedCategories" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+            <el-form-item class="field" label="资产分类" prop="category"><el-tree-select v-model="createDraft.category" :data="managedCategoryTree" node-key="value" filterable :default-expand-all="false" placement="bottom-start" placeholder="资产分类" @change="applyCategoryDefaults($event, createDraft)" /></el-form-item>
             <el-form-item class="field" label="管理员" prop="custodian"><el-select v-model="createDraft.custodian" filterable allow-create placement="bottom-start" placeholder="管理员"><el-option v-for="item in formAdministrators" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item class="field" label="品牌" prop="brand"><el-input v-model="createDraft.brand" placeholder="请输入" /></el-form-item>
             <el-form-item class="field" label="型号"><el-input v-model="createDraft.model" placeholder="请输入" /></el-form-item>
             <el-form-item class="field" label="所属/承租公司" prop="ownerCompany"><el-select v-model="createDraft.ownerCompany" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item class="field" label="资产状况" prop="condition"><el-select v-model="createDraft.condition" placement="bottom-start" placeholder="请选择"><el-option v-for="item in assetConditions" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-            <el-form-item class="field" label="所在位置" prop="location"><el-select v-model="createDraft.location" filterable placement="bottom-start" placeholder="所在位置"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+            <el-form-item class="field" label="所在位置" prop="location"><el-tree-select v-model="createDraft.location" :data="managedLocationTree" node-key="value" filterable check-strictly :default-expand-all="false" placement="bottom-start" placeholder="所在位置" /></el-form-item>
             <el-form-item class="field" label="使用期限"><el-input v-model="createDraft.usageMonths" type="number" min="0" placeholder="请输入"><template #append>月</template></el-input></el-form-item>
             <el-form-item class="field" label="金额"><div class="asset-unit-control"><el-input-number v-model="createDraft.price" :min="0" :precision="2" controls-position="right" placeholder="请输入" /><span class="asset-unit-control__suffix">元</span></div></el-form-item>
             <el-form-item class="field" label="购置/起租日期" prop="purchaseDate"><el-date-picker v-model="createDraft.purchaseDate" value-format="YYYY-MM-DD" /></el-form-item>
@@ -1212,13 +1232,13 @@ onMounted(() => void load())
             <div class="asset-form-grid">
               <el-form-item class="field" label="资产编码"><el-input :model-value="editSource?.id" readonly /></el-form-item>
               <el-form-item class="field" label="资产名称" required><el-input v-model="editForm.name" placeholder="请输入" /></el-form-item>
-              <el-form-item class="field" label="资产分类" required><el-select v-model="editForm.category" filterable placement="bottom-start" @change="applyCategoryDefaults($event, editForm)"><el-option v-for="item in managedCategories" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+              <el-form-item class="field" label="资产分类" required><el-tree-select v-model="editForm.category" :data="managedCategoryTree" node-key="value" filterable :default-expand-all="false" placement="bottom-start" @change="applyCategoryDefaults($event, editForm)" /></el-form-item>
               <el-form-item class="field" label="管理员" required><el-select v-model="editForm.custodian" filterable allow-create placement="bottom-start"><el-option v-for="item in formAdministrators" :key="item" :label="item" :value="item" /></el-select></el-form-item>
               <el-form-item class="field" label="品牌" required><el-input v-model="editForm.brand" placeholder="请输入" /></el-form-item>
               <el-form-item class="field" label="型号"><el-input v-model="editForm.model" placeholder="请输入" /></el-form-item>
               <el-form-item class="field" label="所属/承租公司" required><el-select v-model="editForm.ownerCompany" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
               <el-form-item class="field" label="资产状况"><el-input v-model="editForm.condition" readonly /></el-form-item>
-              <el-form-item class="field" label="所在位置" required><el-select v-model="editForm.location" filterable placement="bottom-start"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+              <el-form-item class="field" label="所在位置" required><el-tree-select v-model="editForm.location" :data="managedLocationTree" node-key="value" filterable check-strictly :default-expand-all="false" placement="bottom-start" /></el-form-item>
               <el-form-item class="field" label="使用期限"><el-input v-model="editForm.usageMonths" type="number" min="0" placeholder="请输入"><template #append>月</template></el-input></el-form-item>
               <el-form-item class="field" label="金额"><div class="asset-unit-control"><el-input-number v-model="editForm.price" :min="0" :precision="2" controls-position="right" /><span class="asset-unit-control__suffix">元</span></div></el-form-item>
               <el-form-item class="field" label="购置/起租日期" required><el-date-picker v-model="editForm.purchaseDate" value-format="YYYY-MM-DD" /></el-form-item>

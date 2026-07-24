@@ -3,6 +3,7 @@ import type { Page, Request } from '@playwright/test'
 export type ApiMockOptions = {
   assets?: Array<Record<string, unknown>>
   categoryTree?: Array<Record<string, unknown>>
+  locationTree?: Array<Record<string, unknown>>
   failAssets?: boolean
   handoverApprovalRequired?: boolean
   borrowApprovalRequired?: boolean
@@ -86,6 +87,7 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
   const currentStoreValues = {
     ...storeValues,
     assetCategoryTree: options.categoryTree || storeValues.assetCategoryTree,
+    assetLocationTree: options.locationTree || storeValues.assetLocationTree,
     assetPortalSelfServiceSettingsV9: {
       ...storeValues.assetPortalSelfServiceSettingsV9,
       receiveAsset: {

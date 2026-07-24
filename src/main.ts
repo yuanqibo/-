@@ -41,7 +41,8 @@ import {
   ElTimeline,
   ElTimelineItem,
   ElTooltip,
-  ElTree
+  ElTree,
+  ElTreeSelect
 } from 'element-plus'
 import 'element-plus/dist/index.css'
 import './styles/app.css'
@@ -107,7 +108,7 @@ const elementComponents = [
   ElDatePicker, ElDescriptions, ElDescriptionsItem, ElDialog, ElDrawer, ElDropdown, ElDropdownItem,
   ElDropdownMenu, ElEmpty, ElForm, ElFormItem, ElIcon, ElInput, ElInputNumber, ElOption, ElPagination,
   ElPopover, ElProgress, ElRadio, ElRadioButton, ElRadioGroup, ElResult, ElSelect, ElSkeleton, ElSwitch, ElTabPane, ElTable, ElTableColumn,
-  ElTabs, ElTag, ElTimeline, ElTimelineItem, ElTooltip, ElTree
+  ElTabs, ElTag, ElTimeline, ElTimelineItem, ElTooltip, ElTree, ElTreeSelect
 ]
 
 const bootstrap = async (): Promise<void> => {

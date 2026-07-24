@@ -7,6 +7,10 @@ export type ManagedCatalogOption = {
   usefulLife?: string
 }
 
+export type ManagedCatalogTreeOption = ManagedCatalogOption & {
+  children?: ManagedCatalogTreeOption[]
+}
+
 export const flattenManagedCatalog = (
   nodes: CatalogNode[],
   parentPath: string[] = [],
@@ -21,4 +25,20 @@ export const flattenManagedCatalog = (
     unit: node.unit,
     usefulLife: node.usefulLife
   }, ...children]
+})
+
+export const buildManagedCatalogTree = (
+  nodes: CatalogNode[],
+  parentPath: string[] = [],
+  leafOnly = false
+): ManagedCatalogTreeOption[] => nodes.map((node) => {
+  const path = [...parentPath, node.name]
+  const children = buildManagedCatalogTree(node.children || [], path, leafOnly)
+  return {
+    value: leafOnly ? node.name : path.join(' / '),
+    label: node.name,
+    unit: node.unit,
+    usefulLife: node.usefulLife,
+    ...(children.length ? { children } : {})
+  }
 })
