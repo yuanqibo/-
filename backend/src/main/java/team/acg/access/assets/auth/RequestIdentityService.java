@@ -1,27 +1,31 @@
 package team.acg.access.assets.auth;
 
+import com.idanchuang.ecp.sdk.spring.session.SessionTokenResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import team.acg.access.assets.ecp.EcpSecurityPolicy;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Collection;
 import java.util.stream.Collectors;
 
 @Service
 public class RequestIdentityService {
     private static final String ATTRIBUTE = RequestIdentityService.class.getName() + ".identity";
     private final ObjectProvider<EcpIdentityService> identityService;
+    private final ObjectProvider<SessionTokenResolver> sessionTokenResolver;
     private final EcpSecurityPolicy securityPolicy;
 
-    public RequestIdentityService(ObjectProvider<EcpIdentityService> identityService, EcpSecurityPolicy securityPolicy) {
+    public RequestIdentityService(ObjectProvider<EcpIdentityService> identityService,
+                                  ObjectProvider<SessionTokenResolver> sessionTokenResolver,
+                                  EcpSecurityPolicy securityPolicy) {
         this.identityService = identityService;
+        this.sessionTokenResolver = sessionTokenResolver;
         this.securityPolicy = securityPolicy;
     }
 
@@ -35,12 +39,14 @@ public class RequestIdentityService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "ECP server authorization is unavailable");
         }
 
-        String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
+        SessionTokenResolver resolver = sessionTokenResolver.getIfAvailable();
+        if (resolver == null) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "ECP session token resolver is unavailable");
+        }
+        String token = resolver.resolveSessionToken(request);
+        if (token == null || token.isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ECP bearer token is required");
         }
-        String token = authorization.substring(7).trim();
-        if (token.isBlank()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ECP bearer token is required");
 
         try {
             Identity identity = Identity.from(service.resolve(token));
@@ -79,9 +85,26 @@ public class RequestIdentityService {
         });
     }
 
+    public void requireAnyPermission(HttpServletRequest request, Collection<String> required) {
+        Set<String> permissions = required == null ? Set.of() : required.stream()
+            .map(RequestIdentityService::text).filter(value -> !value.isBlank())
+            .collect(Collectors.toUnmodifiableSet());
+        if (permissions.isEmpty()) throw new IllegalArgumentException("At least one permission is required");
+        current(request).ifPresent(identity -> {
+            if (!identity.hasAnyPermission(permissions)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "One of ECP permissions is required: " + String.join(", ", permissions));
+            }
+        });
+    }
+
     private String required(String value) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException("User identity is required");
         return value.trim();
+    }
+
+    private static String text(Object value) {
+        return value == null ? "" : value.toString().trim();
     }
 
     public record Identity(String name, String account, String subject, String directorySubject, String tenantId, String department,

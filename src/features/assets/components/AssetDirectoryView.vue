@@ -9,6 +9,7 @@ import { buildManagedCatalogTree, flattenManagedCatalog, type ManagedCatalogOpti
 import { parseAssetWorkbook, type AssetImportMode } from '../composables/parseAssetWorkbook'
 import { useAssets } from '../composables/useAssets'
 import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, AssetRecord, DirectoryPerson } from '../types/assets'
+import { hasPortalPermission } from '../../../authz/permission-aliases'
 import AssetLabelPrintPreview from './AssetLabelPrintPreview.vue'
 import AssetOrderPrintPreview, { type AssetOrderPrintKind } from './AssetOrderPrintPreview.vue'
 
@@ -111,7 +112,8 @@ const viewClass = computed(() => {
 })
 const permissions = computed(() => new Set(user.value?.permissionCodes || []))
 const employeeTerminalPermissions = new Set(['asset:item:view', 'asset:item:advancedSearch', 'asset:item:columnSettings'])
-const can = (code: string): boolean => permissions.value.has(code) && (!isEmployeeTerminal.value || employeeTerminalPermissions.has(code))
+const can = (code: string): boolean => hasPortalPermission(permissions.value, code)
+  && (!isEmployeeTerminal.value || employeeTerminalPermissions.has(code))
 const canCreateRequest = computed(() => permissions.value.has('asset:request:create'))
 const openEmployeeRequest = (): void => { void router.push('/requests') }
 

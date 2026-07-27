@@ -1,13 +1,16 @@
 package team.acg.access.assets.auth;
 
+import com.idanchuang.ecp.sdk.spring.session.DefaultSessionTokenResolver;
+import com.idanchuang.ecp.sdk.spring.session.SessionTokenResolver;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.server.ResponseStatusException;
+import team.acg.access.assets.ecp.EcpSecurityPolicy;
 
 import java.util.List;
 import java.util.Map;
-import team.acg.access.assets.ecp.EcpSecurityPolicy;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -27,11 +30,11 @@ class RequestIdentityServiceTest {
             "name", "李雷", "account", "lilei", "department", "销售部", "roleCode", "employee",
             "tenantId", "tenant-1",
             "subject", "account-1", "directorySubject", "user-1",
-            "permissionCodes", List.of("asset:item:view")));
+            "permissionCodes", List.of("asset:item:view", "asset:item:receive")));
         EcpSecurityPolicy policy = mock(EcpSecurityPolicy.class);
         when(policy.tenantId()).thenReturn("tenant-1");
         when(policy.tenantRestrictionEnabled()).thenReturn(true);
-        RequestIdentityService service = new RequestIdentityService(provider, policy);
+        RequestIdentityService service = service(provider, policy);
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer valid-token");
 
@@ -42,6 +45,7 @@ class RequestIdentityServiceTest {
         assertThatThrownBy(() -> service.requirePermission(request, "asset:item:delete"))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("403 FORBIDDEN");
+        service.requireAnyPermission(request, Set.of("asset:item:receive", "asset:receive_return:receive"));
     }
 
     @Test
@@ -55,7 +59,7 @@ class RequestIdentityServiceTest {
         EcpSecurityPolicy policy = mock(EcpSecurityPolicy.class);
         when(policy.tenantId()).thenReturn("tenant-1");
         when(policy.tenantRestrictionEnabled()).thenReturn(true);
-        RequestIdentityService service = new RequestIdentityService(provider, policy);
+        RequestIdentityService service = service(provider, policy);
         MockHttpServletRequest request = requestWithToken("missing-tenant");
 
         assertThatThrownBy(() -> service.current(request))
@@ -80,7 +84,7 @@ class RequestIdentityServiceTest {
         EcpSecurityPolicy policy = mock(EcpSecurityPolicy.class);
         when(policy.tenantId()).thenReturn("tenant-1");
         when(policy.tenantRestrictionEnabled()).thenReturn(true);
-        RequestIdentityService service = new RequestIdentityService(provider, policy);
+        RequestIdentityService service = service(provider, policy);
         MockHttpServletRequest request = requestWithToken("other-tenant");
 
         assertThatThrownBy(() -> service.current(request))
@@ -104,7 +108,7 @@ class RequestIdentityServiceTest {
             "permissionCodes", List.of("asset:item:view")));
         EcpSecurityPolicy policy = mock(EcpSecurityPolicy.class);
         when(policy.tenantRestrictionEnabled()).thenReturn(false);
-        RequestIdentityService service = new RequestIdentityService(provider, policy);
+        RequestIdentityService service = service(provider, policy);
 
         assertThat(service.current(requestWithToken("valid-token")).orElseThrow().tenantId()).isEqualTo("tenant-2");
     }
@@ -114,7 +118,7 @@ class RequestIdentityServiceTest {
     void requiresBearerTokenWhenEcpIsEnabled() {
         ObjectProvider<EcpIdentityService> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(mock(EcpIdentityService.class));
-        RequestIdentityService service = new RequestIdentityService(provider, mock(EcpSecurityPolicy.class));
+        RequestIdentityService service = service(provider, mock(EcpSecurityPolicy.class));
 
         assertThatThrownBy(() -> service.current(new MockHttpServletRequest()))
             .isInstanceOf(ResponseStatusException.class)
@@ -129,16 +133,48 @@ class RequestIdentityServiceTest {
         when(provider.getIfAvailable()).thenReturn(null);
         when(policy.testBypassEnabled()).thenReturn(false);
 
-        RequestIdentityService service = new RequestIdentityService(provider, policy);
+        RequestIdentityService service = service(provider, policy);
 
         assertThatThrownBy(() -> service.current(new MockHttpServletRequest()))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("503 SERVICE_UNAVAILABLE");
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void resolvesTheSessionTokenThroughTheEcpSdkResolver() {
+        ObjectProvider<EcpIdentityService> identityProvider = mock(ObjectProvider.class);
+        EcpIdentityService ecp = mock(EcpIdentityService.class);
+        when(identityProvider.getIfAvailable()).thenReturn(ecp);
+        when(ecp.resolve("sdk-session-token")).thenReturn(Map.of(
+            "name", "李雷", "account", "lilei", "tenantId", "tenant-1",
+            "subject", "account-1", "directorySubject", "user-1",
+            "permissionCodes", List.of("asset:item:view")));
+        ObjectProvider<SessionTokenResolver> tokenProvider = mock(ObjectProvider.class);
+        SessionTokenResolver resolver = mock(SessionTokenResolver.class);
+        when(tokenProvider.getIfAvailable()).thenReturn(resolver);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        when(resolver.resolveSessionToken(request)).thenReturn("sdk-session-token");
+
+        RequestIdentityService service = new RequestIdentityService(
+            identityProvider, tokenProvider, mock(EcpSecurityPolicy.class));
+
+        assertThat(service.current(request).orElseThrow().account()).isEqualTo("lilei");
+        verify(resolver).resolveSessionToken(request);
+        verify(ecp).resolve("sdk-session-token");
+    }
+
     private MockHttpServletRequest requestWithToken(String token) {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer " + token);
         return request;
+    }
+
+    @SuppressWarnings("unchecked")
+    private RequestIdentityService service(ObjectProvider<EcpIdentityService> identityProvider,
+                                           EcpSecurityPolicy policy) {
+        ObjectProvider<SessionTokenResolver> tokenProvider = mock(ObjectProvider.class);
+        when(tokenProvider.getIfAvailable()).thenReturn(new DefaultSessionTokenResolver());
+        return new RequestIdentityService(identityProvider, tokenProvider, policy);
     }
 }

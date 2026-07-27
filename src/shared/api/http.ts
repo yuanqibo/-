@@ -1,4 +1,4 @@
-import { getPortalSessionToken } from '../../core/auth/portal-context'
+import { getAuthzSessionToken, handleAuthzUnauthorized } from '@acg/ecp-auth'
 
 type ApiErrorPayload = {
   error?: string
@@ -35,7 +35,7 @@ const responseMessage = (payload: unknown, status: number): string => {
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const method = String(options.method || 'GET').toUpperCase()
-  const token = getPortalSessionToken()
+  const token = String(getAuthzSessionToken() ?? '').trim()
   const headers = new Headers(options.headers)
   if (token) headers.set('authorization', `Bearer ${token}`)
   if (options.body !== undefined) headers.set('content-type', 'application/json; charset=utf-8')
@@ -51,6 +51,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     ? null
     : await response.json().catch(() => null)
 
+  if (response.status === 401) handleAuthzUnauthorized()
   if (!response.ok) {
     throw new ApiError(response.status, responseMessage(payload, response.status), payload)
   }

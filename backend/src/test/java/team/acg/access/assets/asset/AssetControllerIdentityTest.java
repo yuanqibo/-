@@ -40,7 +40,7 @@ class AssetControllerIdentityTest {
         controller.command("handover-sign",
             new AssetController.AssetCommandRequest(List.of("A-1"), fields), request);
 
-        verify(identities).requirePermission(request, "asset:receive_return:sign");
+        verify(identities).requireAnyPermission(request, Set.of("asset:receive_return:sign"));
     }
 
     @Test
@@ -59,9 +59,8 @@ class AssetControllerIdentityTest {
         controller.command("receive-import",
             new AssetController.AssetCommandRequest(List.of("A-1"), fields), request);
 
-        verify(identities).requirePermission(request, "asset:item:updateImport");
-        verify(identities).requirePermission(request, "asset:item:receiveImport");
-        verify(identities, never()).requirePermission(request, "asset:item:update");
-        verify(identities, never()).requirePermission(request, "asset:receive_return:receive");
+        verify(identities).requireAnyPermission(request, Set.of("asset:item:updateImport"));
+        verify(identities).requireAnyPermission(request, Set.of("asset:item:receiveImport"));
+        verify(identities, never()).requirePermission(any(), any());
     }
 }

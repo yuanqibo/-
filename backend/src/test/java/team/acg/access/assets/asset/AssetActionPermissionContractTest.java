@@ -8,19 +8,27 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AssetActionPermissionContractTest {
     @Test
     void mapsLifecycleActionsToTheirBusinessPermissionDomains() {
-        assertThat(AssetActionPermissionContract.requiredPermission("receive")).isEqualTo("asset:receive_return:receive");
-        assertThat(AssetActionPermissionContract.requiredPermission("return")).isEqualTo("asset:receive_return:return");
-        assertThat(AssetActionPermissionContract.requiredPermission("handover")).isEqualTo("asset:receive_return:handover");
-        assertThat(AssetActionPermissionContract.requiredPermission("borrow")).isEqualTo("asset:borrow_return:borrow");
-        assertThat(AssetActionPermissionContract.requiredPermission("borrow-return")).isEqualTo("asset:borrow_return:return");
-        assertThat(AssetActionPermissionContract.requiredPermission("cancel-inbound")).isEqualTo("asset:inbound:cancel");
-        assertThat(AssetActionPermissionContract.requiredPermission("update-import")).isEqualTo("asset:item:updateImport");
-        assertThat(AssetActionPermissionContract.requiredPermission("receive-import")).isEqualTo("asset:item:receiveImport");
+        assertThat(AssetActionPermissionContract.requiredPermissions("receive"))
+            .containsExactlyInAnyOrder("asset:receive_return:receive", "asset:item:receive");
+        assertThat(AssetActionPermissionContract.requiredPermissions("return"))
+            .containsExactlyInAnyOrder("asset:receive_return:return", "asset:item:return");
+        assertThat(AssetActionPermissionContract.requiredPermissions("handover"))
+            .containsExactlyInAnyOrder("asset:receive_return:handover", "asset:item:handover");
+        assertThat(AssetActionPermissionContract.requiredPermissions("borrow"))
+            .containsExactlyInAnyOrder("asset:borrow_return:borrow", "asset:item:borrow");
+        assertThat(AssetActionPermissionContract.requiredPermissions("borrow-return"))
+            .containsExactlyInAnyOrder("asset:borrow_return:return", "asset:item:borrowReturn");
+        assertThat(AssetActionPermissionContract.requiredPermissions("cancel-inbound"))
+            .containsExactly("asset:inbound:cancel");
+        assertThat(AssetActionPermissionContract.requiredPermissions("update-import"))
+            .containsExactly("asset:item:updateImport");
+        assertThat(AssetActionPermissionContract.requiredPermissions("receive-import"))
+            .containsExactly("asset:item:receiveImport");
     }
 
     @Test
     void rejectsActionsThatHaveNoDeclaredPermissionContract() {
-        assertThatThrownBy(() -> AssetActionPermissionContract.requiredPermission("unsafe"))
+        assertThatThrownBy(() -> AssetActionPermissionContract.requiredPermissions("unsafe"))
             .isInstanceOf(IllegalArgumentException.class);
     }
 }

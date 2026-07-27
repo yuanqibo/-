@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getAuthzSessionToken, handleAuthzUnauthorized } from '@acg/ecp-auth'
 import { ApiError, apiRequest } from '../../../src/shared/api/http'
-import type { PortalEcpContext } from '../../../src/core/auth/portal-context'
+
+vi.mock('@acg/ecp-auth', () => ({
+  getAuthzSessionToken: vi.fn(),
+  handleAuthzUnauthorized: vi.fn()
+}))
 
 const fetchMock = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>()
 
@@ -13,11 +18,8 @@ describe('apiRequest', () => {
   beforeEach(() => {
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
-    window.__ASSET_PORTAL_ECP_CONTEXT__ = {
-      session: { sessionToken: 'session-token' },
-      user: {},
-      menuItems: []
-    } as unknown as PortalEcpContext
+    vi.mocked(getAuthzSessionToken).mockReturnValue('session-token')
+    vi.mocked(handleAuthzUnauthorized).mockClear()
   })
 
   it('injects the ECP token and serializes JSON writes', async () => {
@@ -47,5 +49,12 @@ describe('apiRequest', () => {
     const error = await apiRequest('/api/assets').catch((reason: unknown) => reason)
     expect(error).toBeInstanceOf(ApiError)
     expect(error).toMatchObject({ status: 403, message: '权限不足', payload: { error: '权限不足' } })
+  })
+
+  it('delegates expired ECP sessions to the SDK unauthorized handler', async () => {
+    fetchMock.mockResolvedValue(response({ error: 'ECP session is invalid' }, 401))
+
+    await expect(apiRequest('/api/assets')).rejects.toMatchObject({ status: 401 })
+    expect(handleAuthzUnauthorized).toHaveBeenCalledOnce()
   })
 })

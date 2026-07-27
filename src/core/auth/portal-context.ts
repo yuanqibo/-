@@ -49,6 +49,3 @@ declare global {
 
 export const getPortalContext = (): PortalEcpContext | null =>
   window.__ASSET_PORTAL_ECP_CONTEXT__ ?? null
-
-export const getPortalSessionToken = (): string =>
-  String(getPortalContext()?.session?.sessionToken ?? '').trim()

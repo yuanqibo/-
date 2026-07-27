@@ -66,7 +66,7 @@ public class AssetController {
     public Map<String, Object> command(@org.springframework.web.bind.annotation.PathVariable String action,
                                        @RequestBody AssetCommandRequest command,
                                        HttpServletRequest request) {
-        identityService.requirePermission(request, AssetActionPermissionContract.requiredPermission(action));
+        identityService.requireAnyPermission(request, AssetActionPermissionContract.requiredPermissions(action));
         ObjectNode fields = command.fields() != null && command.fields().isObject()
             ? (ObjectNode) command.fields().deepCopy() : JsonNodeFactory.instance.objectNode();
         identityService.current(request).ifPresent(identity -> {
