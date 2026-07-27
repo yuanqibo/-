@@ -3,7 +3,10 @@ import { useRouter, type Router } from 'vue-router'
 import type { AuthzSessionContext, MenuTreeNode } from '@acg/ecp-sdk'
 import { ecp, waitForEcpReady } from '../../ecp'
 import type { PortalMenuItem, PortalUser } from './portal-context'
-import { primeEmployeeSelfServiceSession } from './employee-self-service-access'
+import {
+  ensureEmployeeSelfServiceMenu,
+  primeEmployeeSelfServiceSession
+} from './employee-self-service-access'
 
 type PortalSessionState = {
   ready: boolean
@@ -61,11 +64,12 @@ const loadAccessiblePortalMenu = async (): Promise<PortalMenuItem[]> => {
     console.warn('[asset-portal] ECP accessible menu unavailable', error)
     return []
   }) ?? []
-  return flattenMenuTree(tree)
+  const accessibleMenu = flattenMenuTree(tree)
     .filter(isMenuItemAllowed)
     .map(toPortalMenuItem)
     .filter((item): item is PortalMenuItem => Boolean(item))
     .sort((left, right) => left.order - right.order)
+  return ensureEmployeeSelfServiceMenu(accessibleMenu)
 }
 
 const buildPortalUser = (session: AuthzSessionContext): PortalUser => {
