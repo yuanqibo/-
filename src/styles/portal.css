@@ -8267,6 +8267,20 @@ td .link {
   font-weight: 650;
 }
 
+/* Keep native business-table defaults from stretching Element Plus calendars. */
+.el-date-table {
+  min-width: 0;
+  background: transparent;
+}
+
+.el-date-table th {
+  background: transparent;
+}
+
+.el-date-table td {
+  border-bottom: 0;
+}
+
 .asset-list-page {
   flex: 1 1 auto;
   width: 100%;

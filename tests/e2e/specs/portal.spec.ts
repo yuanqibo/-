@@ -646,6 +646,25 @@ test.describe('登录后门户质量回归', () => {
     await expect(dialog).not.toContainText('AST-BORROW-002')
     await expect(dialog).not.toContainText('AST-BORROW-003')
 
+    const expectedReturnField = dialog.locator('.el-form-item').filter({ hasText: '预计归还日期' })
+    await expectedReturnField.locator('input').click()
+    const datePanel = page.locator('.el-picker-panel:visible').last()
+    await expect(datePanel).toBeVisible()
+    const datePanelGeometry = await datePanel.evaluate((element) => {
+      const panel = element.getBoundingClientRect()
+      const table = element.querySelector('.el-date-table')?.getBoundingClientRect()
+      return {
+        panelWidth: panel.width,
+        panelRight: panel.right,
+        tableWidth: table?.width || 0,
+        viewportWidth: document.documentElement.clientWidth
+      }
+    })
+    expect(datePanelGeometry.panelWidth).toBeLessThanOrEqual(360)
+    expect(datePanelGeometry.tableWidth).toBeLessThanOrEqual(datePanelGeometry.panelWidth + 1)
+    expect(datePanelGeometry.panelRight).toBeLessThanOrEqual(datePanelGeometry.viewportWidth + 1)
+    await page.keyboard.press('Escape')
+
     await dialog.getByRole('button', { name: '扫码精确查询', exact: true }).click()
     const scanInput = dialog.getByRole('textbox', { name: '扫码内容', exact: true })
     await scanInput.fill('TAG-BORROW-1')
