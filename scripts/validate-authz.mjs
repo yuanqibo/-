@@ -212,7 +212,14 @@ if (!String(workspace.noPermissionPath || '').startsWith('/')) fail('WORKSPACE_N
 if (!menus.some((menu) => menu.pageKey === 'authz.workspace' && menu.path === workspace.mountPath)) {
   fail('WORKSPACE_MENU_MISSING', 'menus.yaml must expose authz.workspace at workspace.mountPath')
 }
-if (!roles.some((role) => role.code === 'APP_ADMIN' && permissionCodes.size === new Set(role.permissions || []).size)) {
+const appAdminRole = roles.find((role) => role.code === 'APP_ADMIN')
+const appAdminPermissions = new Set(appAdminRole?.permissions || [])
+for (const requiredPermission of ['authz:application:edit', 'authz:app_role:assign']) {
+  if (!appAdminPermissions.has(requiredPermission)) {
+    fail('APP_ADMIN_GOVERNANCE_PERMISSION', `APP_ADMIN must contain ${requiredPermission}`)
+  }
+}
+if (!appAdminRole || permissionCodes.size !== appAdminPermissions.size) {
   warn('APP_ADMIN_REVIEW', 'APP_ADMIN does not contain every declared permission')
 }
 

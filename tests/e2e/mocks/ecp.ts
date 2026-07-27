@@ -14,7 +14,7 @@ const allPermissions = [
   'asset:category_settings:view', 'asset:category_settings:create', 'asset:category_settings:update', 'asset:category_settings:delete', 'asset:category_settings:toggleCode', 'asset:category_settings:template', 'asset:category_settings:import', 'asset:category_settings:export',
   'asset:code_rules:view', 'asset:code_rules:update', 'asset:label_template_settings:view', 'asset:label_template_settings:create', 'asset:label_template_settings:update', 'asset:label_template_settings:delete', 'asset:label_template_settings:save',
   'asset:request:view', 'asset:request:create', 'asset:request:review', 'asset:employee:view', 'asset:department:view', 'asset:self_service:view', 'asset:self_service:update', 'asset:integration:view', 'asset:integration:create', 'asset:integration:update', 'asset:form:view', 'asset:form:create', 'asset:form:update', 'asset:form:delete',
-  'authz:application:view', 'authz:model:view', 'authz:app_role:view', 'authz:app_role:assign'
+  'authz:application:view', 'authz:application:edit', 'authz:model:view', 'authz:app_role:view', 'authz:app_role:assign'
 ]
 const allFeatures = ['PORTAL_HOME', 'PORTAL_ASSETS', 'PORTAL_REQUESTS', 'PORTAL_SETTINGS', 'APP_WORKSPACE']
 
