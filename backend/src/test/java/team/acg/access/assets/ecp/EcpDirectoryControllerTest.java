@@ -29,11 +29,15 @@ class EcpDirectoryControllerTest {
                 "asset:employee:view",
                 "asset:department:view",
                 "asset:item:create",
+                "asset:item:receive",
+                "asset:item:borrow",
+                "asset:item:handover",
                 "asset:item:update",
                 "asset:item:batchUpdate",
                 "asset:receive_return:receive",
                 "asset:receive_return:handover",
                 "asset:borrow_return:borrow",
+                "asset:request:create",
                 "asset:request:review");
     }
 

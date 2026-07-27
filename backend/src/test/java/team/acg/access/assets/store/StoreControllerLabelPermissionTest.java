@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Arrays;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -29,6 +30,38 @@ class StoreControllerLabelPermissionTest {
     private final RequestIdentityService identity = mock(RequestIdentityService.class);
     private final HttpServletRequest request = mock(HttpServletRequest.class);
     private final StoreController controller = new StoreController(repository, mapper, validator, identity, 1_000_000);
+
+    @Test
+    void exposesAssetViewPermissionForBusinessReferenceCatalogs() throws Exception {
+        RequireAnyPermission annotation = StoreController.class
+            .getMethod("list", HttpServletRequest.class)
+            .getAnnotation(RequireAnyPermission.class);
+
+        assertThat(annotation).isNotNull();
+        assertThat(Arrays.stream(annotation.value()).map(spec -> spec.value()).toList())
+            .contains("asset:item:view");
+    }
+
+    @Test
+    void assetViewersReceiveCatalogsWithoutAdministrativeSettings() {
+        var viewer = new RequestIdentityService.Identity(
+            "资产查看人", "viewer", "account-1", "directory-1", "tenant-1", "研发部",
+            Set.of("department-1"), "employee", Set.of("asset:item:view"));
+        when(identity.current(request)).thenReturn(Optional.of(viewer));
+        when(repository.findAll()).thenReturn(Map.of(
+            "assetCategoryTree", value(mapper.createArrayNode()),
+            "assetLocationTree", value(mapper.createArrayNode()),
+            "assetPortalAssetCodeRuleSettingsV1", value(mapper.createObjectNode()),
+            PRINT_KEY, value(mapper.createObjectNode())));
+
+        Map<String, Object> response = controller.list(request);
+
+        @SuppressWarnings("unchecked")
+        Map<String, JsonNode> values = (Map<String, JsonNode>) response.get("values");
+        assertThat(values)
+            .containsKeys("assetCategoryTree", "assetLocationTree")
+            .doesNotContainKeys("assetPortalAssetCodeRuleSettingsV1", PRINT_KEY);
+    }
 
     @Test
     void exposesAllLabelWritePermissionsAtTheEcpAnnotationBoundary() throws Exception {
@@ -116,6 +149,10 @@ class StoreControllerLabelPermissionTest {
     }
 
     private Optional<AppStoreRepository.StoreValue> stored(JsonNode value) {
-        return Optional.of(new AppStoreRepository.StoreValue(value, Instant.EPOCH));
+        return Optional.of(value(value));
+    }
+
+    private AppStoreRepository.StoreValue value(JsonNode value) {
+        return new AppStoreRepository.StoreValue(value, Instant.EPOCH);
     }
 }

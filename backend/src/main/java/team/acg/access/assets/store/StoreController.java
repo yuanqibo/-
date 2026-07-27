@@ -25,14 +25,14 @@ public class StoreController {
     private static final String MIGRATED_ASSET_KEY = "assetPortalAssets";
     private static final Set<String> ARRAY_DOCUMENTS = Set.of("assetLabelCustomTemplatesV1");
     private static final Set<String> OBJECT_DOCUMENTS = Set.of("assetLabelPrintSettingsV2");
-    private static final Map<String, String> DOCUMENT_VIEW_PERMISSIONS = Map.of(
-        "assetCategoryTree", "asset:category_settings:view",
-        "assetCategoryTreeVersion", "asset:category_settings:view",
-        "assetLocationTree", "asset:location_settings:view",
-        "assetPortalAssetCodeRuleSettingsV1", "asset:code_rules:view",
-        "assetLabelPrintSettingsV2", "asset:label_template_settings:view",
-        "assetLabelCustomTemplatesV1", "asset:label_template_settings:view",
-        "assetPortalSelfServiceSettingsV9", "asset:self_service:view");
+    private static final Map<String, Set<String>> DOCUMENT_VIEW_PERMISSIONS = Map.of(
+        "assetCategoryTree", Set.of("asset:category_settings:view", "asset:item:view"),
+        "assetCategoryTreeVersion", Set.of("asset:category_settings:view", "asset:item:view"),
+        "assetLocationTree", Set.of("asset:location_settings:view", "asset:item:view"),
+        "assetPortalAssetCodeRuleSettingsV1", Set.of("asset:code_rules:view"),
+        "assetLabelPrintSettingsV2", Set.of("asset:label_template_settings:view"),
+        "assetLabelCustomTemplatesV1", Set.of("asset:label_template_settings:view"),
+        "assetPortalSelfServiceSettingsV9", Set.of("asset:self_service:view"));
     private static final Set<String> LABEL_DOCUMENTS = Set.of(
         "assetLabelPrintSettingsV2", "assetLabelCustomTemplatesV1");
     private static final String PRINT_SETTINGS_KEY = "assetLabelPrintSettingsV2";
@@ -55,6 +55,7 @@ public class StoreController {
 
     @GetMapping
     @RequireAnyPermission({
+        @PermissionSpec("asset:item:view"),
         @PermissionSpec("asset:category_settings:view"),
         @PermissionSpec("asset:location_settings:view"),
         @PermissionSpec("asset:code_rules:view"),
@@ -66,8 +67,10 @@ public class StoreController {
         Map<String, Instant> updatedAt = new LinkedHashMap<>();
         var identity = identityService.current(request);
         repository.findAll().forEach((key, record) -> {
-            String permission = DOCUMENT_VIEW_PERMISSIONS.get(key);
-            if (permission != null && identity.map(value -> value.hasPermission(permission)).orElse(true)) {
+            Set<String> permissions = DOCUMENT_VIEW_PERMISSIONS.get(key);
+            if (permissions != null && identity
+                .map(value -> permissions.stream().anyMatch(value::hasPermission))
+                .orElse(true)) {
                 values.put(key, record.value());
                 updatedAt.put(key, record.updatedAt());
             }

@@ -28,11 +28,15 @@ public class EcpDirectoryController {
         @PermissionSpec("asset:employee:view"),
         @PermissionSpec("asset:department:view"),
         @PermissionSpec("asset:item:create"),
+        @PermissionSpec("asset:item:receive"),
+        @PermissionSpec("asset:item:borrow"),
+        @PermissionSpec("asset:item:handover"),
         @PermissionSpec("asset:item:update"),
         @PermissionSpec("asset:item:batchUpdate"),
         @PermissionSpec("asset:receive_return:receive"),
         @PermissionSpec("asset:receive_return:handover"),
         @PermissionSpec("asset:borrow_return:borrow"),
+        @PermissionSpec("asset:request:create"),
         @PermissionSpec("asset:request:review")
     })
     public DirectoryUserPage users(@RequestParam(defaultValue = "") String query,
