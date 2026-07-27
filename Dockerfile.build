@@ -32,7 +32,8 @@ FROM eclipse-temurin:17-jre-jammy
 WORKDIR /opt/asset-portal
 ENV HOST=0.0.0.0 PORT=5387 ECP_SDK_ENABLED=true
 COPY --from=backend-build /build/backend/target/access-assets-server-1.0.0.jar ./app.jar
-RUN addgroup -S asset && adduser -S asset -G asset
+RUN addgroup --system asset \
+    && adduser --system --ingroup asset --no-create-home asset
 USER asset
 EXPOSE 5387
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
