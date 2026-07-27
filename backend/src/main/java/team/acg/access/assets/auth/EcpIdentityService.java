@@ -38,9 +38,7 @@ public class EcpIdentityService {
         if (subject.isBlank() || directorySubject.isBlank()) {
             throw new IllegalStateException("ECP session has no stable user subject");
         }
-        Set<String> permissionCodes = context.permissionCodes() == null
-            ? Set.of()
-            : context.permissionCodes().stream().filter(java.util.Objects::nonNull).collect(Collectors.toUnmodifiableSet());
+        Set<String> permissionCodes = EmployeeSelfServiceAccess.merge(context.permissionCodes());
         Set<String> roleTypes = context.roles() == null ? Set.of() : context.roles().stream()
             .map(EcpSessionContext.Role::type).map(EcpIdentityService::text)
             .map(String::toUpperCase).filter(value -> !value.isBlank()).collect(Collectors.toUnmodifiableSet());

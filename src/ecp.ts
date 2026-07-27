@@ -1,9 +1,14 @@
 import { createEcpSdk } from '@acg/ecp-sdk'
+import { initAuthzSdk } from '@acg/ecp-auth'
 import { createBundleFromGlob } from '@acg/ecp-auth-vue'
 import type { App as VueApp } from 'vue'
 import type { Router } from 'vue-router'
 import type { DoctorReport, EcpAuthConfigSourceMode } from '@acg/ecp-sdk'
 import { formatPermissionDisplayName } from './authz/permission-display'
+import {
+  primeEmployeeSelfServiceSession,
+  withEmployeeSelfServiceSnapshot
+} from './core/auth/employee-self-service-access'
 
 export type { AuthzSessionContext } from '@acg/ecp-sdk'
 
@@ -48,7 +53,11 @@ export const ecp = createEcpSdk({
         loginDefaultReturnTo: '/'
       },
       permission: {
-        noPermissionPath: '/no-permission'
+        noPermissionPath: '/no-permission',
+        loadPermissionSnapshot: async ({ appCode }) => {
+          const snapshot = await initAuthzSdk(appCode).loadPermissionSnapshot()
+          return snapshot ? withEmployeeSelfServiceSnapshot(snapshot) : null
+        }
       },
       menu: {
         parentRouteName: 'app-shell',
@@ -96,6 +105,8 @@ export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
       locale: 'zh-CN'
     })
     .then(async () => {
+      const session = await ecp.auth?.session.load()
+      if (session) primeEmployeeSelfServiceSession(session)
       localDoctorReport = await ecp.auth?.doctor.run({ bundleAppCodeMismatchLevel: 'fail' }) ?? null
       if (!localDoctorReport?.ok) {
         const failures = localDoctorReport?.checks

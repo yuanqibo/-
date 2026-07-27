@@ -10,6 +10,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class EcpIdentityServiceTest {
     @Test
+    void grantsAuthenticatedEmployeesTheMinimalSelfServicePermissionsWithoutAnAssignedRole() {
+        EcpSessionContext context = context(null, null, List.of());
+
+        var identity = EcpIdentityService.normalize(context);
+
+        assertThat(identity.get("roleCode")).isEqualTo("employee");
+        assertThat(identity.get("permissionCodes")).isEqualTo(EmployeeSelfServiceAccess.PERMISSIONS);
+    }
+
+    @Test
     void derivesManagementIdentityFromTrustedEcpRoleType() {
         EcpSessionContext context = context("APP_ADMIN", "APP_ADMIN", List.of("asset:item:view"));
 
@@ -63,7 +73,7 @@ class EcpIdentityServiceTest {
         return new EcpSessionContext(
             "WLY5YG", "asset-platform", "资产平台", "", "session-1",
             OffsetDateTime.now(), OffsetDateTime.now().plusHours(1), user, tenant,
-            List.of(new EcpSessionContext.Role(roleCode, roleCode, roleType)),
+            roleCode == null ? List.of() : List.of(new EcpSessionContext.Role(roleCode, roleCode, roleType)),
             permissions, List.of());
     }
 }

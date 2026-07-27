@@ -3,6 +3,7 @@ import { useRouter, type Router } from 'vue-router'
 import type { AuthzSessionContext, MenuTreeNode } from '@acg/ecp-sdk'
 import { ecp, waitForEcpReady } from '../../ecp'
 import type { PortalMenuItem, PortalUser } from './portal-context'
+import { primeEmployeeSelfServiceSession } from './employee-self-service-access'
 
 type PortalSessionState = {
   ready: boolean
@@ -142,8 +143,9 @@ const installPortalContext = (router: Router): void => {
 }
 
 const applySession = async (session: AuthzSessionContext, router: Router): Promise<void> => {
-  state.session = session
-  state.user = buildPortalUser(session)
+  const augmentedSession = primeEmployeeSelfServiceSession(session)
+  state.session = augmentedSession
+  state.user = buildPortalUser(augmentedSession)
   state.menuItems = await loadAccessiblePortalMenu()
   installPortalContext(router)
 }
