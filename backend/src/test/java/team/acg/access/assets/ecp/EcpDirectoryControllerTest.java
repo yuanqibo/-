@@ -1,10 +1,7 @@
 package team.acg.access.assets.ecp;
 
 import com.idanchuang.ecp.api.common.model.directory.EcpUserProfile;
-import com.idanchuang.ecp.sdk.client.EcpClient;
 import com.idanchuang.ecp.sdk.client.model.EcpPage;
-import com.idanchuang.ecp.sdk.client.operation.DirectoryOperations;
-import com.idanchuang.ecp.sdk.client.operation.UsersOperations;
 import com.idanchuang.ecp.sdk.spring.annotation.RequireAnyPermission;
 import org.junit.jupiter.api.Test;
 
@@ -43,15 +40,11 @@ class EcpDirectoryControllerTest {
 
     @Test
     void searchesUsersThroughThePublicEcpClientSurface() {
-        EcpClient client = mock(EcpClient.class);
-        DirectoryOperations directory = mock(DirectoryOperations.class);
-        UsersOperations users = mock(UsersOperations.class);
-        when(client.directory()).thenReturn(directory);
-        when(directory.users()).thenReturn(users);
-        when(users.search("李雷", 1, 20)).thenReturn(new EcpPage<>(List.of(profile()), 1, 20, 1));
+        EcpDirectoryUserService directoryUsers = mock(EcpDirectoryUserService.class);
+        when(directoryUsers.page("李雷", 1, 20)).thenReturn(new EcpPage<>(List.of(profile()), 1, 20, 1));
 
         EcpDirectoryController.DirectoryUserPage result =
-            new EcpDirectoryController(client).users(" 李雷 ", 1, 20);
+            new EcpDirectoryController(directoryUsers).users(" 李雷 ", 1, 20);
 
         assertThat(result.items()).hasSize(1);
         assertThat(result.items().get(0).subject()).isEqualTo("user-1");
@@ -63,7 +56,7 @@ class EcpDirectoryControllerTest {
 
     @Test
     void boundsDirectoryQueriesBeforeCallingEcp() {
-        EcpDirectoryController controller = new EcpDirectoryController(mock(EcpClient.class));
+        EcpDirectoryController controller = new EcpDirectoryController(mock(EcpDirectoryUserService.class));
 
         assertThatThrownBy(() -> controller.users("x", 0, 20)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> controller.users("x", 1, 101)).isInstanceOf(IllegalArgumentException.class);

@@ -1,7 +1,6 @@
 package team.acg.access.assets.ecp;
 
 import com.idanchuang.ecp.api.common.model.directory.EcpUserProfile;
-import com.idanchuang.ecp.sdk.client.EcpClient;
 import com.idanchuang.ecp.sdk.client.model.EcpPage;
 import com.idanchuang.ecp.sdk.spring.annotation.PermissionSpec;
 import com.idanchuang.ecp.sdk.spring.annotation.RequireAnyPermission;
@@ -17,10 +16,10 @@ import java.util.List;
 @RequestMapping("/api/ecp/directory")
 @ConditionalOnProperty(prefix = "ecp.sdk", name = "enabled", havingValue = "true")
 public class EcpDirectoryController {
-    private final EcpClient client;
+    private final EcpDirectoryUserService directoryUsers;
 
-    public EcpDirectoryController(EcpClient client) {
-        this.client = client;
+    public EcpDirectoryController(EcpDirectoryUserService directoryUsers) {
+        this.directoryUsers = directoryUsers;
     }
 
     @GetMapping("/users")
@@ -47,9 +46,7 @@ public class EcpDirectoryController {
         if (page < 1) throw new IllegalArgumentException("Directory page must be positive");
         if (size < 1 || size > 100) throw new IllegalArgumentException("Directory page size must be between 1 and 100");
 
-        EcpPage<EcpUserProfile> result = normalizedQuery.isEmpty()
-            ? client.directory().users().list(page, size)
-            : client.directory().users().search(normalizedQuery, page, size);
+        EcpPage<EcpUserProfile> result = directoryUsers.page(normalizedQuery, page, size);
         return new DirectoryUserPage(
             result.items().stream().map(DirectoryUser::from).toList(),
             result.current(), result.size(), result.total(), result.totalPages(), result.hasNext());
