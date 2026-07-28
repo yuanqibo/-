@@ -9,6 +9,7 @@ import {
   primeEmployeeSelfServiceSession,
   withEmployeeSelfServiceSnapshot
 } from './core/auth/employee-self-service-access'
+import { registerInternalEcpLoginRoutes } from './core/auth/ecp-login-routes'
 
 export type { AuthzSessionContext } from '@acg/ecp-sdk'
 
@@ -38,9 +39,12 @@ const resolveConfigSourceMode = (): EcpAuthConfigSourceMode => {
   return value === 'local' || value === 'remote-first' || value === 'remote' ? value : 'local'
 }
 
+const ecpAppCode = readEnv('VITE_ECP_APP_CODE', 'WLY5YG')
+const ecpApiBaseUrl = readEnv('VITE_ECP_API_BASE_URL', '/api/v1')
+
 export const ecp = createEcpSdk({
-  appCode: readEnv('VITE_ECP_APP_CODE', 'WLY5YG'),
-  baseUrl: readEnv('VITE_ECP_API_BASE_URL', '/api/v1'),
+  appCode: ecpAppCode,
+  baseUrl: ecpApiBaseUrl,
   modules: {
     auth: true
   },
@@ -99,6 +103,7 @@ export const preloadMemberAuthorizationWorkspace = (): Promise<void> => {
 }
 
 export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
+  registerInternalEcpLoginRoutes(router, ecpAppCode, ecpApiBaseUrl)
   ecpReadyPromise = ecp.setup({
       app,
       router,
