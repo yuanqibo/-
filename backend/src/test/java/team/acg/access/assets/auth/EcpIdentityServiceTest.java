@@ -2,17 +2,49 @@ package team.acg.access.assets.auth;
 
 import com.idanchuang.ecp.api.common.model.session.EcpSessionContext;
 import com.idanchuang.ecp.api.common.model.role.ApplicationRole;
+import com.idanchuang.ecp.sdk.client.EcpClient;
+import com.idanchuang.ecp.sdk.client.operation.AssignmentsOperations;
+import com.idanchuang.ecp.sdk.client.operation.RolesOperations;
+import com.idanchuang.ecp.sdk.client.operation.SessionOperations;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
 
 class EcpIdentityServiceTest {
+    @Test
+    void reusesAResolvedIdentityForConcurrentPageRequests() {
+        EcpClient client = mock(EcpClient.class);
+        SessionOperations session = mock(SessionOperations.class);
+        RolesOperations roles = mock(RolesOperations.class);
+        AssignmentsOperations assignments = mock(AssignmentsOperations.class);
+        when(client.session("same-session-token")).thenReturn(session);
+        when(session.context()).thenReturn(context("APP_ADMIN", "APP_ADMIN", List.of("asset:item:view")));
+        when(client.roles()).thenReturn(roles);
+        when(roles.list()).thenReturn(List.of());
+        when(roles.assignments()).thenReturn(assignments);
+        when(assignments.list(anyString(), isNull())).thenReturn(List.of());
+        EcpIdentityService service = new EcpIdentityService(client, Duration.ofSeconds(10));
+
+        Map<String, Object> first = service.resolve("same-session-token");
+        Map<String, Object> second = service.resolve("same-session-token");
+
+        assertThat(second).isSameAs(first);
+        verify(session, times(1)).context();
+        verify(roles, times(1)).list();
+    }
+
     @Test
     void grantsAuthenticatedEmployeesTheMinimalSelfServicePermissionsWithoutAnAssignedRole() {
         EcpSessionContext context = context(null, null, List.of());

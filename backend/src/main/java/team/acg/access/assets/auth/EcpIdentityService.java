@@ -5,10 +5,15 @@ import com.idanchuang.ecp.api.common.model.role.ApplicationRole;
 import com.idanchuang.ecp.api.common.model.role.ApplicationRoleAssignment;
 import com.idanchuang.ecp.sdk.client.EcpClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -17,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,12 +32,31 @@ public class EcpIdentityService {
     private static final Set<String> ADMIN_ROLE_TYPES = Set.of("APP_ADMIN", "OPERATOR", "AUDITOR");
 
     private final EcpClient client;
+    private final long cacheTtlMillis;
+    private final Map<String, CachedIdentity> identityCache = new ConcurrentHashMap<>();
 
-    public EcpIdentityService(EcpClient client) {
+    public EcpIdentityService(EcpClient client,
+                              @Value("${asset-portal.security.identity-cache-ttl:10s}") Duration cacheTtl) {
         this.client = client;
+        this.cacheTtlMillis = Math.max(0, cacheTtl.toMillis());
     }
 
     public Map<String, Object> resolve(String token) {
+        if (cacheTtlMillis == 0) return resolveFresh(token);
+        long now = System.currentTimeMillis();
+        String cacheKey = tokenFingerprint(token);
+        CachedIdentity cached = identityCache.compute(cacheKey, (key, current) -> {
+            if (current != null && current.expiresAtMillis() > now) return current;
+            Map<String, Object> identity = Map.copyOf(resolveFresh(token));
+            return new CachedIdentity(identity, System.currentTimeMillis() + cacheTtlMillis);
+        });
+        if (identityCache.size() > 256) {
+            identityCache.entrySet().removeIf(entry -> entry.getValue().expiresAtMillis() <= now);
+        }
+        return cached.identity();
+    }
+
+    private Map<String, Object> resolveFresh(String token) {
         EcpSessionContext context = client.session(token).context();
         Map<String, Object> identity = normalize(context);
         try {
@@ -40,6 +65,16 @@ public class EcpIdentityService {
             log.warn("Unable to reconcile ECP account role assignments for {}", identity.get("directorySubject"), error);
         }
         return identity;
+    }
+
+    private String tokenFingerprint(String token) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                .digest(token.getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 is unavailable", error);
+        }
     }
 
     private List<ApplicationRole> loadAccountRoles(EcpSessionContext.User user) {
@@ -191,5 +226,7 @@ public class EcpIdentityService {
     private static String text(Object value) {
         return value == null ? "" : value.toString().trim();
     }
+
+    private record CachedIdentity(Map<String, Object> identity, long expiresAtMillis) {}
 
 }

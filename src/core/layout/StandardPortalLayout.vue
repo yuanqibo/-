@@ -7,6 +7,7 @@ import { usePortalSession } from '../auth/portal-session'
 import { useTerminalMode, type PortalTerminalMode } from '../auth/terminal-mode'
 import type { PortalMenuItem } from '../auth/portal-context'
 import { MEMBER_AUTHORIZATION_PORTAL_PATH } from '../routing/standard-routes'
+import { preloadMemberAuthorizationWorkspace } from '../../ecp'
 import ApprovalNotificationDialog from '../../features/approvals/components/ApprovalNotificationDialog.vue'
 import { useApprovals } from '../../features/approvals/composables/useApprovals'
 import type { ApprovalRecord } from '../../features/approvals/types/approval'
@@ -34,7 +35,6 @@ const systemSubnav = ref<HTMLElement>()
 const layoutActive = ref(true)
 const approvalNotificationOpen = ref(false)
 const routePreloads = new Map<string, Promise<void>>()
-let idlePreloadScheduled = false
 let approvalRefreshTimer: ReturnType<typeof setInterval> | null = null
 
 const pendingStatuses = new Set(['审批中', '待审批', '待执行'])
@@ -92,19 +92,13 @@ const preloadPath = (path: string): Promise<void> => {
   routePreloads.set(path, preload)
   return preload
 }
-const preloadMenuRoute = (item: PortalMenuItem): void => { void preloadPath(routePathForMenu(item)) }
+const preloadMenuRoute = (item: PortalMenuItem): void => {
+  void preloadPath(routePathForMenu(item))
+  if (item.id === 'authz.workspace') void preloadMemberAuthorizationWorkspace()
+}
 const primaryTarget = (item: PortalMenuItem): PortalMenuItem =>
   item.id === 'settings' ? systemMenus.value[0] || item : item
 const preloadPrimaryMenuRoute = (item: PortalMenuItem): void => preloadMenuRoute(primaryTarget(item))
-const scheduleRoutePreload = (): void => {
-  if (idlePreloadScheduled) return
-  idlePreloadScheduled = true
-  const preload = () => (isEmployeeTerminal.value ? primaryMenus.value : menuItems.value).forEach(preloadMenuRoute)
-  const idleWindow = window as Window & { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number }
-  if (idleWindow.requestIdleCallback) idleWindow.requestIdleCallback(preload, { timeout: 1200 })
-  else window.setTimeout(preload, 180)
-}
-
 const rememberSubnavScroll = (force = false): void => {
   if (subnavScrollState.navigationPending && !force) return
   if (assetSubnav.value) subnavScrollState.asset = assetSubnav.value.scrollTop
@@ -234,7 +228,6 @@ watch(canReviewApprovals, () => {
 
 onMounted(() => {
   syncActiveLayout()
-  scheduleRoutePreload()
   startApprovalRefresh()
 })
 

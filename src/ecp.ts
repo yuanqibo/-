@@ -124,7 +124,6 @@ export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
           .join('; ')
         throw new Error(`ECP local doctor failed${failures ? `: ${failures}` : ''}`)
       }
-      void preloadMemberAuthorizationWorkspace()
     })
     .catch((error) => {
       console.error('[asset-portal] ECP setup failed', error)

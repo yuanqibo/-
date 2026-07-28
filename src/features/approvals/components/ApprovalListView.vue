@@ -135,6 +135,7 @@ onMounted(() => {
   focusManagerRequestFromRoute()
 })
 onActivated(() => {
+  void load()
   openRequestFromRoute()
   focusManagerRequestFromRoute()
   if (isEmployeeTerminal.value) void loadAssets(true)
