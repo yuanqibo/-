@@ -177,7 +177,6 @@ resources:
     scopes: [ALL]
     permissions:
       - { code: authz:application:view, action: view, riskLevel: L1, approvalRequired: false }
-      - { code: authz:application:edit, action: update, riskLevel: L2, approvalRequired: false }
   - code: authz:model
     name: 权限模型
     scopes: [ALL]

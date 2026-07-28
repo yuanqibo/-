@@ -3,6 +3,7 @@ import { useRouter, type Router } from 'vue-router'
 import type { AuthzSessionContext, MenuTreeNode } from '@acg/ecp-sdk'
 import { ecp, waitForEcpReady } from '../../ecp'
 import type { PortalMenuItem, PortalUser } from './portal-context'
+import { resolvePortalRoleCode } from './portal-role'
 import {
   ensureEmployeeSelfServiceMenu,
   primeEmployeeSelfServiceSession
@@ -73,15 +74,8 @@ const loadAccessiblePortalMenu = async (): Promise<PortalMenuItem[]> => {
 }
 
 const buildPortalUser = (session: AuthzSessionContext): PortalUser => {
-  const roleCodes = new Set((session.roles || []).map((role) => role.code.toUpperCase()))
   const permissionCodes = session.permissionCodes || []
-  const roleCode = roleCodes.has('APP_ADMIN')
-    ? 'super_admin'
-    : roleCodes.has('OPERATOR')
-      ? 'admin'
-      : roleCodes.has('APP_AUDITOR')
-        ? 'auditor'
-        : 'employee'
+  const roleCode = resolvePortalRoleCode(session.roles)
   const roleName = roleCode === 'super_admin'
     ? '应用管理员'
     : roleCode === 'admin'

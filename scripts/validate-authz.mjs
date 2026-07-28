@@ -214,7 +214,7 @@ if (!menus.some((menu) => menu.pageKey === 'authz.workspace' && menu.path === wo
 }
 const appAdminRole = roles.find((role) => role.code === 'APP_ADMIN')
 const appAdminPermissions = new Set(appAdminRole?.permissions || [])
-for (const requiredPermission of ['authz:application:edit', 'authz:app_role:assign']) {
+for (const requiredPermission of ['authz:app_role:assign']) {
   if (!appAdminPermissions.has(requiredPermission)) {
     fail('APP_ADMIN_GOVERNANCE_PERMISSION', `APP_ADMIN must contain ${requiredPermission}`)
   }
