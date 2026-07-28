@@ -4,6 +4,7 @@ import type { AuthzSessionContext, MenuTreeNode } from '@acg/ecp-sdk'
 import { ecp, waitForEcpReady } from '../../ecp'
 import type { PortalMenuItem, PortalUser } from './portal-context'
 import { resolvePortalRoleCode } from './portal-role'
+import { revokeEcpSession } from './ecp-session-logout'
 import {
   ensureEmployeeSelfServiceMenu,
   primeEmployeeSelfServiceSession
@@ -134,7 +135,7 @@ const installPortalContext = (router: Router): void => {
       await router.push(target.path)
     },
     logout: async () => {
-      ecp.auth?.session.clear()
+      await revokeEcpSession(ecp.auth)
       window.location.href = ecp.auth?.login.buildUrl('/') || '/login'
     }
   }
