@@ -52,6 +52,7 @@ public class ApprovedAssetRequestExecutor {
         fields.put("note", item.path("reason").asText(""));
         fields.put("company", item.path("company").asText(""));
         fields.put("department", item.path("department").asText(""));
+        fields.put("selfServiceRequest", item.path("selfServiceRequest").asBoolean(false));
         switch (action) {
             case "receive" -> {
                 fields.put("receiver", item.path("applicant").asText());

@@ -9,6 +9,7 @@ final class EmployeeSelfServiceAccess {
         "asset:item:view",
         "asset:receive_return:view",
         "asset:receive_return:sign",
+        "asset:borrow_return:view",
         "asset:request:view",
         "asset:request:create",
         "asset:self_service:view"

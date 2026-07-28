@@ -68,7 +68,7 @@ describe('employee self-service access', () => {
 
     const menu = ensureEmployeeSelfServiceMenu([settings, home])
 
-    expect(menu.map((item) => item.id)).toEqual(['home', 'requests', 'settings'])
+    expect(menu.map((item) => item.id)).toEqual(['home', 'signatures', 'requests', 'settings'])
     expect(menu.filter((item) => item.id === 'home')).toHaveLength(1)
   })
 })

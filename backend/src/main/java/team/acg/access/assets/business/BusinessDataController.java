@@ -167,7 +167,7 @@ public class BusinessDataController {
             Set.of("assetCount", "assetIds", "receiveType", "receiveLocation", "receiveDate", "borrowLocation", "borrowDate",
                     "returnLocation", "returnDate", "expectedReturnDate", "handoverLocation", "handoverDate",
                     "receiverSubject", "receiverName", "receiverCompany", "receiverDepartment",
-                    "handoverType", "approvalDate")
+                    "handoverType", "approvalDate", "signatureImage", "signatureNotice")
                 .forEach(field -> {
                     JsonNode value = command.details().get(field);
                     if (value != null) item.set(field, value);

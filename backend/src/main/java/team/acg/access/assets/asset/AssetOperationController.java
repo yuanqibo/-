@@ -61,7 +61,7 @@ public class AssetOperationController {
             records = records.stream().map(record -> {
                 ObjectNode view = record.deepCopy();
                 String partySubject = view.path("partySubject").asText();
-                view.put("canSign", "HANDOVER".equals(view.path("type").asText())
+                view.put("canSign", Set.of("RECEIVE", "BORROW", "HANDOVER").contains(view.path("type").asText())
                     && "待签字".equals(view.path("status").asText())
                     && (partySubject.equals(subject) || partySubject.equals(directorySubject)));
                 return view;

@@ -6,6 +6,7 @@ export const EMPLOYEE_SELF_SERVICE_PERMISSION_CODES = [
   'asset:item:view',
   'asset:receive_return:view',
   'asset:receive_return:sign',
+  'asset:borrow_return:view',
   'asset:request:view',
   'asset:request:create',
   'asset:self_service:view'
@@ -25,6 +26,14 @@ export const EMPLOYEE_SELF_SERVICE_MENU_ITEMS: readonly PortalMenuItem[] = [
     path: '/',
     pageKey: 'asset.portal.home',
     order: 10
+  },
+  {
+    id: 'signatures',
+    parentId: '',
+    title: '签字',
+    path: '/signatures',
+    pageKey: 'asset.portal.signatures',
+    order: 35
   },
   {
     id: 'requests',

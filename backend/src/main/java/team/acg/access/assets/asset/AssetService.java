@@ -27,7 +27,8 @@ import team.acg.access.assets.store.PortalReferenceCatalog;
 public class AssetService {
     private static final int MAX_ASSETS = 5_000;
     private static final Set<String> ALLOWED_STATUS = Set.of(
-        "空闲", "闲置", "上架", "待验收", "在用", "借用中", "维修中", "审批中", "交接待签字", "已报废");
+        "空闲", "闲置", "上架", "待验收", "在用", "借用中", "维修中", "审批中",
+        "领用待签字", "借用待签字", "交接待签字", "已报废");
     private static final Set<String> AVAILABLE = Set.of("空闲", "闲置", "上架", "待验收");
     private final AssetRepository repository;
     private final ObjectMapper mapper;
@@ -279,11 +280,17 @@ public class AssetService {
                 String receiver = requiredField(fields, "receiver");
                 String receiverSubject = requiredField(fields, "receiverSubject");
                 String location = requiredField(fields, "location");
+                boolean requiresSignature = workflowPolicy.requiresEmployeeSignature(
+                    "RECEIVE", fields.path("selfServiceRequest").asBoolean(false));
+                if (requiresSignature) snapshotReceipt(asset);
                 copyText(fields, asset, "department", "departmentUnionId", "company", "companyUnionId", "note");
                 asset.put("location", location);
                 asset.put("owner", receiver); asset.put("ownerSubject", receiverSubject);
-                asset.put("status", "在用"); asset.put("receiveDate", date(requiredField(fields, "date")));
-                lifecycle(asset, fields, "资产领用", receiver + " 领用 " + name);
+                asset.put("status", requiresSignature ? "领用待签字" : "在用");
+                asset.put("receiveDate", date(requiredField(fields, "date")));
+                lifecycle(asset, fields, requiresSignature ? "发起资产领用" : "资产领用",
+                    requiresSignature ? name + " 待 " + receiver + " 签字确认" : receiver + " 领用 " + name);
+                if (!requiresSignature) clearReceiptSnapshot(asset);
             }
             case "return" -> {
                 requireStatus(asset, Set.of("在用"));
@@ -299,12 +306,19 @@ public class AssetService {
                 String borrower = requiredField(fields, "borrower");
                 String borrowerSubject = requiredField(fields, "borrowerSubject");
                 String location = requiredField(fields, "location");
+                boolean requiresSignature = workflowPolicy.requiresEmployeeSignature(
+                    "BORROW", fields.path("selfServiceRequest").asBoolean(false));
+                if (requiresSignature) snapshotReceipt(asset);
                 copyText(fields, asset, "department", "departmentUnionId", "company", "companyUnionId", "note");
                 asset.put("location", location);
                 asset.put("owner", borrower); asset.put("ownerSubject", borrowerSubject);
-                asset.put("status", "借用中"); asset.put("borrowDate", date(requiredField(fields, "date")));
+                asset.put("status", requiresSignature ? "借用待签字" : "借用中");
+                asset.put("borrowDate", date(requiredField(fields, "date")));
                 String expected = fields.path("expectedReturnDates").path(asset.path("id").asText()).asText(fields.path("expectedReturnDate").asText());
-                asset.put("expectedReturnDate", date(expected)); lifecycle(asset, fields, "资产借用", borrower + " 借用 " + name);
+                asset.put("expectedReturnDate", date(expected));
+                lifecycle(asset, fields, requiresSignature ? "发起资产借用" : "资产借用",
+                    requiresSignature ? name + " 待 " + borrower + " 签字确认" : borrower + " 借用 " + name);
+                if (!requiresSignature) clearReceiptSnapshot(asset);
             }
             case "borrow-return" -> {
                 requireStatus(asset, Set.of("借用中"));
@@ -320,18 +334,19 @@ public class AssetService {
                 String receiver = requiredField(fields, "receiver");
                 String receiverSubject = requiredField(fields, "receiverSubject");
                 String location = requiredField(fields, "location");
-                snapshotHandover(asset);
+                snapshotReceipt(asset);
                 copyText(fields, asset, "company", "companyUnionId", "department", "departmentUnionId", "note");
                 asset.put("location", location);
                 asset.put("owner", receiver); asset.put("ownerSubject", receiverSubject);
                 asset.put("handoverDate", date(requiredField(fields, "date"))); asset.put("handoverType", fields.path("handoverType").asText("员工交接"));
                 if (AssetPartyResolver.PUBLIC_AREA_SUBJECT.equals(receiverSubject)
-                    || !workflowPolicy.requiresEmployeeHandoverSignature()) {
+                    || !workflowPolicy.requiresEmployeeSignature(
+                        "HANDOVER", fields.path("selfServiceRequest").asBoolean(false))) {
                     asset.put("status", "在用");
                     lifecycle(asset, fields,
                         AssetPartyResolver.PUBLIC_AREA_SUBJECT.equals(receiverSubject) ? "公共区域交接" : "资产交接",
                         name + " 已交接至 " + receiver);
-                    clearHandoverSnapshot(asset);
+                    clearReceiptSnapshot(asset);
                 } else {
                     asset.put("status", "交接待签字");
                     lifecycle(asset, fields, "发起资产交接", name + " 待 " + receiver + " 签字确认");
@@ -347,14 +362,17 @@ public class AssetService {
                 }
                 asset.put("status", "在用");
                 lifecycle(asset, fields, "交接签字", asset.path("owner").asText("接收人") + " 已确认交接");
-                clearHandoverSnapshot(asset);
+                clearReceiptSnapshot(asset);
             }
             case "handover-cancel" -> {
                 requireStatus(asset, Set.of("交接待签字"));
-                restoreHandoverSnapshot(asset);
+                restoreReceiptSnapshot(asset);
                 lifecycle(asset, fields, "取消交接", requiredField(fields, "operator") + " 取消交接单");
-                clearHandoverSnapshot(asset);
+                clearReceiptSnapshot(asset);
             }
+            case "receipt-sign" -> completeReceipt(asset, fields);
+            case "receipt-reject" -> rejectReceipt(asset, fields, false);
+            case "receipt-cancel" -> rejectReceipt(asset, fields, true);
             case "borrow-delay" -> {
                 requireStatus(asset, Set.of("借用中"));
                 String expected = date(requiredField(fields, "expectedReturnDate"));
@@ -494,11 +512,13 @@ public class AssetService {
             ObjectNode previous = before.get(assetId);
             switch (effectiveAction) {
                 case "receive" -> operationRepository.create(buildOperation(
-                    asset, previous, commandFields, "RECEIVE", "LY", "已完成"));
+                    asset, previous, commandFields, "RECEIVE", "LY",
+                    "领用待签字".equals(asset.path("status").asText()) ? "待签字" : "已完成"));
                 case "return" -> operationRepository.create(buildOperation(
                     asset, previous, commandFields, "RETURN", "TK", "已完成"));
                 case "borrow" -> {
-                    ObjectNode operation = buildOperation(asset, previous, commandFields, "BORROW", "JY", "待归还");
+                    ObjectNode operation = buildOperation(asset, previous, commandFields, "BORROW", "JY",
+                        "借用待签字".equals(asset.path("status").asText()) ? "待签字" : "待归还");
                     operation.put("returnOrderId", operationId("GH", operation.path("date").asText()));
                     operationRepository.create(operation);
                 }
@@ -526,6 +546,24 @@ public class AssetService {
                         operation.put("status", "已取消");
                         operation.put("cancelledAt", date(commandFields.path("date").asText()));
                     });
+                case "receipt-sign" -> updateReceiptOperation(assetId, previous.path("status").asText(), Set.of("待签字"), operation -> {
+                    operation.put("status", "BORROW".equals(operation.path("type").asText()) ? "待归还" : "已签字");
+                    operation.put("signedAt", java.time.Instant.now().toString());
+                    operation.put("signer", commandFields.path("operator").asText());
+                    operation.put("signerSubject", commandFields.path("operatorSubject").asText());
+                    operation.put("signatureImage", commandFields.path("signatureImage").asText());
+                });
+                case "receipt-reject" -> updateReceiptOperation(assetId, previous.path("status").asText(), Set.of("待签字"), operation -> {
+                    operation.put("status", "已打回");
+                    operation.put("rejectedAt", java.time.Instant.now().toString());
+                    operation.put("rejectedBy", commandFields.path("operator").asText());
+                    operation.put("rejectionReason", commandFields.path("reason").asText());
+                });
+                case "receipt-cancel" -> updateReceiptOperation(assetId, previous.path("status").asText(), Set.of("待签字"), operation -> {
+                    operation.put("status", "已终止");
+                    operation.put("cancelledAt", java.time.Instant.now().toString());
+                    operation.put("cancelledBy", commandFields.path("operator").asText());
+                });
                 case "borrow-delay" -> operationRepository.updateLatest(
                     assetId, "BORROW", Set.of("待归还"), operation -> {
                         operation.put("expectedReturnDate", asset.path("expectedReturnDate").asText());
@@ -551,6 +589,7 @@ public class AssetService {
         String operationDate = date(fields.path("date").asText(asset.path("purchaseDate").asText()));
         ObjectNode operation = mapper.createObjectNode();
         operation.put("id", operationId(prefix, operationDate));
+        operation.put("createdAt", java.time.Instant.now().toString());
         operation.put("assetId", asset.path("id").asText());
         operation.put("type", type);
         operation.put("status", status);
@@ -572,7 +611,58 @@ public class AssetService {
         operation.put("assetModel", asset.path("model").asText(""));
         operation.put("assetSn", asset.path("sn").asText(""));
         operation.put("assetPrice", asset.path("price").asDouble(0));
+        operation.put("noticeContent", workflowPolicy.noticeContent(
+            type, fields.path("selfServiceRequest").asBoolean(false)));
         return operation;
+    }
+
+    private void updateReceiptOperation(String assetId, String pendingStatus, Set<String> statuses,
+                                        java.util.function.Consumer<ObjectNode> mutation) {
+        operationRepository.updateLatest(assetId, receiptType(pendingStatus), statuses, mutation);
+    }
+
+    private String receiptType(String status) {
+        return switch (status) {
+            case "领用待签字" -> "RECEIVE";
+            case "借用待签字" -> "BORROW";
+            case "交接待签字" -> "HANDOVER";
+            default -> throw new IllegalArgumentException("Asset is not waiting for employee signature");
+        };
+    }
+
+    private void completeReceipt(ObjectNode asset, JsonNode fields) {
+        String type = receiptType(asset.path("status").asText());
+        requireDesignatedRecipient(asset, fields);
+        String signatureImage = fields.path("signatureImage").asText("").trim();
+        if (!signatureImage.matches("^data:image/(png|jpeg);base64,[A-Za-z0-9+/=]+$") || signatureImage.length() > 700_000) {
+            throw new IllegalArgumentException("A valid PNG or JPEG signature image is required");
+        }
+        asset.put("status", "BORROW".equals(type) ? "借用中" : "在用");
+        lifecycle(asset, fields, "员工签收", asset.path("owner").asText("接收人") + " 已签字确认");
+        clearReceiptSnapshot(asset);
+    }
+
+    private void rejectReceipt(ObjectNode asset, JsonNode fields, boolean cancelledByAdministrator) {
+        receiptType(asset.path("status").asText());
+        if (!cancelledByAdministrator) {
+            requireDesignatedRecipient(asset, fields);
+            requiredField(fields, "reason");
+        }
+        restoreReceiptSnapshot(asset);
+        lifecycle(asset, fields, cancelledByAdministrator ? "终止签收" : "签收打回",
+            cancelledByAdministrator
+                ? requiredField(fields, "operator") + " 终止待签收单"
+                : requiredField(fields, "operator") + " 打回待签收单");
+        clearReceiptSnapshot(asset);
+    }
+
+    private void requireDesignatedRecipient(ObjectNode asset, JsonNode fields) {
+        String receiverSubject = asset.path("ownerSubject").asText("").trim();
+        String operatorSubject = fields.path("operatorSubject").asText("").trim();
+        if (receiverSubject.isBlank() || operatorSubject.isBlank() || !receiverSubject.equals(operatorSubject)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Only the designated recipient can process this receipt");
+        }
     }
 
     private String operationParty(String type, ObjectNode asset, ObjectNode previous) {
@@ -660,7 +750,7 @@ public class AssetService {
         if (!allowed.contains(asset.path("status").asText())) throw new IllegalArgumentException("Asset is not eligible for this operation: " + asset.path("id").asText());
     }
 
-    private void snapshotHandover(ObjectNode asset) {
+    private void snapshotReceipt(ObjectNode asset) {
         snapshot(asset, "owner");
         snapshot(asset, "ownerSubject");
         snapshot(asset, "company");
@@ -669,6 +759,9 @@ public class AssetService {
         snapshot(asset, "departmentUnionId");
         snapshot(asset, "location");
         snapshot(asset, "status");
+        snapshot(asset, "receiveDate");
+        snapshot(asset, "borrowDate");
+        snapshot(asset, "expectedReturnDate");
     }
 
     private void snapshot(ObjectNode asset, String field) {
@@ -676,7 +769,7 @@ public class AssetService {
             asset.path(field).asText(""));
     }
 
-    private void restoreHandoverSnapshot(ObjectNode asset) {
+    private void restoreReceiptSnapshot(ObjectNode asset) {
         restore(asset, "owner", true);
         restore(asset, "ownerSubject", true);
         restore(asset, "company", false);
@@ -685,6 +778,9 @@ public class AssetService {
         restore(asset, "departmentUnionId", false);
         restore(asset, "location", true);
         restore(asset, "status", true);
+        restore(asset, "receiveDate", false);
+        restore(asset, "borrowDate", false);
+        restore(asset, "expectedReturnDate", false);
     }
 
     private void restore(ObjectNode asset, String field, boolean required) {
@@ -695,8 +791,9 @@ public class AssetService {
         asset.put(field, asset.path(snapshotField).asText(""));
     }
 
-    private void clearHandoverSnapshot(ObjectNode asset) {
-        Set.of("Owner", "OwnerSubject", "Company", "CompanyUnionId", "Department", "DepartmentUnionId", "Location", "Status")
+    private void clearReceiptSnapshot(ObjectNode asset) {
+        Set.of("Owner", "OwnerSubject", "Company", "CompanyUnionId", "Department", "DepartmentUnionId", "Location", "Status",
+                "ReceiveDate", "BorrowDate", "ExpectedReturnDate")
             .forEach(field -> asset.remove("handoverPrevious" + field));
     }
 
@@ -757,12 +854,15 @@ public class AssetService {
     private void validateStatusTransition(String id, String before, String after) {
         if (before.equals(after)) return;
         boolean allowed = switch (before) {
-            case "空闲", "闲置", "上架", "待验收" -> Set.of("在用", "借用中", "维修中", "审批中", "已报废").contains(after);
+            case "空闲", "闲置", "上架", "待验收" -> Set.of(
+                "在用", "借用中", "领用待签字", "借用待签字", "维修中", "审批中", "已报废").contains(after);
             case "在用" -> Set.of("空闲", "闲置", "维修中", "审批中", "交接待签字", "已报废").contains(after);
             case "借用中" -> Set.of("空闲", "闲置", "维修中", "审批中", "交接待签字").contains(after);
             case "维修中" -> Set.of("空闲", "闲置", "在用", "借用中", "已报废").contains(after);
             case "审批中" -> Set.of("空闲", "闲置", "在用", "借用中", "已报废").contains(after);
             case "交接待签字" -> Set.of("在用", "借用中").contains(after);
+            case "领用待签字" -> Set.of("空闲", "闲置", "上架", "待验收", "在用").contains(after);
+            case "借用待签字" -> Set.of("空闲", "闲置", "上架", "待验收", "借用中").contains(after);
             case "已报废" -> false;
             default -> false;
         };

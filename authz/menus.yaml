@@ -135,6 +135,17 @@ menus:
       - asset:request:view
     featureCodes:
       - PORTAL_REQUESTS
+  - id: signatures
+    title: 签字
+    icon: EditPen
+    path: /signatures
+    pageKey: asset.portal.signatures
+    file: /src/views/EmployeeSignaturesPage.vue
+    order: 35
+    permissionCodes:
+      - asset:receive_return:sign
+    featureCodes:
+      - PORTAL_REQUESTS
   - id: settings
     title: 系统
     icon: Setting

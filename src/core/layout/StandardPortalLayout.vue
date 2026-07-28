@@ -54,12 +54,14 @@ const resolvedSection = computed<Exclude<LayoutSection, 'auto'>>(() => {
   return 'none'
 })
 
-const primaryMenuIds = ['home', 'assets', 'requests', 'settings']
-const employeePortalPaths = new Set(['/', '/requests'])
+const primaryMenuIds = ['home', 'assets', 'signatures', 'requests', 'settings']
+const employeePortalPaths = new Set(['/', '/signatures', '/requests'])
 const primaryMenus = computed(() => primaryMenuIds
   .map((id) => menuItems.value.find((item) => item.id === id))
   .filter((item): item is PortalMenuItem => Boolean(item))
-  .filter((item) => !isEmployeeTerminal.value || ['home', 'requests'].includes(item.id)))
+  .filter((item) => isEmployeeTerminal.value
+    ? ['home', 'signatures', 'requests'].includes(item.id)
+    : item.id !== 'signatures'))
 const systemMenus = computed(() => menuItems.value
   .filter((item) => item.parentId === 'settings')
   .sort((left, right) => left.order - right.order))

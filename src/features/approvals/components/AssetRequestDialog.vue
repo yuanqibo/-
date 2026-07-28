@@ -2,6 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { Aim, Close, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import SignaturePad from '../../../shared/components/SignaturePad.vue'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { searchDirectoryPeople } from '../../assets/api/assets.api'
 import { useAssets } from '../../assets/composables/useAssets'
@@ -31,6 +32,8 @@ const scanOpen = ref(false)
 const scanCode = ref('')
 const scanInput = ref<{ focus: () => void }>()
 const receiverQuery = ref('')
+const requestSignatureOpen = ref(false)
+const requestSignatureImage = ref('')
 const form = reactive({
   type: '资产领用',
   assetIds: [] as string[],
@@ -50,6 +53,25 @@ const isSelfGiveBack = computed(() => form.type === '资产归还')
 const isSelfReceive = computed(() => form.type === '资产领用')
 const isSelfBorrow = computed(() => form.type === '资产借用')
 const isAvailableSelfService = computed(() => isSelfReceive.value || isSelfBorrow.value)
+const requestSignatureKey = computed(() => ({
+  '资产领用': 'selfReceiveAsset',
+  '资产借用': 'selfBorrowAsset',
+  '资产归还': 'selfGiveBackAsset',
+  '资产交接': 'selfHandoverAsset'
+}[form.type] || ''))
+const requestSignaturePolicy = computed<Record<string, unknown>>(() => {
+  const settings = store.value.assetPortalSelfServiceSettingsV9?.signSettings
+  if (!settings || typeof settings !== 'object' || !requestSignatureKey.value) return {}
+  const value = (settings as Record<string, unknown>)[requestSignatureKey.value]
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+})
+const requestSignatureRequired = computed(() => {
+  const timings = requestSignaturePolicy.value.timings
+  const start = timings && typeof timings === 'object' && Boolean((timings as Record<string, unknown>).start)
+  return start || Boolean(requestSignaturePolicy.value.noticeEnabled)
+})
+const requestSignatureNotice = computed(() => requestSignaturePolicy.value.noticeEnabled
+  ? String(requestSignaturePolicy.value.noticeContent || '') : '')
 const usesAssetPicker = computed(() => isHandover.value || isSelfReturn.value || isSelfGiveBack.value || isAvailableSelfService.value)
 const flattenLocations = (nodes: CatalogNode[], parent: string[] = []): string[] => nodes.flatMap((node) => {
   if (node.enabled === false) return []
@@ -98,6 +120,8 @@ const clearReceiver = (): void => {
   form.receiverCompany = ''
   form.receiverDepartment = ''
   receiverQuery.value = ''
+  requestSignatureOpen.value = false
+  requestSignatureImage.value = ''
 }
 const prepare = async (): Promise<void> => {
   Object.assign(form, {
@@ -183,12 +207,20 @@ const submit = async (): Promise<void> => {
   if (form.type === '资产借用' && !form.expectedReturnDate) { ElMessage.warning('请选择预计归还日期'); return }
   if (isSelfBorrow.value && form.expectedReturnDate < form.date) { ElMessage.warning('预计归还日期不能早于借用日期'); return }
   if (isHandover.value && (!form.receiverSubject || !form.receiverName)) { ElMessage.warning('请从组织目录选择接收人'); return }
+  if (requestSignatureRequired.value && !requestSignatureImage.value) {
+    requestSignatureOpen.value = true
+    return
+  }
   const details: Record<string, unknown> = { assetIds: [...form.assetIds], assetCount: form.assetIds.length }
   const fieldPrefix = form.type === '资产借用' ? 'borrow' : form.type === '资产归还' || form.type === '资产退还' ? 'return' : isHandover.value ? 'handover' : 'receive'
   details[`${fieldPrefix}Location`] = form.location
   details[`${fieldPrefix}Date`] = form.date
   if (isSelfReceive.value) details.receiveType = '个人领用'
   if (form.expectedReturnDate) details.expectedReturnDate = form.expectedReturnDate
+  if (requestSignatureImage.value) {
+    details.signatureImage = requestSignatureImage.value
+    details.signatureNotice = requestSignatureNotice.value
+  }
   if (isHandover.value) Object.assign(details, {
     receiverSubject: form.receiverSubject,
     receiverName: form.receiverName,
@@ -228,6 +260,12 @@ const submit = async (): Promise<void> => {
   } finally {
     submitting.value = false
   }
+}
+
+const confirmRequestSignature = (): void => {
+  if (!requestSignatureImage.value) { ElMessage.warning('请先完成签字'); return }
+  requestSignatureOpen.value = false
+  void submit()
 }
 
 watch(() => [props.modelValue, props.type, props.preselectedAssetId] as const, ([open]) => {
@@ -349,5 +387,11 @@ watch(() => [props.modelValue, props.type, props.preselectedAssetId] as const, (
       <el-form-item label="申请原因" class="standard-form-span"><el-input v-model="form.reason" type="textarea" :rows="3" /></el-form-item>
     </el-form>
     <template #footer><el-button @click="close">取消</el-button><el-button type="primary" :loading="submitting" @click="submit">{{ isAvailableSelfService ? '确认提交' : usesAssetPicker ? '确认' : '提交申请' }}</el-button></template>
+  </el-dialog>
+  <el-dialog v-model="requestSignatureOpen" title="申请签字确认" width="min(760px, 94vw)" append-to-body destroy-on-close>
+    <p v-if="requestSignatureNotice" class="signature-notice">{{ requestSignatureNotice }}</p>
+    <div class="signature-dialog-label">请签字确认后发起申请</div>
+    <SignaturePad v-model="requestSignatureImage" :height="280" />
+    <template #footer><el-button @click="requestSignatureOpen = false">取消</el-button><el-button type="primary" @click="confirmRequestSignature">确定</el-button></template>
   </el-dialog>
 </template>

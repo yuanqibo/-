@@ -73,6 +73,13 @@ export type AssetOperationRecord = {
   expectedReturnDate?: string
   returnOrderId?: string
   canSign?: boolean
+  createdAt?: string
+  signedAt?: string
+  signer?: string
+  signerSubject?: string
+  signatureImage?: string
+  noticeContent?: string
+  rejectionReason?: string
   [key: string]: unknown
 }
 
@@ -111,6 +118,11 @@ export type AssetCommand =
   | 'borrow'
   | 'borrow-return'
   | 'handover'
+  | 'handover-sign'
+  | 'handover-cancel'
+  | 'receipt-sign'
+  | 'receipt-reject'
+  | 'receipt-cancel'
   | 'delete'
   | 'edit'
   | 'batch-edit'

@@ -36,11 +36,18 @@ class AssetControllerTest {
     void clearAssets() {
         jdbc.update("DELETE FROM asset_audit_log");
         jdbc.update("DELETE FROM asset_record");
+        var signSettings = mapper.createObjectNode();
+        signSettings.set("assetReceive", mapper.createObjectNode().put("employeeSign", false));
+        signSettings.set("assetBorrow", mapper.createObjectNode().put("employeeSign", false));
+        signSettings.set("assetHandover", mapper.createObjectNode().put("employeeSign", true));
+        var selfService = mapper.createObjectNode();
+        selfService.set("signSettings", signSettings);
         storeRepository.saveAll(Map.of(
             "assetCategoryTree", mapper.createArrayNode().add(mapper.createObjectNode()
                 .put("id", "cat-computer").put("name", "电脑").put("code", "PC").set("children", mapper.createArrayNode())),
             "assetLocationTree", mapper.createArrayNode().add(mapper.createObjectNode()
-                .put("id", "loc-hq").put("name", "总部").set("children", mapper.createArrayNode()))));
+                .put("id", "loc-hq").put("name", "总部").set("children", mapper.createArrayNode())),
+            "assetPortalSelfServiceSettingsV9", selfService));
     }
 
     @Test
@@ -153,6 +160,58 @@ class AssetControllerTest {
             .andExpect(jsonPath("$.items[0].status").value("在用"))
             .andExpect(jsonPath("$.items[0].owner").value("新责任人"))
             .andExpect(jsonPath("$.items[0].handoverPreviousOwner").doesNotExist());
+    }
+
+    @Test
+    void receiveSignaturePersistsTheImageAndRejectRestoresTheAsset() throws Exception {
+        var signSettings = mapper.createObjectNode();
+        signSettings.set("assetReceive", mapper.createObjectNode().put("employeeSign", true)
+            .put("noticeEnabled", true).put("noticeContent", "请核对资产"));
+        signSettings.set("assetBorrow", mapper.createObjectNode().put("employeeSign", true));
+        var settings = mapper.createObjectNode();
+        settings.set("signSettings", signSettings);
+        storeRepository.saveAll(Map.of("assetPortalSelfServiceSettingsV9", settings));
+
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-SIGN","name":"签收资产","category":"电脑","location":"总部"}}
+            """)).andExpect(status().isOk());
+
+        mvc.perform(post("/api/assets/commands/receive").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-SIGN"],"fields":{"receiver":"李雷","receiverSubject":"user-1",
+              "location":"总部","date":"2026-07-10"}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("领用待签字"));
+
+        mvc.perform(post("/api/assets/commands/receipt-sign").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-SIGN"],"fields":{"operator":"李雷","operatorSubject":"user-1",
+              "signatureImage":"data:image/png;base64,AA==","date":"2026-07-11"}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("在用"));
+
+        mvc.perform(get("/api/asset-operations").param("type", "RECEIVE"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("已签字"))
+            .andExpect(jsonPath("$.items[0].signatureImage").value("data:image/png;base64,AA=="))
+            .andExpect(jsonPath("$.items[0].noticeContent").value("请核对资产"));
+
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-REJECT","name":"打回资产","category":"电脑","location":"总部"}}
+            """)).andExpect(status().isOk());
+        mvc.perform(post("/api/assets/commands/borrow").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-REJECT"],"fields":{"borrower":"韩梅梅","borrowerSubject":"user-2",
+              "location":"总部","date":"2026-07-10","expectedReturnDate":"2026-07-20"}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("借用待签字"));
+        mvc.perform(post("/api/assets/commands/receipt-reject").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-REJECT"],"fields":{"operator":"韩梅梅","operatorSubject":"user-2",
+              "reason":"设备与单据不符","date":"2026-07-11"}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("空闲"))
+            .andExpect(jsonPath("$.items[0].owner").value("未分配"));
     }
 
     @Test

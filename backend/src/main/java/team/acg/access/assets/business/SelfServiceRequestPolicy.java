@@ -24,6 +24,11 @@ public class SelfServiceRequestPolicy {
         "资产归还", "giveBackAsset",
         "资产退还", "returnAsset",
         "资产交接", "handoverAsset");
+    private static final Map<String, String> REQUEST_SIGNATURE_KEYS = Map.of(
+        "资产领用", "selfReceiveAsset",
+        "资产借用", "selfBorrowAsset",
+        "资产归还", "selfGiveBackAsset",
+        "资产交接", "selfHandoverAsset");
     private static final Set<String> AVAILABLE_ASSET_SETTINGS = Set.of("receiveAsset", "borrowAsset");
     private static final Set<String> CONFIGURABLE_APPROVAL_SETTINGS = Set.of(
         "receiveAsset", "borrowAsset", "handoverAsset");
@@ -61,6 +66,7 @@ public class SelfServiceRequestPolicy {
         if (policy.path("remarkRequired").asBoolean(false) && (reason == null || reason.isBlank())) {
             throw new IllegalArgumentException("Request reason is required");
         }
+        enforceStartSignature(normalizedType, details, settings);
         if (AVAILABLE_ASSET_SETTINGS.contains(settingKey)) {
             enforceAvailableAssetSelection(details, policy, identity, settingKey);
         } else if (OWNED_ASSET_STATUSES.containsKey(settingKey)) {
@@ -70,6 +76,19 @@ public class SelfServiceRequestPolicy {
         if ("borrowAsset".equals(settingKey)) enforceBorrowDetails(details);
         if (Set.of("giveBackAsset", "returnAsset").contains(settingKey)) enforceReturnDetails(details);
         if ("handoverAsset".equals(settingKey)) enforceHandoverTarget(details, identity);
+    }
+
+    private void enforceStartSignature(String requestType, JsonNode details, JsonNode settings) {
+        String signatureKey = REQUEST_SIGNATURE_KEYS.get(requestType);
+        if (signatureKey == null) return;
+        JsonNode signature = settings.path("signSettings").path(signatureKey);
+        boolean required = signature.path("timings").path("start").asBoolean(false)
+            || signature.path("noticeEnabled").asBoolean(false);
+        if (!required) return;
+        String image = details == null ? "" : details.path("signatureImage").asText("").trim();
+        if (!image.matches("^data:image/(png|jpeg);base64,[A-Za-z0-9+/=]+$") || image.length() > 700_000) {
+            throw new IllegalArgumentException("Employee signature is required before submitting this request");
+        }
     }
 
     public boolean requiresApproval(String requestType, RequestIdentityService.Identity identity) {

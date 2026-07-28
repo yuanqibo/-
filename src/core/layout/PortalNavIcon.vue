@@ -25,6 +25,11 @@ defineProps<{ kind: string }>()
       <path d="M25.8 42c1.4-4.1 4.3-6 7.7-6s6.3 1.9 7.7 6H25.8Z" fill="currentColor" stroke="#ffffff" stroke-width="2.2" stroke-linejoin="round" />
     </g>
   </svg>
+  <svg v-else-if="kind === 'signatures'" class="nav-signature-icon" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+    <path d="M33.8 6.8a4.2 4.2 0 0 1 5.9 5.9L20.4 32l-8.1 2.1 2.1-8.1L33.8 6.8Z" fill="currentColor" />
+    <path d="m30.3 10.3 5.9 5.9" fill="none" stroke="#fff" stroke-width="2.6" />
+    <path d="M8.5 40h31" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" />
+  </svg>
   <svg v-else class="nav-system-icon" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
     <g transform="translate(0 -2) translate(24 26) scale(.8) translate(-24 -26)">
       <path d="M21.1 6h5.8l1.1 5.1c1.2.4 2.3.9 3.3 1.6l4.4-2.8 4.1 4.1-2.8 4.4c.7 1 1.2 2.2 1.6 3.3l5.1 1.1v5.8l-5.1 1.1c-.4 1.2-.9 2.3-1.6 3.3l2.8 4.4-4.1 4.1-4.4-2.8c-1 .7-2.2 1.2-3.3 1.6L26.9 46h-5.8l-1.1-5.1c-1.2-.4-2.3-.9-3.3-1.6l-4.4 2.8-4.1-4.1 2.8-4.4c-.7-1-1.2-2.2-1.6-3.3L4.3 29.2v-5.8l5.1-1.1c.4-1.2.9-2.3 1.6-3.3L8.2 14.6l4.1-4.1 4.4 2.8c1-.7 2.2-1.2 3.3-1.6L21.1 6Z" fill="currentColor" />
