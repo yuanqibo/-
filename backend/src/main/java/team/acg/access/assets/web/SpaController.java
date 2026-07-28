@@ -11,7 +11,7 @@ public class SpaController {
         "/assets/stocktake", "/assets/consumables", "/assets/repairs", "/assets/contracts",
         "/assets/settings", "/assets/settings/locations", "/assets/settings/categories",
         "/assets/settings/code-rules", "/assets/settings/label-templates",
-        "/requests", "/system", "/system/**"
+        "/requests", "/signatures", "/system", "/system/**"
     })
     public String index() {
         return "forward:/index.html";

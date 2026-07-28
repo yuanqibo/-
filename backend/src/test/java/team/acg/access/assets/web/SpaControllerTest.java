@@ -20,7 +20,7 @@ class SpaControllerTest {
             "/assets", "/assets/inbound", "/assets/receive-return", "/assets/borrow-return",
             "/assets/stocktake", "/assets/consumables", "/assets/repairs", "/assets/contracts",
             "/assets/settings", "/assets/settings/locations", "/assets/settings/categories",
-            "/assets/settings/code-rules", "/assets/settings/label-templates", "/requests",
+            "/assets/settings/code-rules", "/assets/settings/label-templates", "/requests", "/signatures",
             "/system", "/system/employees", "/system/departments", "/system/self-service",
             "/system/integrations", "/system/forms"
         )) {
