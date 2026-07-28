@@ -36,7 +36,7 @@ public class EcpIdentityService {
     private final Map<String, CachedIdentity> identityCache = new ConcurrentHashMap<>();
 
     public EcpIdentityService(EcpClient client,
-                              @Value("${asset-portal.security.identity-cache-ttl:10s}") Duration cacheTtl) {
+                              @Value("${asset-portal.security.identity-cache-ttl:1m}") Duration cacheTtl) {
         this.client = client;
         this.cacheTtlMillis = Math.max(0, cacheTtl.toMillis());
     }
@@ -54,6 +54,10 @@ public class EcpIdentityService {
             identityCache.entrySet().removeIf(entry -> entry.getValue().expiresAtMillis() <= now);
         }
         return cached.identity();
+    }
+
+    public void invalidateAll() {
+        identityCache.clear();
     }
 
     private Map<String, Object> resolveFresh(String token) {

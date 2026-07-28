@@ -48,7 +48,7 @@ asset-portal:
   security:
     tenant-id: ${ECP_TENANT_ID:}
     allow-unauthenticated-api-for-tests: ${ALLOW_UNAUTHENTICATED_TEST_MODE:false}
-    identity-cache-ttl: ${ECP_IDENTITY_CACHE_TTL:10s}
+    identity-cache-ttl: ${ECP_IDENTITY_CACHE_TTL:1m}
   store:
     max-keys-per-request: ${STORE_MAX_KEYS_PER_REQUEST:100}
     max-value-bytes: ${STORE_MAX_VALUE_BYTES:10485760}

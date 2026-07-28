@@ -15,9 +15,11 @@ import java.util.concurrent.ConcurrentHashMap;
 public class EcpDirectoryUserService {
     private static final int PAGE_SIZE = 100;
     private static final int MAX_PAGES = 100;
+    private static final long PAGE_CACHE_TTL_MILLIS = Duration.ofMinutes(1).toMillis();
     private static final long CACHE_TTL_MILLIS = Duration.ofMinutes(5).toMillis();
 
     private final EcpClient client;
+    private final Map<PageKey, CachedPage> pages = new ConcurrentHashMap<>();
     private final Map<String, CachedProfile> profiles = new ConcurrentHashMap<>();
 
     public EcpDirectoryUserService(EcpClient client) {
@@ -27,9 +29,16 @@ public class EcpDirectoryUserService {
     public EcpPage<EcpUserProfile> page(String query, int page, int size) {
         pruneExpiredProfiles();
         String normalizedQuery = text(query);
-        EcpPage<EcpUserProfile> result = normalizedQuery.isEmpty()
-            ? client.directory().users().list(page, size)
-            : client.directory().users().search(normalizedQuery, page, size);
+        long now = System.currentTimeMillis();
+        PageKey key = new PageKey(normalizedQuery, page, size);
+        CachedPage cached = pages.compute(key, (ignored, current) -> {
+            if (current != null && current.expiresAtMillis() > now) return current;
+            EcpPage<EcpUserProfile> loaded = normalizedQuery.isEmpty()
+                ? client.directory().users().list(page, size)
+                : client.directory().users().search(normalizedQuery, page, size);
+            return new CachedPage(loaded, System.currentTimeMillis() + PAGE_CACHE_TTL_MILLIS);
+        });
+        EcpPage<EcpUserProfile> result = cached.page();
         result.items().forEach(this::remember);
         return result;
     }
@@ -95,6 +104,9 @@ public class EcpDirectoryUserService {
 
     private void pruneExpiredProfiles() {
         long now = System.currentTimeMillis();
+        pages.forEach((key, cached) -> {
+            if (cached.expiresAtMillis() < now) pages.remove(key, cached);
+        });
         profiles.forEach((subject, cached) -> {
             if (cached.expiresAtMillis() < now) profiles.remove(subject, cached);
         });
@@ -107,5 +119,7 @@ public class EcpDirectoryUserService {
     public record DirectoryParty(String subject, String name, String departmentUnionId, String department,
                                  String companyUnionId, String company) {}
 
+    private record PageKey(String query, int page, int size) {}
+    private record CachedPage(EcpPage<EcpUserProfile> page, long expiresAtMillis) {}
     private record CachedProfile(EcpUserProfile profile, long expiresAtMillis) {}
 }

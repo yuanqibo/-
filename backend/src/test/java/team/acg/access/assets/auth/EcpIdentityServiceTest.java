@@ -24,6 +24,27 @@ import static org.mockito.ArgumentMatchers.isNull;
 
 class EcpIdentityServiceTest {
     @Test
+    void invalidatesCachedIdentityAfterAuthorizationChanges() {
+        EcpClient client = mock(EcpClient.class);
+        SessionOperations session = mock(SessionOperations.class);
+        RolesOperations roles = mock(RolesOperations.class);
+        AssignmentsOperations assignments = mock(AssignmentsOperations.class);
+        when(client.session("session-token")).thenReturn(session);
+        when(session.context()).thenReturn(context("APP_ADMIN", "APP_ADMIN", List.of("asset:item:view")));
+        when(client.roles()).thenReturn(roles);
+        when(roles.list()).thenReturn(List.of());
+        when(roles.assignments()).thenReturn(assignments);
+        when(assignments.list(anyString(), isNull())).thenReturn(List.of());
+        EcpIdentityService service = new EcpIdentityService(client, Duration.ofMinutes(1));
+
+        service.resolve("session-token");
+        service.invalidateAll();
+        service.resolve("session-token");
+
+        verify(session, times(2)).context();
+    }
+
+    @Test
     void reusesAResolvedIdentityForConcurrentPageRequests() {
         EcpClient client = mock(EcpClient.class);
         SessionOperations session = mock(SessionOperations.class);

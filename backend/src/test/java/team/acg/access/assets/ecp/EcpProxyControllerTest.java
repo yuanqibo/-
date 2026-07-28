@@ -17,6 +17,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import team.acg.access.assets.auth.EcpIdentityService;
 import team.acg.access.assets.auth.RequestIdentityService;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,6 +33,7 @@ class EcpProxyControllerTest {
     private RequestIdentityService identityService;
     private AssignmentsOperations assignments;
     private ObjectProvider<EcpClient> ecpClientProvider;
+    private EcpIdentityService identityCache;
 
     @BeforeEach
     void startUpstream() throws Exception {
@@ -58,14 +60,17 @@ class EcpProxyControllerTest {
         upstream.start();
         ecpClient = mock(EcpClient.class);
         ecpClientProvider = mock(ObjectProvider.class);
+        ObjectProvider<EcpIdentityService> identityCacheProvider = mock(ObjectProvider.class);
+        identityCache = mock(EcpIdentityService.class);
         identityService = mock(RequestIdentityService.class);
         RolesOperations roles = mock(RolesOperations.class);
         assignments = mock(AssignmentsOperations.class);
         when(ecpClient.roles()).thenReturn(roles);
         when(ecpClientProvider.getIfAvailable()).thenReturn(ecpClient);
+        when(identityCacheProvider.getIfAvailable()).thenReturn(identityCache);
         when(roles.assignments()).thenReturn(assignments);
         controller = new EcpProxyController("http://127.0.0.1:" + upstream.getAddress().getPort(), "WLY5YG",
-            ecpClientProvider, identityService, new ObjectMapper());
+            ecpClientProvider, identityCacheProvider, identityService, new ObjectMapper());
     }
 
     @AfterEach
@@ -153,5 +158,6 @@ class EcpProxyControllerTest {
         assertThat(new String(response.getBody(), StandardCharsets.UTF_8)).contains("account:user-1", "assignmentCount");
         verify(identityService).requirePermission(request, "authz:app_role:assign");
         verify(assignments).syncSubjects(any());
+        verify(identityCache).invalidateAll();
     }
 }

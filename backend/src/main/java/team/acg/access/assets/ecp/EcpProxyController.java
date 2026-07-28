@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.Map;
 import java.util.Locale;
 import java.util.Optional;
+import team.acg.access.assets.auth.EcpIdentityService;
 import team.acg.access.assets.auth.RequestIdentityService;
 
 @RestController
@@ -48,12 +49,14 @@ public class EcpProxyController {
     private final String baseUrl;
     private final String appCode;
     private final ObjectProvider<EcpClient> ecpClientProvider;
+    private final ObjectProvider<EcpIdentityService> identityCacheProvider;
     private final RequestIdentityService identityService;
     private final ObjectMapper mapper;
 
     public EcpProxyController(@Value("${asset-portal.ecp-api-base-url}") String baseUrl,
                               @Value("${ecp.sdk.app-code}") String appCode,
                               ObjectProvider<EcpClient> ecpClientProvider,
+                              ObjectProvider<EcpIdentityService> identityCacheProvider,
                               RequestIdentityService identityService,
                               ObjectMapper mapper) {
         this.baseUrl = baseUrl.replaceAll("/$", "");
@@ -62,6 +65,7 @@ public class EcpProxyController {
         }
         this.appCode = appCode;
         this.ecpClientProvider = ecpClientProvider;
+        this.identityCacheProvider = identityCacheProvider;
         this.identityService = identityService;
         this.mapper = mapper;
     }
@@ -153,6 +157,8 @@ public class EcpProxyController {
         } else {
             return Optional.empty();
         }
+        EcpIdentityService identityCache = identityCacheProvider.getIfAvailable();
+        if (identityCache != null) identityCache.invalidateAll();
         return Optional.of(mapper.writeValueAsBytes(result));
     }
 

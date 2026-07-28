@@ -14,9 +14,27 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 class EcpDirectoryUserServiceTest {
+    @Test
+    void reusesTheSameDirectoryPageWithinTheShortCacheWindow() {
+        EcpClient client = mock(EcpClient.class);
+        DirectoryOperations directory = mock(DirectoryOperations.class);
+        UsersOperations users = mock(UsersOperations.class);
+        when(client.directory()).thenReturn(directory);
+        when(directory.users()).thenReturn(users);
+        when(users.list(1, 50)).thenReturn(new EcpPage<>(List.of(profile("user-1")), 1, 50, 1));
+        EcpDirectoryUserService service = new EcpDirectoryUserService(client);
+
+        EcpPage<EcpUserProfile> first = service.page("", 1, 50);
+        EcpPage<EcpUserProfile> second = service.page("", 1, 50);
+
+        assertThat(second).isSameAs(first);
+        verify(users, times(1)).list(1, 50);
+    }
+
     @Test
     void resolvesAStableDirectorySubjectFromTheApplicationDirectory() {
         EcpClient client = mock(EcpClient.class);

@@ -6,6 +6,7 @@ vi.mock('../../../src/shared/api/http', () => ({ apiRequest }))
 import {
   copyAsset,
   createAsset,
+  fetchAssets,
   runAssetCommand,
   searchDirectoryPeople,
   updateStocktake
@@ -22,6 +23,19 @@ describe('assets feature API', () => {
 
     await copyAsset('AST-1', draft)
     expect(apiRequest).toHaveBeenLastCalledWith('/api/assets', { method: 'POST', body: { sourceAssetId: 'AST-1', item: draft } })
+  })
+
+  it('reuses recent asset reads and invalidates them after a write', async () => {
+    apiRequest.mockResolvedValueOnce({ items: [{ id: 'AST-1' }] })
+    await fetchAssets()
+    await fetchAssets()
+    expect(apiRequest).toHaveBeenCalledTimes(1)
+
+    apiRequest.mockResolvedValueOnce({ item: { id: 'AST-2' } })
+    await createAsset({ name: '显示器', category: 'IT设备', location: '仓库' })
+    apiRequest.mockResolvedValueOnce({ items: [{ id: 'AST-1' }, { id: 'AST-2' }] })
+    await fetchAssets()
+    expect(apiRequest).toHaveBeenCalledTimes(3)
   })
 
   it('encodes command and stocktake identifiers', async () => {

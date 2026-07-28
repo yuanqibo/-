@@ -28,12 +28,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @ConditionalOnProperty(prefix = "ecp.sdk", name = "enabled", havingValue = "true")
 public class EcpOrganizationService {
     private static final int PAGE_SIZE = 100;
     private static final int MAX_PAGES = 100;
+    private static final long CACHE_TTL_MILLIS = Duration.ofMinutes(2).toMillis();
 
     private final EcpClient client;
     private final EcpTransportClient transportClient;
@@ -43,6 +46,7 @@ public class EcpOrganizationService {
         .build();
     private final ObjectMapper objectMapper;
     private final String baseUrl;
+    private final Map<String, CachedOrganization> organizations = new ConcurrentHashMap<>();
 
     public EcpOrganizationService(EcpClient client,
                                   ObjectMapper objectMapper,
@@ -61,10 +65,24 @@ public class EcpOrganizationService {
     }
 
     public OrganizationConsole load(String tenantId, String authorization) {
-        List<String> warnings = new ArrayList<>();
-        List<EcpCompanyProfile> companies = safeCompanies(warnings);
-        List<EcpDepartmentProfile> departments = loadDepartments(warnings);
-        List<EcpUserProfile> users = loadUsers(warnings);
+        String cacheKey = text(tenantId);
+        long now = System.currentTimeMillis();
+        CachedOrganization cached = organizations.compute(cacheKey, (ignored, current) -> {
+            if (current != null && current.expiresAtMillis() > now) return current;
+            return new CachedOrganization(loadFresh(tenantId, authorization),
+                System.currentTimeMillis() + CACHE_TTL_MILLIS);
+        });
+        return cached.console();
+    }
+
+    private OrganizationConsole loadFresh(String tenantId, String authorization) {
+        List<String> warnings = java.util.Collections.synchronizedList(new ArrayList<>());
+        CompletableFuture<List<EcpCompanyProfile>> companiesFuture = CompletableFuture.supplyAsync(() -> safeCompanies(warnings));
+        CompletableFuture<List<EcpDepartmentProfile>> departmentsFuture = CompletableFuture.supplyAsync(() -> loadDepartments(warnings));
+        CompletableFuture<List<EcpUserProfile>> usersFuture = CompletableFuture.supplyAsync(() -> loadUsers(warnings));
+        List<EcpCompanyProfile> companies = companiesFuture.join();
+        List<EcpDepartmentProfile> departments = departmentsFuture.join();
+        List<EcpUserProfile> users = usersFuture.join();
         List<AccountSetView> accountSets = loadAccountSets(tenantId, authorization, companies, users, warnings);
         OrganizationBuilder builder = new OrganizationBuilder();
         companies.forEach(builder::addCompany);
@@ -79,7 +97,7 @@ public class EcpOrganizationService {
                 true,
                 true,
                 ""),
-            warnings,
+            List.copyOf(warnings),
             OffsetDateTime.now());
     }
 
@@ -220,6 +238,8 @@ public class EcpOrganizationService {
     public record OrganizationConsole(List<AccountSetView> accountSets, List<OrganizationNode> roots,
                                       List<UserView> users, OrganizationCapabilities capabilities,
                                       List<String> warnings, OffsetDateTime fetchedAt) {}
+
+    private record CachedOrganization(OrganizationConsole console, long expiresAtMillis) {}
 
     public record OrganizationCapabilities(boolean sync, boolean syncConfiguration, boolean accountSetSettings,
                                            String unavailableReason) {}
