@@ -1,4 +1,4 @@
-import { onBeforeUnmount, reactive, ref } from 'vue'
+import { onActivated, onBeforeUnmount, onDeactivated, reactive, ref } from 'vue'
 import { memberAuthorizationWorkspaceUrl } from '../api/member-authorization.api'
 import type { MemberAuthorizationWorkspaceState } from '../types/member-authorization'
 
@@ -32,52 +32,25 @@ export const useMemberAuthorizationWorkspace = () => {
   const frame = ref<HTMLIFrameElement>()
   const state = reactive<MemberAuthorizationWorkspaceState>({
     loaded: false,
-    docked: false,
-    overlayOpen: false,
     errorMessage: ''
   })
   const workspaceUrl = memberAuthorizationWorkspaceUrl()
   let drawerObserver: MutationObserver | null = null
-  let anchorResizeObserver: ResizeObserver | null = null
-  let dockedShell: HTMLElement | null = null
-  let dockAnchor: HTMLElement | null = null
   let loadTimer: number | null = null
   let loadTimeout: number | null = null
   let syncFrame: number | null = null
-  let positionFrame: number | null = null
+  let active = true
 
-  const positionDock = (): void => {
-    if (!dockedShell || !dockAnchor?.isConnected || state.overlayOpen) return
-    const rect = dockAnchor.getBoundingClientRect()
-    dockedShell.style.setProperty('--authz-workspace-dock-left', `${Math.round(rect.left)}px`)
-    dockedShell.style.setProperty('--authz-workspace-dock-top', `${Math.round(rect.top)}px`)
-    dockedShell.style.setProperty('--authz-workspace-dock-width', `${Math.round(rect.width)}px`)
-    dockedShell.style.setProperty('--authz-workspace-dock-height', `${Math.round(rect.height)}px`)
-  }
-
-  const schedulePositionDock = (): void => {
-    if (positionFrame !== null) return
-    positionFrame = window.requestAnimationFrame(() => {
-      positionFrame = null
-      positionDock()
-    })
-  }
-
-  const setOverlay = (active: boolean, hideWorkspaceApp = active): void => {
-    state.overlayOpen = active
-    setClassState(dockedShell, 'is-workspace-drawer-open', active)
-    setClassState(document.body, 'authz-workspace-overlay-active', active)
-    try {
-      setClassState(frame.value?.contentDocument?.body, 'authz-workspace-portal-overlay-active', hideWorkspaceApp)
-    } catch {
-      // Supported deployments render this iframe on the same origin.
-    }
-    if (!active) schedulePositionDock()
+  const disconnectObserver = (): void => {
+    drawerObserver?.disconnect()
+    drawerObserver = null
+    const frameWindow = frame.value?.contentWindow
+    if (syncFrame !== null && frameWindow) frameWindow.cancelAnimationFrame(syncFrame)
+    syncFrame = null
   }
 
   const observeFrame = (): void => {
-    drawerObserver?.disconnect()
-    setOverlay(false, false)
+    disconnectObserver()
     try {
       const frameDocument = frame.value?.contentDocument
       const frameWindow = frame.value?.contentWindow
@@ -85,13 +58,9 @@ export const useMemberAuthorizationWorkspace = () => {
       const sync = (): void => {
         syncFrame = null
         const overlays = Array.from(frameDocument.getElementsByClassName('el-overlay'))
-        overlays.forEach((overlay) => setClassState(overlay, 'authz-workspace-host', true))
-        const activeOverlays = overlays.filter((overlay) => {
-          if (!overlay.querySelector(WORKSPACE_SURFACE_SELECTOR)) return false
-          const style = frameWindow.getComputedStyle(overlay)
-          return style.display !== 'none' && style.visibility !== 'hidden'
+        overlays.forEach((overlay) => {
+          setClassState(overlay, 'authz-workspace-host', Boolean(overlay.querySelector(WORKSPACE_SURFACE_SELECTOR)))
         })
-        setOverlay(activeOverlays.length > 0, activeOverlays.some((overlay) => !overlay.closest('#app')))
       }
       const scheduleSync = (): void => {
         if (syncFrame !== null) return
@@ -113,33 +82,23 @@ export const useMemberAuthorizationWorkspace = () => {
     }
   }
 
-  const dockFrame = (element: HTMLIFrameElement): void => {
-    const shell = element.closest<HTMLElement>('.account-management-frame-shell')
-    const anchor = shell?.closest<HTMLElement>('.account-management-frame-anchor')
-    if (!shell || !anchor) return
-    dockedShell = shell
-    dockAnchor = anchor
-    state.docked = true
-    shell.classList.add('is-workspace-docked')
-    document.body.append(shell)
-    window.addEventListener('resize', schedulePositionDock)
-    window.addEventListener('scroll', schedulePositionDock, true)
-    anchorResizeObserver = new ResizeObserver(schedulePositionDock)
-    anchorResizeObserver.observe(anchor)
-    positionDock()
-  }
-
-  const bindFrame = (element: unknown): void => {
-    if (!(element instanceof HTMLIFrameElement) || frame.value === element) return
-    frame.value = element
+  const requestWorkspace = (element: HTMLIFrameElement): void => {
+    if (loadTimer !== null) window.clearTimeout(loadTimer)
     loadTimer = window.setTimeout(() => {
-      dockFrame(element)
+      loadTimer = null
+      if (frame.value !== element || !element.isConnected) return
       element.dataset.workspaceRequested = 'true'
       element.src = workspaceUrl
       loadTimeout = window.setTimeout(() => {
         if (!state.loaded) state.errorMessage = 'ECP 成员授权工作台加载超时，请刷新页面重试'
       }, 20_000)
     }, 0)
+  }
+
+  const bindFrame = (element: unknown): void => {
+    if (!(element instanceof HTMLIFrameElement) || frame.value === element) return
+    frame.value = element
+    requestWorkspace(element)
   }
 
   const frameLoaded = (): void => {
@@ -154,19 +113,24 @@ export const useMemberAuthorizationWorkspace = () => {
     loadTimeout = null
     state.loaded = true
     state.errorMessage = ''
-    observeFrame()
+    if (active) observeFrame()
   }
 
   onBeforeUnmount(() => {
     if (loadTimer !== null) window.clearTimeout(loadTimer)
     if (loadTimeout !== null) window.clearTimeout(loadTimeout)
-    drawerObserver?.disconnect()
-    anchorResizeObserver?.disconnect()
-    window.removeEventListener('resize', schedulePositionDock)
-    window.removeEventListener('scroll', schedulePositionDock, true)
-    if (positionFrame !== null) window.cancelAnimationFrame(positionFrame)
-    setOverlay(false, false)
-    dockedShell?.remove()
+    disconnectObserver()
+  })
+
+  onDeactivated(() => {
+    active = false
+    disconnectObserver()
+  })
+  onActivated(() => {
+    active = true
+    const element = frame.value
+    if (state.loaded) observeFrame()
+    else if (element && element.dataset.workspaceRequested !== 'true') requestWorkspace(element)
   })
 
   return { frame, state, bindFrame, frameLoaded }

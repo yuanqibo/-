@@ -1,6 +1,7 @@
 import type { App as VueApp } from 'vue'
 import type { RouteRecordRaw, Router } from 'vue-router'
 import type { AuthzSessionContext } from '@acg/ecp-sdk'
+import { configureAuthzBrowserRuntime } from '@acg/ecp-auth'
 
 export type { AuthzSessionContext } from '@acg/ecp-sdk'
 
@@ -32,6 +33,7 @@ const routes: Array<RouteRecordRaw & { path: string }> = [
   { path: '/assets/settings/label-templates', name: 'e2e-labels', component: () => import('../../../src/views/AssetLabelTemplatesPage.vue') },
   { path: '/requests', name: 'e2e-requests', component: () => import('../../../src/views/ApprovalsPage.vue') },
   { path: '/system', name: 'e2e-system', component: () => import('../../../src/views/SystemIndexView.vue') },
+  { path: '/workspace', name: 'e2e-authz-workspace', component: () => import('./AuthzWorkspaceHost.vue') },
   { path: '/system/employees', name: 'e2e-employees', component: () => import('../../../src/views/EmployeeDirectoryPage.vue') },
   { path: '/system/departments', name: 'e2e-departments', component: () => import('../../../src/views/OrganizationDirectoryPage.vue') },
   { path: '/system/self-service', name: 'e2e-self-service', component: () => import('../../../src/views/SelfServiceSettingsPage.vue') },
@@ -84,7 +86,7 @@ const session = (): AuthzSessionContext => ({
 export const ecp = {
   auth: {
     permission: { all: (input: AccessInput) => allowed(input, 'all'), any: (input: AccessInput) => allowed(input, 'any') },
-    menu: { getAccessibleNavTree: async () => menuTree },
+    menu: { getNavTree: async () => menuTree, getAccessibleNavTree: async () => menuTree },
     session: { load: async () => session(), clear: () => undefined, subscribe: () => () => undefined },
     login: { buildUrl: (returnTo: string) => `/login?returnTo=${encodeURIComponent(returnTo)}` },
     doctor: { run: async () => ({ ok: true, checks: [] }) }
@@ -92,6 +94,7 @@ export const ecp = {
 }
 
 export const configureEcp = async (_app: VueApp, router: Router): Promise<void> => {
+  configureAuthzBrowserRuntime({ defaultAppCode: 'WLY5YG', baseUrl: '/api/v1' })
   routes.forEach((route) => { if (!router.hasRoute(String(route.name))) router.addRoute(route) })
 }
 export const waitForEcpReady = async (): Promise<void> => undefined

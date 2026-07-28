@@ -14,21 +14,16 @@ const { state, bindFrame, frameLoaded } = useMemberAuthorizationWorkspace()
         </div>
       </div>
       <el-alert v-if="state.errorMessage" :title="state.errorMessage" type="warning" show-icon :closable="false" />
-      <div class="account-management-frame-anchor">
-        <div
-          class="account-management-frame-shell"
-          :class="{ 'is-workspace-docked': state.docked, 'is-workspace-drawer-open': state.overlayOpen }"
-        >
-          <div v-if="!state.loaded" class="account-management-frame-loading">正在加载 ECP 成员授权工作台...</div>
-          <iframe
-            :ref="bindFrame"
-            class="account-management-frame"
-            src="about:blank"
-            title="ECP 成员授权工作台"
-            loading="eager"
-            @load="frameLoaded"
-          ></iframe>
-        </div>
+      <div class="account-management-frame-shell">
+        <div v-if="!state.loaded" class="account-management-frame-loading">正在加载 ECP 成员授权工作台...</div>
+        <iframe
+          :ref="bindFrame"
+          class="account-management-frame"
+          src="about:blank"
+          title="ECP 成员授权工作台"
+          loading="eager"
+          @load="frameLoaded"
+        ></iframe>
       </div>
     </section>
   </div>

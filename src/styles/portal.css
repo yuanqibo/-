@@ -4299,7 +4299,7 @@ button.asset-code-rule-field-name {
   flex-direction: column;
 }
 
-.account-management-frame-anchor {
+.account-management-frame-shell {
   position: relative;
   flex: 1 1 auto;
   height: auto;
@@ -4309,23 +4309,6 @@ button.asset-code-rule-field-name {
   border-radius: var(--radius);
   background: #ffffff;
   box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.12);
-}
-
-.account-management-frame-shell {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  background: #ffffff;
-}
-
-.account-management-frame-shell.is-workspace-docked {
-  position: fixed;
-  inset: auto;
-  left: var(--authz-workspace-dock-left, 0);
-  top: var(--authz-workspace-dock-top, 0);
-  z-index: 80;
-  width: var(--authz-workspace-dock-width, 0);
-  height: var(--authz-workspace-dock-height, 0);
 }
 
 .account-management-frame-loading {
@@ -4347,33 +4330,6 @@ button.asset-code-rule-field-name {
   height: 100%;
   border: 0;
   background: #ffffff;
-}
-
-body.authz-workspace-overlay-active {
-  overflow: hidden;
-}
-
-.account-management-frame-shell.is-workspace-drawer-open {
-  position: fixed;
-  inset: 0;
-  z-index: 4000;
-  width: 100vw;
-  height: 100vh;
-  min-height: 100vh;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.account-management-frame-shell.is-workspace-drawer-open .account-management-frame-loading {
-  display: none;
-}
-
-.account-management-frame-shell.is-workspace-drawer-open .account-management-frame {
-  width: 100vw;
-  height: 100vh;
-  background: transparent;
 }
 
 @media print {

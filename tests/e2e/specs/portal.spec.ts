@@ -199,16 +199,17 @@ test.describe('登录后门户质量回归', () => {
     expect(geometry.paginationButtonWidth).toBe(28)
   })
 
-  test('成员授权保持在系统目录内且不再使用全屏 iframe', async ({ page, isMobile }) => {
+  test('成员授权弹窗限制在系统内容区且切换菜单后不残留', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '成员授权工作区布局在桌面项目执行')
     await openApp(page, '/system/member-authorization')
 
     const activeMenu = page.locator('.system-menu .asset-subnav-item.active')
     await expect(activeMenu).toHaveText('成员授权')
-    await expect(page.locator('.member-authorization-view iframe')).toHaveCount(0)
-    await expect(page.getByText('应用角色', { exact: true }).first()).toBeVisible()
+    const shell = page.locator('.member-authorization-view .account-management-frame-shell')
+    const frame = page.frameLocator('iframe[title="ECP 成员授权工作台"]')
+    await expect(frame.getByText('应用角色', { exact: true }).first()).toBeVisible()
 
-    const geometry = await page.locator('.member-authorization-workspace').evaluate((element) => {
+    const geometry = await shell.evaluate((element) => {
       const rect = element.getBoundingClientRect()
       const content = element.closest('.standard-system-content')?.getBoundingClientRect()
       return {
@@ -222,6 +223,23 @@ test.describe('登录后门户质量回归', () => {
     expect(geometry.position).not.toBe('fixed')
     expect(geometry.left).toBeGreaterThanOrEqual(geometry.contentLeft)
     expect(geometry.right).toBeLessThanOrEqual(geometry.contentRight)
+
+    await frame.getByRole('button', { name: '分配给成员', exact: true }).click()
+    await expect(frame.getByRole('dialog', { name: '分配 应用管理员 角色' })).toBeVisible()
+    const shellBox = await shell.boundingBox()
+    const overlayBox = await frame.locator('.el-overlay').boundingBox()
+    expect(shellBox).not.toBeNull()
+    expect(overlayBox).not.toBeNull()
+    expect(Math.abs((overlayBox?.x || 0) - (shellBox?.x || 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((overlayBox?.y || 0) - (shellBox?.y || 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((overlayBox?.width || 0) - (shellBox?.width || 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((overlayBox?.height || 0) - (shellBox?.height || 0))).toBeLessThanOrEqual(1)
+    expect(overlayBox?.x || 0).toBeGreaterThan(0)
+
+    await page.getByRole('button', { name: '员工信息', exact: true }).click()
+    await expect(page).toHaveURL('/system/employees')
+    await expect(page.getByText('员工信息', { exact: true }).first()).toBeVisible()
+    await expect(page.locator('.account-management-frame-shell')).toHaveCount(0)
 
     await page.goto('/workspace')
     await expect(page).toHaveURL('/system/member-authorization')
