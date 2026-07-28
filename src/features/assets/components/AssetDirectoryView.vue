@@ -122,6 +122,24 @@ const actionPermission = (action: AssetCommand): string => ({
   handover: 'asset:item:handover'
 } as Partial<Record<AssetCommand, string>>)[action] || ''
 const canRunAction = (action: AssetCommand): boolean => Boolean(actionPermission(action)) && can(actionPermission(action))
+const actionStatuses: Partial<Record<AssetCommand, string[]>> = {
+  receive: ['空闲'],
+  borrow: ['空闲'],
+  return: ['在用'],
+  'borrow-return': ['借用中'],
+  handover: ['在用', '借用中']
+}
+const assetsAllowAction = (items: AssetRecord[], action: AssetCommand): boolean => {
+  const allowed = actionStatuses[action]
+  return !allowed || items.every((item) => allowed.includes(item.status))
+}
+const actionStatusWarning = (action: AssetCommand): string => ({
+  receive: '领用只能选择空闲资产',
+  borrow: '借用只能选择空闲资产',
+  return: '退库只能选择在用资产',
+  'borrow-return': '归还只能选择借用中的资产',
+  handover: '交接只能选择在用或借用中的资产'
+} as Partial<Record<AssetCommand, string>>)[action] || '所选资产当前状态不能执行此操作'
 const canCreateRequest = computed(() => permissions.value.has('asset:request:create'))
 const openEmployeeRequest = (): void => { void router.push('/requests') }
 
@@ -458,7 +476,7 @@ const operationId = (item: AssetRecord, prefix: string): string => String(
 )
 const receiveAction = computed<AssetCommand>(() => receiveReturnTab.value === 'return' ? 'return' : receiveReturnTab.value === 'handover' ? 'handover' : 'receive')
 const pickerCandidates = computed(() => assets.value.filter((item) => {
-  if (pickerAction.value === 'receive' || pickerAction.value === 'borrow') return ['空闲', '闲置', '上架', '待验收'].includes(item.status)
+  if (pickerAction.value === 'receive' || pickerAction.value === 'borrow') return item.status === '空闲'
   if (pickerAction.value === 'return') return ['在用', '领用中'].includes(item.status)
   if (pickerAction.value === 'handover') return ['在用', '借用中', '交接待签字'].includes(item.status)
   if (pickerAction.value === 'borrow-return') return item.status === '借用中'
@@ -645,6 +663,7 @@ const initializeActionForm = (items: AssetRecord[], action: AssetCommand): void 
 }
 const openActionForIds = (items: AssetRecord[], action: AssetCommand): void => {
   if (!items.length) { ElMessage.warning('请先选择资产'); return }
+  if (!assetsAllowAction(items, action)) { ElMessage.warning(actionStatusWarning(action)); return }
   initializeActionForm(items, action)
 }
 const openBlankAction = (action: AssetCommand): void => initializeActionForm([], action)
@@ -791,7 +810,7 @@ const validateImportRows = async (rows: AssetImportRow[]): Promise<AssetImportRo
     if (importMode.value !== 'asset' && !knownAssets.has(id)) errors.push(`资产编码“${id}”不存在或不在当前数据范围`)
     if (draft.category && knownCategories.size && !knownCategories.has(draft.category)) errors.push(`资产分类“${draft.category}”不存在`)
     if (draft.location && knownLocations.size && !knownLocations.has(draft.location)) errors.push(`所在位置“${draft.location}”不存在`)
-    if (importMode.value === 'receive' && id && knownAssets.has(id) && !['空闲', '闲置'].includes(knownAssets.get(id)?.status || '')) errors.push(`资产“${id}”当前状态不能领用`)
+    if (importMode.value === 'receive' && id && knownAssets.has(id) && knownAssets.get(id)?.status !== '空闲') errors.push(`资产“${id}”不是空闲状态，不能领用`)
     if (importMode.value === 'asset' && draft.owner && draft.owner !== '未分配' && !draft.ownerSubject) {
       const matches = (await searchDirectoryPeople(String(draft.owner))).filter((person) => person.name === draft.owner)
       if (matches.length !== 1) errors.push(`使用人“${draft.owner}”无法唯一匹配 ECP 账号目录`)
@@ -946,11 +965,11 @@ onMounted(() => void load())
           <el-dropdown placement="bottom-start" trigger="click">
             <button class="table-action has-caret" type="button">操作<span class="action-caret" aria-hidden="true"></span></button>
             <template #dropdown><el-dropdown-menu>
-              <el-dropdown-item v-if="can('asset:item:receive')" @click="openActionForIds(selected, 'receive')">领用</el-dropdown-item>
-              <el-dropdown-item v-if="can('asset:item:borrow')" @click="openActionForIds(selected, 'borrow')">借用</el-dropdown-item>
-              <el-dropdown-item v-if="can('asset:item:return')" @click="openActionForIds(selected, 'return')">领用退还</el-dropdown-item>
-              <el-dropdown-item v-if="can('asset:item:borrowReturn')" @click="openActionForIds(selected, 'borrow-return')">借用归还</el-dropdown-item>
-              <el-dropdown-item v-if="can('asset:item:handover')" @click="openActionForIds(selected, 'handover')">资产交接</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:receive')" :disabled="selected.length > 0 && !assetsAllowAction(selected, 'receive')" @click="openActionForIds(selected, 'receive')">领用</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:borrow')" :disabled="selected.length > 0 && !assetsAllowAction(selected, 'borrow')" @click="openActionForIds(selected, 'borrow')">借用</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:return')" :disabled="selected.length > 0 && !assetsAllowAction(selected, 'return')" @click="openActionForIds(selected, 'return')">领用退还</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:borrowReturn')" :disabled="selected.length > 0 && !assetsAllowAction(selected, 'borrow-return')" @click="openActionForIds(selected, 'borrow-return')">借用归还</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:handover')" :disabled="selected.length > 0 && !assetsAllowAction(selected, 'handover')" @click="openActionForIds(selected, 'handover')">资产交接</el-dropdown-item>
             </el-dropdown-menu></template>
           </el-dropdown>
           <el-dropdown placement="bottom-start" trigger="click">
@@ -1188,9 +1207,11 @@ onMounted(() => void load())
           <section class="asset-detail-section asset-detail-operations"><h3>操作记录</h3><div class="asset-detail-table-wrap"><table class="asset-detail-operation-table"><thead><tr><th>操作时间</th><th>操作人</th><th>渠道</th><th>操作类型</th><th>操作内容</th></tr></thead><tbody><tr v-for="(row, index) in detailOperationRows(detail)" :key="index"><td>{{ row[0] }}</td><td>{{ detail.custodian || user?.name || 'admin' }}</td><td>网页</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td></tr></tbody></table></div><div class="asset-detail-operation-footer"><span>共 {{ detailOperationRows(detail).length }} 条</span><button class="page-btn" type="button" disabled>‹</button><button class="page-btn active" type="button">1</button><button class="page-btn" type="button" disabled>›</button><el-select model-value="20" class="asset-page-size-select" aria-label="每页条数" disabled><el-option label="20 条/页" value="20" /></el-select></div></section>
         </div>
         <div class="asset-detail-footer-actions">
-          <button v-if="can(detail.status === '在用' || detail.status === '领用中' ? 'asset:item:return' : 'asset:item:receive')" class="table-action primary" type="button" @click="openAction(detail, detail.status === '在用' || detail.status === '领用中' ? 'return' : 'receive')">{{ detail.status === '在用' || detail.status === '领用中' ? '退库' : '领用' }}</button>
-          <button v-if="can(detail.status === '借用中' ? 'asset:item:borrowReturn' : 'asset:item:borrow')" class="table-action primary" type="button" @click="openAction(detail, detail.status === '借用中' ? 'borrow-return' : 'borrow')">{{ detail.status === '借用中' ? '归还' : '借用' }}</button>
-          <button v-if="can('asset:item:handover')" class="table-action" type="button" @click="openAction(detail, 'handover')">交接</button>
+          <button v-if="detail.status === '空闲' && can('asset:item:receive')" class="table-action primary" type="button" @click="openAction(detail, 'receive')">领用</button>
+          <button v-if="detail.status === '在用' && can('asset:item:return')" class="table-action primary" type="button" @click="openAction(detail, 'return')">退库</button>
+          <button v-if="detail.status === '空闲' && can('asset:item:borrow')" class="table-action primary" type="button" @click="openAction(detail, 'borrow')">借用</button>
+          <button v-if="detail.status === '借用中' && can('asset:item:borrowReturn')" class="table-action primary" type="button" @click="openAction(detail, 'borrow-return')">归还</button>
+          <button v-if="['在用', '借用中'].includes(detail.status) && can('asset:item:handover')" class="table-action" type="button" @click="openAction(detail, 'handover')">交接</button>
         </div>
       </div>
     </el-drawer>

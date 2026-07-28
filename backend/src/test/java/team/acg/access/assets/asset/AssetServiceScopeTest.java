@@ -60,4 +60,12 @@ class AssetServiceScopeTest {
         assertThat(service.listFor(identity)).extracting(item -> item.path("id").asText())
             .containsExactly("A-1", "A-2");
     }
+
+    @Test
+    void onlyTheIdleStatusIsAssignable() throws Exception {
+        assertThat(service.isAvailable(mapper.readTree("{\"status\":\"空闲\"}"))).isTrue();
+        assertThat(service.isAvailable(mapper.readTree("{\"status\":\"闲置\"}"))).isFalse();
+        assertThat(service.isAvailable(mapper.readTree("{\"status\":\"在用\"}"))).isFalse();
+        assertThat(service.isAvailable(mapper.readTree("{\"status\":\"借用中\"}"))).isFalse();
+    }
 }

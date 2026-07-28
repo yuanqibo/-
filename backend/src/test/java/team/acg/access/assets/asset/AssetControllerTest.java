@@ -83,6 +83,56 @@ class AssetControllerTest {
     }
 
     @Test
+    void receiveAndBorrowCanOnlyStartFromAnIdleAsset() throws Exception {
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-RECEIVED","name":"已领用电脑","category":"电脑","location":"总部"}}
+            """))
+            .andExpect(status().isOk());
+        mvc.perform(post("/api/assets/commands/receive").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-RECEIVED"],"fields":{"receiver":"李雷","receiverSubject":"user-1",
+              "location":"总部","date":"2026-07-10"}}
+            """))
+            .andExpect(status().isOk());
+        mvc.perform(post("/api/assets/commands/borrow").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-RECEIVED"],"fields":{"borrower":"韩梅梅","borrowerSubject":"user-2",
+              "location":"总部","date":"2026-07-11","expectedReturnDate":"2026-07-20"}}
+            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Asset is not eligible for this operation: PC-RECEIVED"));
+
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-BORROWED","name":"已借用电脑","category":"电脑","location":"总部"}}
+            """))
+            .andExpect(status().isOk());
+        mvc.perform(post("/api/assets/commands/borrow").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-BORROWED"],"fields":{"borrower":"韩梅梅","borrowerSubject":"user-2",
+              "location":"总部","date":"2026-07-11","expectedReturnDate":"2026-07-20"}}
+            """))
+            .andExpect(status().isOk());
+        mvc.perform(post("/api/assets/commands/receive").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-BORROWED"],"fields":{"receiver":"李雷","receiverSubject":"user-1",
+              "location":"总部","date":"2026-07-12"}}
+            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Asset is not eligible for this operation: PC-BORROWED"));
+
+        String document = jdbc.queryForObject(
+            "SELECT document FROM asset_record WHERE asset_id = ?", String.class, "PC-BORROWED");
+        var nonIdle = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(document);
+        nonIdle.put("status", "闲置");
+        nonIdle.put("owner", "未分配");
+        nonIdle.put("ownerSubject", "");
+        jdbc.update("UPDATE asset_record SET status = ?, document = ? WHERE asset_id = ?",
+            "闲置", mapper.writeValueAsString(nonIdle), "PC-BORROWED");
+        mvc.perform(post("/api/assets/commands/receive").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-BORROWED"],"fields":{"receiver":"李雷","receiverSubject":"user-1",
+              "location":"总部","date":"2026-07-12"}}
+            """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Asset is not eligible for this operation: PC-BORROWED"));
+    }
+
+    @Test
     void createsAssetWithoutTrustingClientStatusOrLifecycle() throws Exception {
         mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
             {"item":{"id":"PC-NEW","name":"新电脑","category":"电脑","location":"总部","owner":"","status":"已报废","lifecycle":[["x","伪造","伪造"]]}}

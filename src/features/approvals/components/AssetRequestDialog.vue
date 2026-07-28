@@ -98,7 +98,7 @@ const requestAssets = computed(() => assets.value.filter((item) => {
   if (isSelfGiveBack.value) return item.status === '借用中' && belongsToCurrentEmployee(item)
   if (form.type === '资产退还') return item.status === '在用' && (!item.owner || item.owner === user.value?.name)
   if (form.type === '资产交接') return ['在用', '领用中', '借用中'].includes(item.status) && (!item.owner || item.owner === user.value?.name)
-  return ['空闲', '闲置'].includes(item.status)
+  return item.status === '空闲'
 }))
 const filteredRequestAssets = computed(() => {
   const keyword = assetQuery.value.trim().toLowerCase()

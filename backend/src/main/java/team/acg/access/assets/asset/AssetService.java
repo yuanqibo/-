@@ -29,7 +29,8 @@ public class AssetService {
     private static final Set<String> ALLOWED_STATUS = Set.of(
         "空闲", "闲置", "上架", "待验收", "在用", "借用中", "维修中", "审批中",
         "领用待签字", "借用待签字", "交接待签字", "已报废");
-    private static final Set<String> AVAILABLE = Set.of("空闲", "闲置", "上架", "待验收");
+    private static final Set<String> UNASSIGNED = Set.of("空闲", "闲置", "上架", "待验收");
+    private static final Set<String> ASSIGNABLE = Set.of("空闲");
     private final AssetRepository repository;
     private final ObjectMapper mapper;
     private final PortalReferenceCatalog referenceCatalog;
@@ -60,7 +61,7 @@ public class AssetService {
             String ownerSubject = asset.path("ownerSubject").asText();
             boolean owned = (!identity.subject().isBlank() && identity.subject().equals(ownerSubject))
                 || (!identity.directorySubject().isBlank() && identity.directorySubject().equals(ownerSubject));
-            return owned || canCreateRequest && AVAILABLE.contains(asset.path("status").asText());
+            return owned || canCreateRequest && UNASSIGNED.contains(asset.path("status").asText());
         })
             .toList();
     }
@@ -74,7 +75,7 @@ public class AssetService {
     }
 
     public boolean isAvailable(JsonNode asset) {
-        return asset != null && AVAILABLE.contains(asset.path("status").asText());
+        return asset != null && ASSIGNABLE.contains(asset.path("status").asText());
     }
 
     @Transactional
@@ -130,7 +131,7 @@ public class AssetService {
         assets.forEach(asset -> validate(asset, existing.get(asset.path("id").asText()), ids,
             allowedCategories, allowedLocations));
         existing.forEach((id, asset) -> {
-            if (!ids.contains(id) && !AVAILABLE.contains(asset.path("status").asText())) {
+            if (!ids.contains(id) && !UNASSIGNED.contains(asset.path("status").asText())) {
                 throw new IllegalArgumentException("Only available assets can be deleted: " + id);
             }
         });
@@ -162,7 +163,7 @@ public class AssetService {
         Map<String, ObjectNode> before = new LinkedHashMap<>();
         selected.forEach((id, asset) -> before.put(id, asset.deepCopy()));
         if ("delete".equals(action)) {
-            selected.values().forEach(asset -> requireStatus(asset, AVAILABLE));
+            selected.values().forEach(asset -> requireStatus(asset, UNASSIGNED));
             List<JsonNode> retained = assets.stream().filter(asset -> !selected.containsKey(asset.path("id").asText())).toList();
             replaceAll(retained);
             return List.of();
@@ -276,7 +277,7 @@ public class AssetService {
         String name = asset.path("name").asText();
         switch (action) {
             case "receive" -> {
-                requireStatus(asset, AVAILABLE);
+                requireStatus(asset, ASSIGNABLE);
                 String receiver = requiredField(fields, "receiver");
                 String receiverSubject = requiredField(fields, "receiverSubject");
                 String location = requiredField(fields, "location");
@@ -302,7 +303,7 @@ public class AssetService {
                 lifecycle(asset, fields, "资产退库", requiredField(fields, "operator") + " 办理 " + name + " 退库");
             }
             case "borrow" -> {
-                requireStatus(asset, AVAILABLE);
+                requireStatus(asset, ASSIGNABLE);
                 String borrower = requiredField(fields, "borrower");
                 String borrowerSubject = requiredField(fields, "borrowerSubject");
                 String location = requiredField(fields, "location");
@@ -397,7 +398,7 @@ public class AssetService {
                 lifecycle(asset, fields, "维修归档", requiredField(fields, "operator") + " 完成 " + name + " 维修");
             }
             case "cancel-inbound" -> {
-                requireStatus(asset, AVAILABLE);
+                requireStatus(asset, UNASSIGNED);
                 String owner = asset.path("owner").asText("").trim();
                 String ownerSubject = asset.path("ownerSubject").asText("").trim();
                 if ((!owner.isBlank() && !"未分配".equals(owner)) || !ownerSubject.isBlank()) {
