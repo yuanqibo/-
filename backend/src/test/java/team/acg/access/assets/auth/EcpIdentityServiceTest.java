@@ -1,12 +1,16 @@
 package team.acg.access.assets.auth;
 
 import com.idanchuang.ecp.api.common.model.session.EcpSessionContext;
+import com.idanchuang.ecp.api.common.model.role.ApplicationRole;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class EcpIdentityServiceTest {
     @Test
@@ -57,6 +61,26 @@ class EcpIdentityServiceTest {
         EcpSessionContext context = context("APP_AUDITOR", "AUDITOR", List.of("asset:item:view"));
 
         assertThat(EcpIdentityService.normalize(context).get("roleCode")).isEqualTo("admin");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void reconcilesAStoredAccountAssignmentWhenThePublicSessionOmitsIt() {
+        EcpSessionContext context = context("EMPLOYEE_SELF_SERVICE", "VIEWER", List.of("asset:item:view"));
+        ApplicationRole appAdmin = mock(ApplicationRole.class);
+        when(appAdmin.code()).thenReturn("APP_ADMIN");
+        when(appAdmin.roleTypeCode()).thenReturn("APP_ADMIN");
+        when(appAdmin.effectivePermissionCodes()).thenReturn(List.of("asset:item:create", "authz:app_role:assign"));
+        when(appAdmin.effectiveFeatureCodes()).thenReturn(List.of("PORTAL_ASSETS", "PORTAL_SETTINGS", "APP_WORKSPACE"));
+        var identity = EcpIdentityService.normalize(context);
+
+        EcpIdentityService.mergeAuthoritativeAccountRoles(identity, context.user(), List.of(appAdmin));
+
+        assertThat(identity.get("roleCode")).isEqualTo("super_admin");
+        assertThat((Set<String>) identity.get("roleCodes")).contains("APP_ADMIN");
+        assertThat((Set<String>) identity.get("permissionCodes")).contains("asset:item:create", "authz:app_role:assign");
+        assertThat((Set<String>) identity.get("featureCodes")).contains("PORTAL_SETTINGS", "APP_WORKSPACE");
+        assertThat(identity.get("roleAssignmentReconciled")).isEqualTo(true);
     }
 
     private EcpSessionContext context(String roleCode, String roleType, List<String> permissions) {

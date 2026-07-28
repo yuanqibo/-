@@ -164,6 +164,23 @@ class RequestIdentityServiceTest {
         verify(ecp).resolve("sdk-session-token");
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void letsAnAuthoritativelyReconciledSuperAdminUseAllPortalPermissions() {
+        ObjectProvider<EcpIdentityService> provider = mock(ObjectProvider.class);
+        EcpIdentityService ecp = mock(EcpIdentityService.class);
+        when(provider.getIfAvailable()).thenReturn(ecp);
+        when(ecp.resolve("admin-token")).thenReturn(Map.of(
+            "name", "袁其博", "account", "yuanqibo@accesscorporate.com.cn", "tenantId", "tenant-1",
+            "subject", "account-1", "directorySubject", "vlbe8nyybl35d17u",
+            "roleCode", "super_admin", "permissionCodes", List.of("asset:item:view")));
+        RequestIdentityService service = service(provider, mock(EcpSecurityPolicy.class));
+        RequestIdentityService.Identity identity = service.current(requestWithToken("admin-token")).orElseThrow();
+
+        assertThat(identity.hasPermission("asset:item:delete")).isTrue();
+        assertThat(identity.hasAnyPermission(Set.of("authz:app_role:assign"))).isTrue();
+    }
+
     private MockHttpServletRequest requestWithToken(String token) {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer " + token);

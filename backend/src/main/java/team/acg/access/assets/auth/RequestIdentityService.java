@@ -79,7 +79,7 @@ public class RequestIdentityService {
 
     public void requirePermission(HttpServletRequest request, String permission) {
         current(request).ifPresent(identity -> {
-            if (!identity.permissions().contains(permission)) {
+            if (!identity.hasPermission(permission)) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Permission is required: " + permission);
             }
         });
@@ -128,11 +128,11 @@ public class RequestIdentityService {
         }
 
         public boolean hasPermission(String permission) {
-            return permissions.contains(permission);
+            return "super_admin".equals(roleCode) || permissions.contains(permission);
         }
 
         public boolean hasAnyPermission(Set<String> required) {
-            return required.stream().anyMatch(permissions::contains);
+            return "super_admin".equals(roleCode) || required.stream().anyMatch(permissions::contains);
         }
 
         private static String text(Object value) {
