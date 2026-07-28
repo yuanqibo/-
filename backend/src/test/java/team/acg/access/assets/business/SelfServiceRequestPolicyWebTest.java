@@ -180,6 +180,8 @@ class SelfServiceRequestPolicyWebTest {
 
         ObjectNode borrowed = asset("A-BORROW-PENDING");
         org.assertj.core.api.Assertions.assertThat(borrowed.path("status").asText()).isEqualTo("借用中");
+        org.assertj.core.api.Assertions.assertThat(borrowed.path("borrowDate").asText()).isEqualTo("2026-07-22");
+        org.assertj.core.api.Assertions.assertThat(borrowed.path("custodian").asText()).isEqualTo("管理员");
         org.assertj.core.api.Assertions.assertThat(borrowed.path("owner").asText()).isEqualTo("李雷");
         org.assertj.core.api.Assertions.assertThat(borrowed.path("ownerSubject").asText()).isEqualTo("user-1");
         org.assertj.core.api.Assertions.assertThat(borrowed.path("expectedReturnDate").asText()).isEqualTo("2026-08-22");
@@ -236,6 +238,8 @@ class SelfServiceRequestPolicyWebTest {
 
         ObjectNode received = asset("A-RECEIVE-PENDING");
         org.assertj.core.api.Assertions.assertThat(received.path("status").asText()).isEqualTo("在用");
+        org.assertj.core.api.Assertions.assertThat(received.path("receiveDate").asText()).isEqualTo("2026-07-22");
+        org.assertj.core.api.Assertions.assertThat(received.path("custodian").asText()).isEqualTo("管理员");
         org.assertj.core.api.Assertions.assertThat(received.path("owner").asText()).isEqualTo("李雷");
         org.assertj.core.api.Assertions.assertThat(received.path("ownerSubject").asText()).isEqualTo("user-1");
     }

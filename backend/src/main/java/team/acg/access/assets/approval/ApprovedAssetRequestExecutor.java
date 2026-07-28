@@ -47,6 +47,7 @@ public class ApprovedAssetRequestExecutor {
             assetService.requireStatusForApprovedRequest(assetIds, Set.of("空闲"));
         }
         fields.put("operator", operator.name());
+        fields.put("custodian", operator.name());
         fields.put("operatorAccount", operator.account());
         fields.put("operatorSubject", operator.subject());
         fields.put("note", item.path("reason").asText(""));

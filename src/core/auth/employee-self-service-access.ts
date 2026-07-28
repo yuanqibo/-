@@ -28,22 +28,26 @@ export const EMPLOYEE_SELF_SERVICE_MENU_ITEMS: readonly PortalMenuItem[] = [
     order: 10
   },
   {
-    id: 'signatures',
-    parentId: '',
-    title: '签字',
-    path: '/signatures',
-    pageKey: 'asset.portal.signatures',
-    order: 35
-  },
-  {
     id: 'requests',
     parentId: '',
     title: '审批',
     path: '/requests',
     pageKey: 'asset.portal.requests',
+    order: 35
+  },
+  {
+    id: 'signatures',
+    parentId: '',
+    title: '签字',
+    path: '/signatures',
+    pageKey: 'asset.portal.signatures',
     order: 40
   }
 ] as const
+
+const employeeMenuOrder = new Map(
+  EMPLOYEE_SELF_SERVICE_MENU_ITEMS.map((item) => [item.id, item.order])
+)
 
 const mergeCodes = (current: string[] | undefined, defaults: readonly string[]): string[] =>
   Array.from(new Set([...(current || []), ...defaults]))
@@ -51,7 +55,9 @@ const mergeCodes = (current: string[] | undefined, defaults: readonly string[]):
 export const ensureEmployeeSelfServiceMenu = (current: PortalMenuItem[]): PortalMenuItem[] => {
   const currentIds = new Set(current.map((item) => item.id))
   return [
-    ...current,
+    ...current.map((item) => employeeMenuOrder.has(item.id)
+      ? { ...item, order: employeeMenuOrder.get(item.id)! }
+      : item),
     ...EMPLOYEE_SELF_SERVICE_MENU_ITEMS
       .filter((item) => !currentIds.has(item.id))
       .map((item) => ({ ...item }))

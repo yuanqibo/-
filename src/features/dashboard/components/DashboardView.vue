@@ -34,6 +34,19 @@ const markAssetImageFailed = (item: AssetRecord): void => {
   failedAssetImages.value = new Set([...failedAssetImages.value, item.id])
 }
 const assetAssignmentLabel = (item: AssetRecord): string => item.status === '借用中' ? '借用' : '领用'
+const assetAssignmentDateLabel = (item: AssetRecord): string => item.status === '借用中' ? '借用日期' : '领用日期'
+const approvedRequestForAsset = (item: AssetRecord) => requests.value.find((request) =>
+  ['已同意', '已完成'].includes(String(request.status || ''))
+  && Array.isArray(request.assetIds)
+  && request.assetIds.some((assetId) => String(assetId) === item.id)
+)
+const assetAssignmentDate = (item: AssetRecord): string => item.status === '借用中'
+  ? String(item.borrowDate || approvedRequestForAsset(item)?.borrowDate || item.receiveDate || '-')
+  : String(item.receiveDate || approvedRequestForAsset(item)?.receiveDate || item.borrowDate || '-')
+const assetCustodian = (item: AssetRecord): string => {
+  const custodian = String(item.custodian || '').trim()
+  return custodian && custodian !== '-' ? custodian : String(approvedRequestForAsset(item)?.decisionOperator || '-')
+}
 const assetModelLabel = (item: AssetRecord): string => [item.brand, item.model].filter(Boolean).join(' ') || '-'
 const openEmployeeRequest = (action: 'return' | 'handover', item: AssetRecord): void => {
   requestType.value = action === 'handover' ? '资产交接' : item.status === '借用中' ? '资产归还' : '资产退还'
@@ -132,8 +145,8 @@ const metricLabel = (value: number, mode: CategoryMetricMode = 'count'): string 
               <dl class="device-card-fields">
                 <div><dt>资产编码</dt><dd class="device-card-code" :title="item.id">{{ item.id }}</dd></div>
                 <div><dt>品牌/型号</dt><dd :title="assetModelLabel(item)">{{ assetModelLabel(item) }}</dd></div>
-                <div><dt>管理员</dt><dd :title="item.custodian || '-'">{{ item.custodian || '-' }}</dd></div>
-                <div><dt>领用日期</dt><dd :title="item.receiveDate || '-'">{{ item.receiveDate || '-' }}</dd></div>
+                <div><dt>管理员</dt><dd :title="assetCustodian(item)">{{ assetCustodian(item) }}</dd></div>
+                <div><dt>{{ assetAssignmentDateLabel(item) }}</dt><dd :title="assetAssignmentDate(item)">{{ assetAssignmentDate(item) }}</dd></div>
               </dl>
             </div>
           </div>

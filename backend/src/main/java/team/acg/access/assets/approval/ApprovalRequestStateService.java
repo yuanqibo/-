@@ -97,7 +97,7 @@ public class ApprovalRequestStateService {
             case "APPROVED" -> {
                 if (!Set.of("已完成", "已同意", "待执行").contains(localStatus)) {
                     if (executor.supports(target.path("type").asText())) {
-                        executor.execute(target, ApprovedAssetRequestExecutor.Operator.ecp());
+                        executor.execute(target, decisionOperator(target));
                         target.put("status", approvedStatus(target));
                         target.put("currentNode", "已归档");
                     } else {
@@ -147,6 +147,14 @@ public class ApprovalRequestStateService {
         item.put("decisionOperatorSubject", operator.identitySubject());
         item.put("decisionReason", text(reason));
         item.put("decisionAt", Instant.now().toString());
+    }
+
+    private ApprovedAssetRequestExecutor.Operator decisionOperator(ObjectNode item) {
+        String name = text(item.path("decisionOperator").asText());
+        String subject = text(item.path("decisionOperatorSubject").asText());
+        return name.isEmpty()
+            ? ApprovedAssetRequestExecutor.Operator.ecp()
+            : new ApprovedAssetRequestExecutor.Operator(name, "", subject, subject);
     }
 
     private JsonNode unwrap(JsonNode detail) {

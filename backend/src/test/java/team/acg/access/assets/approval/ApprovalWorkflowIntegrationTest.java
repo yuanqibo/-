@@ -39,6 +39,8 @@ class ApprovalWorkflowIntegrationTest {
     @Test
     void appliesApprovedStateAndExecutesTheAssetCommandOnlyOnce() throws Exception {
         createRequest("REQ-1", "APPROVAL-1", "资产领用");
+        state.markExternalDecisionSubmitted("REQ-1", "approve",
+            new ApprovedAssetRequestExecutor.Operator("王管理", "", "manager-1", "manager-1"), "同意");
         when(executor.supports("资产领用")).thenReturn(true);
         var detail = mapper.readTree("""
             {"approvalNo":"APPROVAL-1","bizNo":"REQ-1","instanceId":101,
@@ -54,7 +56,8 @@ class ApprovalWorkflowIntegrationTest {
         assertThat(item.number("instanceId")).isEqualTo(101L);
         verify(executor, times(1)).execute(
             org.mockito.ArgumentMatchers.any(ObjectNode.class),
-            org.mockito.ArgumentMatchers.eq(ApprovedAssetRequestExecutor.Operator.ecp()));
+            org.mockito.ArgumentMatchers.eq(new ApprovedAssetRequestExecutor.Operator(
+                "王管理", "", "manager-1", "manager-1")));
     }
 
     @Test

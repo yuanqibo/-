@@ -286,6 +286,7 @@ public class AssetService {
                 if (requiresSignature) snapshotReceipt(asset);
                 copyText(fields, asset, "department", "departmentUnionId", "company", "companyUnionId", "note");
                 asset.put("location", location);
+                copyText(fields, asset, "custodian");
                 asset.put("owner", receiver); asset.put("ownerSubject", receiverSubject);
                 asset.put("status", requiresSignature ? "领用待签字" : "在用");
                 asset.put("receiveDate", date(requiredField(fields, "date")));
@@ -312,6 +313,7 @@ public class AssetService {
                 if (requiresSignature) snapshotReceipt(asset);
                 copyText(fields, asset, "department", "departmentUnionId", "company", "companyUnionId", "note");
                 asset.put("location", location);
+                copyText(fields, asset, "custodian");
                 asset.put("owner", borrower); asset.put("ownerSubject", borrowerSubject);
                 asset.put("status", requiresSignature ? "借用待签字" : "借用中");
                 asset.put("borrowDate", date(requiredField(fields, "date")));

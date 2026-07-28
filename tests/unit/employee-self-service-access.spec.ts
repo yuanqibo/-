@@ -68,7 +68,17 @@ describe('employee self-service access', () => {
 
     const menu = ensureEmployeeSelfServiceMenu([settings, home])
 
-    expect(menu.map((item) => item.id)).toEqual(['home', 'signatures', 'requests', 'settings'])
+    expect(menu.map((item) => item.id)).toEqual(['home', 'requests', 'signatures', 'settings'])
     expect(menu.filter((item) => item.id === 'home')).toHaveLength(1)
+  })
+
+  it('normalizes stale ECP menu orders so approval remains above signatures', () => {
+    const stale = EMPLOYEE_SELF_SERVICE_MENU_ITEMS.map((item) => ({
+      ...item,
+      order: item.id === 'signatures' ? 35 : item.id === 'requests' ? 40 : item.order
+    }))
+
+    expect(ensureEmployeeSelfServiceMenu(stale).map((item) => item.id))
+      .toEqual(['home', 'requests', 'signatures'])
   })
 })
