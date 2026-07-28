@@ -9,6 +9,10 @@ import {
   primeEmployeeSelfServiceSession,
   withEmployeeSelfServiceSnapshot
 } from './core/auth/employee-self-service-access'
+import {
+  applyTrustedPermissionSnapshot,
+  loadTrustedPortalIdentity
+} from './core/auth/trusted-identity'
 
 export type { AuthzSessionContext } from '@acg/ecp-sdk'
 
@@ -55,8 +59,13 @@ export const ecp = createEcpSdk({
       permission: {
         noPermissionPath: '/no-permission',
         loadPermissionSnapshot: async ({ appCode }) => {
-          const snapshot = await initAuthzSdk(appCode).loadPermissionSnapshot()
-          return snapshot ? withEmployeeSelfServiceSnapshot(snapshot) : null
+          const [snapshot, trustedIdentity] = await Promise.all([
+            initAuthzSdk(appCode).loadPermissionSnapshot(),
+            loadTrustedPortalIdentity()
+          ])
+          return snapshot
+            ? withEmployeeSelfServiceSnapshot(applyTrustedPermissionSnapshot(snapshot, trustedIdentity))
+            : null
         }
       },
       menu: {
