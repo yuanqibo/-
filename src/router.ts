@@ -28,7 +28,7 @@ export const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  if (to.path === MEMBER_AUTHORIZATION_WORKSPACE_PATH) {
+  if (to.path === MEMBER_AUTHORIZATION_WORKSPACE_PATH && to.query.embedded !== '1') {
     return { path: MEMBER_AUTHORIZATION_PORTAL_PATH, replace: true }
   }
   return true

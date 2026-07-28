@@ -4290,47 +4290,90 @@ button.asset-code-rule-field-name {
 }
 
 .member-authorization-view {
-  flex: 1 1 auto;
-  min-width: 0;
+  padding-bottom: 12px;
+}
+
+.account-management-panel {
   min-height: 0;
-  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow: hidden;
 }
 
-.member-authorization-header {
-  flex: 0 0 auto;
-  padding: 2px 2px 0;
-}
-
-.member-authorization-workspace-shell {
+.account-management-frame-anchor {
   position: relative;
   flex: 1 1 auto;
-  min-width: 0;
+  height: auto;
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.12);
 }
 
-.member-authorization-loading {
+.account-management-frame-shell {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.account-management-frame-shell.is-workspace-docked {
+  position: fixed;
+  inset: auto;
+  left: var(--authz-workspace-dock-left, 0);
+  top: var(--authz-workspace-dock-top, 0);
+  z-index: 80;
+  width: var(--authz-workspace-dock-width, 0);
+  height: var(--authz-workspace-dock-height, 0);
+}
+
+.account-management-frame-loading {
   position: absolute;
   inset: 0;
   z-index: 2;
   display: grid;
   place-items: center;
   color: var(--muted);
-  background: #ffffff;
   font-size: 14px;
+  background: #ffffff;
 }
 
-.member-authorization-workspace {
+.account-management-frame {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
+  border: 0;
+  background: #ffffff;
+}
+
+body.authz-workspace-overlay-active {
+  overflow: hidden;
+}
+
+.account-management-frame-shell.is-workspace-drawer-open {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.account-management-frame-shell.is-workspace-drawer-open .account-management-frame-loading {
+  display: none;
+}
+
+.account-management-frame-shell.is-workspace-drawer-open .account-management-frame {
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
 }
 
 @media print {

@@ -1,39 +1,35 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import AuthzWorkspaceHost from '@acg/ecp-auth-vue/workspace/vue'
+import { useMemberAuthorizationWorkspace } from '../composables/useMemberAuthorizationWorkspace'
 
-const loaded = ref(false)
-const errorMessage = ref('')
-
-const handleLoaded = (): void => {
-  loaded.value = true
-  errorMessage.value = ''
-}
-
-const handleError = (error: unknown): void => {
-  loaded.value = false
-  errorMessage.value = error instanceof Error ? error.message : '成员授权工作台加载失败'
-}
+const { state, bindFrame, frameLoaded } = useMemberAuthorizationWorkspace()
 </script>
 
 <template>
-  <section class="member-authorization-view" aria-labelledby="member-authorization-title">
-    <header class="member-authorization-header">
-      <div>
-        <h2 id="member-authorization-title" class="panel-title">成员授权</h2>
-        <div class="panel-subtitle">管理应用角色、账号授权和权限模型。</div>
+  <div class="system-content member-authorization-view">
+    <section class="panel account-management-panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">成员授权</h2>
+          <div class="panel-subtitle">使用 ECP SDK 工作台管理应用角色、账号授权和权限模型，保持在资产系统内操作。</div>
+        </div>
       </div>
-    </header>
-    <el-alert v-if="errorMessage" :title="errorMessage" type="error" show-icon :closable="false" />
-    <div class="member-authorization-workspace-shell" :aria-busy="!loaded">
-      <div v-if="!loaded && !errorMessage" class="member-authorization-loading">正在加载成员授权...</div>
-      <AuthzWorkspaceHost
-        class="member-authorization-workspace"
-        style-scope-mode="strict"
-        :auto-redirect-on-unauthorized="true"
-        @loaded="handleLoaded"
-        @error="handleError"
-      />
-    </div>
-  </section>
+      <el-alert v-if="state.errorMessage" :title="state.errorMessage" type="warning" show-icon :closable="false" />
+      <div class="account-management-frame-anchor">
+        <div
+          class="account-management-frame-shell"
+          :class="{ 'is-workspace-docked': state.docked, 'is-workspace-drawer-open': state.overlayOpen }"
+        >
+          <div v-if="!state.loaded" class="account-management-frame-loading">正在加载 ECP 成员授权工作台...</div>
+          <iframe
+            :ref="bindFrame"
+            class="account-management-frame"
+            src="about:blank"
+            title="ECP 成员授权工作台"
+            loading="eager"
+            @load="frameLoaded"
+          ></iframe>
+        </div>
+      </div>
+    </section>
+  </div>
 </template>

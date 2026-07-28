@@ -21,12 +21,25 @@ body:has(.authz-workspace-host) #app {
   overflow: hidden !important;
 }
 
+body.authz-workspace-portal-overlay-active {
+  background: transparent !important;
+}
+
+body.authz-workspace-portal-overlay-active #app {
+  visibility: hidden !important;
+  background: transparent !important;
+}
+
+body.authz-workspace-portal-overlay-active .el-overlay.is-drawer {
+  visibility: visible !important;
+}
+
 .authz-workspace-host,
 .authz-workspace-host * {
   box-sizing: border-box !important;
 }
 
-/* Keep the SDK workspace dense and contained inside the system content area. */
+/* Keep the standalone SDK workspace dense inside the portal iframe. */
 .authz-workspace-host .workspace-account-management {
   display: flex !important;
   flex-direction: column !important;
@@ -42,15 +55,15 @@ body:has(.authz-workspace-host) #app {
 .authz-workspace-host .target-workspace {
   height: 100% !important;
   min-height: 0 !important;
-  max-height: none !important;
+  max-height: 100vh !important;
   overflow: hidden !important;
 }
 
 .authz-workspace-host {
-  position: relative !important;
-  inset: auto !important;
-  width: 100% !important;
-  height: 100% !important;
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
 }
 
 .authz-workspace-host .target-workspace {
