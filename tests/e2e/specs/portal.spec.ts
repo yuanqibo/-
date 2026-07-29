@@ -229,6 +229,7 @@ test.describe('登录后门户质量回归', () => {
     await expect(assignmentDialog).toBeVisible()
     const workspaceOverlay = page.locator('body > .el-overlay.authz-workspace-host')
     await expect(workspaceOverlay).toBeVisible()
+    await expect.poll(() => workspaceOverlay.evaluate((element) => getComputedStyle(element).getPropertyValue('--ecp-primary-500').trim())).toBe('#3370ff')
     await expect(shell).not.toHaveClass(/is-workspace-overlay-open/)
     await expect(shell).not.toHaveCSS('position', 'fixed')
     await expect(page.locator('.system-menu')).toBeVisible()

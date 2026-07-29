@@ -23,28 +23,43 @@ export const useMemberAuthorizationWorkspace = () => {
   })
   const workspaceUrl = memberAuthorizationWorkspaceUrl()
   let portalObserver: MutationObserver | null = null
+  let hostObserver: MutationObserver | null = null
   const portaledNodes = new Set<HTMLElement>()
+  const copiedThemeProperties = new WeakMap<HTMLElement, string[]>()
   let loadTimer: number | null = null
   let loadTimeout: number | null = null
   let active = true
 
+  const clearPortalState = (node: HTMLElement): void => {
+    node.classList.remove('authz-workspace-host', 'authz-workspace-auxiliary')
+    copiedThemeProperties.get(node)?.forEach((property) => node.style.removeProperty(property))
+    copiedThemeProperties.delete(node)
+    portaledNodes.delete(node)
+  }
+
+  const restoreNode = (node: HTMLElement, frameBody?: HTMLElement): void => {
+    clearPortalState(node)
+    if (node.isConnected && frameBody) frameBody.appendChild(node)
+    else if (node.isConnected) node.remove()
+  }
+
   const restorePortaledNodes = (): void => {
     try {
       const frameBody = frame.value?.contentDocument?.body
-      portaledNodes.forEach((node) => {
-        node.classList.remove('authz-workspace-host', 'authz-workspace-auxiliary')
-        if (node.isConnected && frameBody) frameBody.appendChild(node)
-        else if (node.isConnected) node.remove()
-      })
+      const nodes = Array.from(portaledNodes)
+        .sort((node) => node.classList.contains('authz-workspace-auxiliary') ? -1 : 1)
+      nodes.forEach((node) => restoreNode(node, frameBody))
     } catch {
       portaledNodes.forEach((node) => node.remove())
+      portaledNodes.clear()
     }
-    portaledNodes.clear()
   }
 
   const disconnectObserver = (): void => {
     portalObserver?.disconnect()
+    hostObserver?.disconnect()
     portalObserver = null
+    hostObserver = null
     restorePortaledNodes()
   }
 
@@ -55,12 +70,22 @@ export const useMemberAuthorizationWorkspace = () => {
       const frameWindow = frame.value?.contentWindow
       if (!frameDocument?.body || !frameWindow) return
 
+      const applyWorkspaceTheme = (node: HTMLElement): void => {
+        const rootStyle = frameWindow.getComputedStyle(frameDocument.documentElement)
+        const properties = Array.from(rootStyle).filter((property) => property.startsWith('--ecp-'))
+        properties.forEach((property) => node.style.setProperty(property, rootStyle.getPropertyValue(property)))
+        copiedThemeProperties.set(node, properties)
+      }
       const portalNode = (node: HTMLElement, primary: boolean): void => {
         node.classList.add(primary ? 'authz-workspace-host' : 'authz-workspace-auxiliary')
+        if (primary) {
+          applyWorkspaceTheme(node)
+        }
         const primaryHost = Array.from(portaledNodes).find((item) => item.classList.contains('authz-workspace-host'))
         if (primary) document.body.appendChild(node)
         else (primaryHost || document.body).appendChild(node)
         portaledNodes.add(node)
+        if (primary) hostObserver?.observe(node, { attributes: true, attributeFilter: ['class', 'style'] })
       }
       const sync = (): void => {
         portaledNodes.forEach((node) => {
@@ -69,7 +94,12 @@ export const useMemberAuthorizationWorkspace = () => {
 
         const overlays = Array.from(frameDocument.querySelectorAll<HTMLElement>('.el-overlay'))
         overlays
-          .filter((overlay) => overlay.querySelector(WORKSPACE_SURFACE_SELECTOR))
+          .filter((overlay) => {
+            const style = frameWindow.getComputedStyle(overlay)
+            return overlay.querySelector(WORKSPACE_SURFACE_SELECTOR)
+              && style.display !== 'none'
+              && style.visibility !== 'hidden'
+          })
           .forEach((overlay) => portalNode(overlay, true))
         if (!Array.from(portaledNodes).some((node) => node.classList.contains('authz-workspace-host'))) return
 
@@ -77,9 +107,32 @@ export const useMemberAuthorizationWorkspace = () => {
           .forEach((node) => portalNode(node, false))
       }
 
+      const syncHost = (): void => {
+        portaledNodes.forEach((node) => {
+          if (!node.isConnected) portaledNodes.delete(node)
+        })
+        const frameBody = frame.value?.contentDocument?.body
+        Array.from(portaledNodes)
+          .filter((node) => node.classList.contains('authz-workspace-host'))
+          .filter((node) => {
+            const style = window.getComputedStyle(node)
+            return style.display === 'none' || style.visibility === 'hidden'
+          })
+          .forEach((node) => restoreNode(node, frameBody))
+        if (Array.from(portaledNodes).some((node) => node.classList.contains('authz-workspace-host'))) return
+        Array.from(portaledNodes).forEach((node) => restoreNode(node, frameBody))
+      }
+
       const FrameMutationObserver = (frameWindow as unknown as { MutationObserver: typeof MutationObserver }).MutationObserver
       portalObserver = new FrameMutationObserver(sync)
-      portalObserver.observe(frameDocument.body, { childList: true, subtree: true })
+      portalObserver.observe(frameDocument.body, {
+        attributes: true,
+        attributeFilter: ['class', 'style'],
+        childList: true,
+        subtree: true
+      })
+      hostObserver = new MutationObserver(syncHost)
+      hostObserver.observe(document.body, { childList: true })
       sync()
     } catch (error) {
       state.errorMessage = error instanceof Error ? error.message : 'ECP 工作台浮层联动不可用'

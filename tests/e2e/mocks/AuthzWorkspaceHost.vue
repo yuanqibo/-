@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 const emit = defineEmits<{ loaded: [] }>()
 const activeView = ref<'roles' | 'accounts'>('roles')
 const assignmentOpen = ref(false)
 const roleDetailOpen = ref(false)
 const accountPermissionOpen = ref(false)
-onMounted(() => emit('loaded'))
+onMounted(() => {
+  document.documentElement.style.setProperty('--ecp-primary-500', '#3370ff')
+  emit('loaded')
+})
+onBeforeUnmount(() => document.documentElement.style.removeProperty('--ecp-primary-500'))
 </script>
 
 <template>
@@ -28,7 +32,7 @@ onMounted(() => emit('loaded'))
       </section>
     </section>
     <Teleport to="body">
-      <div v-if="assignmentOpen" class="el-overlay">
+      <div v-show="assignmentOpen" class="el-overlay">
         <div class="el-overlay-dialog is-align-center" style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%">
           <section class="target-workspace-assignment-dialog el-dialog" style="width: min(1000px, 92vw)" role="dialog" aria-label="分配 应用管理员 角色">
             <h2>分配 应用管理员 角色</h2>
@@ -38,7 +42,7 @@ onMounted(() => emit('loaded'))
       </div>
     </Teleport>
     <Teleport to="body">
-      <div v-if="roleDetailOpen" class="el-overlay is-drawer">
+      <div v-show="roleDetailOpen" class="el-overlay is-drawer">
         <section class="role-editor-wizard-drawer el-drawer rtl" style="width: var(--authz-role-editor-drawer-width); height: 100%" role="dialog" aria-label="编辑应用角色">
           <h2>编辑应用角色</h2>
           <button type="button" aria-label="关闭角色详情" @click="roleDetailOpen = false">关闭</button>
@@ -46,7 +50,7 @@ onMounted(() => emit('loaded'))
       </div>
     </Teleport>
     <Teleport to="body">
-      <div v-if="accountPermissionOpen" class="el-overlay is-drawer">
+      <div v-show="accountPermissionOpen" class="el-overlay is-drawer">
         <section class="target-workspace-subject-assignment-drawer el-drawer rtl" style="width: var(--authz-editor-drawer-width); height: 100%" role="dialog" aria-label="新增权限配置">
           <h2>新增权限配置</h2>
           <button type="button" aria-label="关闭账号授权" @click="accountPermissionOpen = false">关闭</button>
