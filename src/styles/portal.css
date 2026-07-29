@@ -4293,18 +4293,6 @@ button.asset-code-rule-field-name {
   padding-bottom: 12px;
 }
 
-.standard-system-content:has(.member-authorization-view.is-assignment-open) {
-  position: relative;
-}
-
-.member-authorization-view.is-assignment-open .account-management-frame-shell {
-  position: absolute;
-  inset: -14px;
-  z-index: 20;
-  border: 0;
-  border-radius: 0;
-}
-
 .account-management-panel {
   min-height: 0;
   display: flex;
@@ -4342,6 +4330,43 @@ button.asset-code-rule-field-name {
   height: 100%;
   border: 0;
   background: #ffffff;
+}
+
+body.authz-workspace-overlay-active {
+  overflow: hidden;
+}
+
+.standard-system-content.has-authz-workspace-overlay,
+.standard-system-content.has-authz-workspace-overlay .member-authorization-view {
+  animation: none !important;
+  transform: none !important;
+  will-change: auto !important;
+  contain: none !important;
+  overflow: visible !important;
+}
+
+.account-management-frame-shell.is-workspace-overlay-open {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: transparent;
+  box-shadow: none;
+}
+
+.account-management-frame-shell.is-workspace-overlay-open .account-management-frame-loading {
+  display: none;
+}
+
+.account-management-frame-shell.is-workspace-overlay-open .account-management-frame {
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
 }
 
 @media print {

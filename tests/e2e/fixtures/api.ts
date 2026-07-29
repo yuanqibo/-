@@ -116,6 +116,9 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
     state.requests.push({ method, path, body })
     const fulfill = (value: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) })
 
+    if (url.pathname === '/api/auth/ecp/me' && method === 'GET') {
+      return fulfill({ user: { roleCode: 'super_admin', permissionCodes: [], featureCodes: [] } })
+    }
     if (url.pathname === '/api/assets' && method === 'GET') return options.failAssets ? fulfill({ error: '资产服务暂不可用' }, 503) : fulfill({ items: currentAssets })
     if (url.pathname === '/api/asset-operations' && method === 'GET') return fulfill({ items: assetOperations, total: assetOperations.length, page: 1, size: 500 })
     if (url.pathname === '/api/assets' && method === 'POST') return fulfill({ item: { ...assets[0], ...(body as { item?: object })?.item, id: 'AST-NEW' } }, 201)

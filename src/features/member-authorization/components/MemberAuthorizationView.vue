@@ -5,7 +5,7 @@ const { state, bindFrame, frameLoaded } = useMemberAuthorizationWorkspace()
 </script>
 
 <template>
-  <div class="system-content member-authorization-view" :class="{ 'is-assignment-open': state.assignmentOpen }">
+  <div class="system-content member-authorization-view">
     <section class="panel account-management-panel">
       <div class="panel-header">
         <div>
