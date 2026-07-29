@@ -32,7 +32,8 @@ export const useMemberAuthorizationWorkspace = () => {
   const frame = ref<HTMLIFrameElement>()
   const state = reactive<MemberAuthorizationWorkspaceState>({
     loaded: false,
-    errorMessage: ''
+    errorMessage: '',
+    assignmentOpen: false
   })
   const workspaceUrl = memberAuthorizationWorkspaceUrl()
   let drawerObserver: MutationObserver | null = null
@@ -58,6 +59,7 @@ export const useMemberAuthorizationWorkspace = () => {
       const sync = (): void => {
         syncFrame = null
         const overlays = Array.from(frameDocument.getElementsByClassName('el-overlay'))
+        state.assignmentOpen = overlays.some((overlay) => Boolean(overlay.querySelector('.target-workspace-assignment-dialog')))
         overlays.forEach((overlay) => {
           setClassState(overlay, 'authz-workspace-host', Boolean(overlay.querySelector(WORKSPACE_SURFACE_SELECTOR)))
         })
@@ -120,11 +122,13 @@ export const useMemberAuthorizationWorkspace = () => {
     if (loadTimer !== null) window.clearTimeout(loadTimer)
     if (loadTimeout !== null) window.clearTimeout(loadTimeout)
     disconnectObserver()
+    state.assignmentOpen = false
   })
 
   onDeactivated(() => {
     active = false
     disconnectObserver()
+    state.assignmentOpen = false
   })
   onActivated(() => {
     active = true

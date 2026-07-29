@@ -98,4 +98,5 @@ export const configureEcp = async (_app: VueApp, router: Router): Promise<void> 
   routes.forEach((route) => { if (!router.hasRoute(String(route.name))) router.addRoute(route) })
 }
 export const waitForEcpReady = async (): Promise<void> => undefined
+export const preloadMemberAuthorizationWorkspace = async (): Promise<void> => undefined
 export const getLocalDoctorReport = () => ({ ok: true, checks: [] })

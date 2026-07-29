@@ -199,7 +199,7 @@ test.describe('登录后门户质量回归', () => {
     expect(geometry.paginationButtonWidth).toBe(28)
   })
 
-  test('成员授权弹窗限制在系统内容区且切换菜单后不残留', async ({ page, isMobile }) => {
+  test('成员授权弹窗铺满系统内容区且切换菜单后不残留', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '成员授权工作区布局在桌面项目执行')
     await openApp(page, '/system/member-authorization')
 
@@ -227,13 +227,21 @@ test.describe('登录后门户质量回归', () => {
     await frame.getByRole('button', { name: '分配给成员', exact: true }).click()
     await expect(frame.getByRole('dialog', { name: '分配 应用管理员 角色' })).toBeVisible()
     const shellBox = await shell.boundingBox()
+    const contentBox = await page.locator('.standard-system-content').boundingBox()
     const overlayBox = await frame.locator('.el-overlay').boundingBox()
+    const dialogBox = await frame.getByRole('dialog', { name: '分配 应用管理员 角色' }).boundingBox()
     expect(shellBox).not.toBeNull()
+    expect(contentBox).not.toBeNull()
     expect(overlayBox).not.toBeNull()
-    expect(Math.abs((overlayBox?.x || 0) - (shellBox?.x || 0))).toBeLessThanOrEqual(1)
-    expect(Math.abs((overlayBox?.y || 0) - (shellBox?.y || 0))).toBeLessThanOrEqual(1)
-    expect(Math.abs((overlayBox?.width || 0) - (shellBox?.width || 0))).toBeLessThanOrEqual(1)
-    expect(Math.abs((overlayBox?.height || 0) - (shellBox?.height || 0))).toBeLessThanOrEqual(1)
+    expect(dialogBox).not.toBeNull()
+    expect(Math.abs((shellBox?.x || 0) - (contentBox?.x || 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((shellBox?.y || 0) - (contentBox?.y || 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((shellBox?.width || 0) - (contentBox?.width || 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((shellBox?.height || 0) - (contentBox?.height || 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((dialogBox?.x || 0) - (overlayBox?.x || 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((dialogBox?.y || 0) - (overlayBox?.y || 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((dialogBox?.width || 0) - (overlayBox?.width || 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((dialogBox?.height || 0) - (overlayBox?.height || 0))).toBeLessThanOrEqual(1)
     expect(overlayBox?.x || 0).toBeGreaterThan(0)
 
     await page.getByRole('button', { name: '员工信息', exact: true }).click()

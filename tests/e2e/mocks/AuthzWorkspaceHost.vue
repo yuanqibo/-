@@ -21,7 +21,7 @@ onMounted(() => emit('loaded'))
       </section>
     </section>
     <div v-if="assignmentOpen" class="el-overlay">
-      <section class="target-workspace-assignment-dialog" role="dialog" aria-label="分配 应用管理员 角色">
+      <section class="target-workspace-assignment-dialog el-dialog" role="dialog" aria-label="分配 应用管理员 角色">
         <h2>分配 应用管理员 角色</h2>
         <button type="button" @click="assignmentOpen = false">取消</button>
       </section>

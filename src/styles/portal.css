@@ -4293,6 +4293,18 @@ button.asset-code-rule-field-name {
   padding-bottom: 12px;
 }
 
+.standard-system-content:has(.member-authorization-view.is-assignment-open) {
+  position: relative;
+}
+
+.member-authorization-view.is-assignment-open .account-management-frame-shell {
+  position: absolute;
+  inset: -14px;
+  z-index: 20;
+  border: 0;
+  border-radius: 0;
+}
+
 .account-management-panel {
   min-height: 0;
   display: flex;

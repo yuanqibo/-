@@ -701,8 +701,12 @@ body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
 .authz-workspace-host .target-workspace-assignment-dialog.el-dialog {
   display: flex !important;
   flex-direction: column !important;
-  max-height: calc(100vh - 32px) !important;
-  margin: 16px auto !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
   overflow: hidden !important;
 }
 
