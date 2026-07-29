@@ -21,6 +21,7 @@ body:has(.authz-workspace-host) #app {
   overflow: hidden !important;
 }
 
+html:has(body.authz-workspace-portal-overlay-active),
 body.authz-workspace-portal-overlay-active {
   background: transparent !important;
 }

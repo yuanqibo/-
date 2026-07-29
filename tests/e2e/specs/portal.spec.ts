@@ -230,6 +230,11 @@ test.describe('登录后门户质量回归', () => {
     await expect(shell).toHaveClass(/is-workspace-overlay-open/)
     await expect(shell).toHaveCSS('position', 'fixed')
     await expect(page.locator('.standard-system-content')).toHaveClass(/has-authz-workspace-overlay/)
+    const embeddedBackgrounds = await frame.locator('html').evaluate((element) => ({
+      html: getComputedStyle(element).backgroundColor,
+      body: getComputedStyle(element.ownerDocument.body).backgroundColor
+    }))
+    expect(embeddedBackgrounds).toEqual({ html: 'rgba(0, 0, 0, 0)', body: 'rgba(0, 0, 0, 0)' })
     const shellBox = await shell.boundingBox()
     const overlayBox = await frame.locator('.el-overlay').boundingBox()
     const dialogBox = await frame.getByRole('dialog', { name: '分配 应用管理员 角色' }).boundingBox()
