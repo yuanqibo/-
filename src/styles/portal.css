@@ -4332,43 +4332,6 @@ button.asset-code-rule-field-name {
   background: #ffffff;
 }
 
-body.authz-workspace-overlay-active {
-  overflow: hidden;
-}
-
-.standard-system-content.has-authz-workspace-overlay,
-.standard-system-content.has-authz-workspace-overlay .member-authorization-view {
-  animation: none !important;
-  transform: none !important;
-  will-change: auto !important;
-  contain: none !important;
-  overflow: visible !important;
-}
-
-.account-management-frame-shell.is-workspace-overlay-open {
-  position: fixed;
-  inset: 0;
-  z-index: 4000;
-  width: 100vw;
-  height: 100vh;
-  min-height: 100vh;
-  border: 0;
-  border-radius: 0;
-  overflow: hidden;
-  background: transparent;
-  box-shadow: none;
-}
-
-.account-management-frame-shell.is-workspace-overlay-open .account-management-frame-loading {
-  display: none;
-}
-
-.account-management-frame-shell.is-workspace-overlay-open .account-management-frame {
-  width: 100vw;
-  height: 100vh;
-  background: transparent;
-}
-
 @media print {
   body * { visibility: hidden !important; }
   .standard-print-dialog,

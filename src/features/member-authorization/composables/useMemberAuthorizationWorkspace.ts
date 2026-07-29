@@ -8,11 +8,12 @@ const WORKSPACE_SURFACE_SELECTOR = [
   '.authz-code-selector-dialog'
 ].join(',')
 
-export const setClassState = (element: Element | null | undefined, className: string, active: boolean): boolean => {
-  if (!element || element.classList.contains(className) === active) return false
-  element.classList.toggle(className, active)
-  return true
-}
+const WORKSPACE_PORTAL_SELECTOR = [
+  '.el-overlay',
+  '.el-popper',
+  '.el-message',
+  '.el-notification'
+].map((selector) => `:scope > ${selector}`).join(',')
 
 export const useMemberAuthorizationWorkspace = () => {
   const frame = ref<HTMLIFrameElement>()
@@ -21,30 +22,30 @@ export const useMemberAuthorizationWorkspace = () => {
     errorMessage: ''
   })
   const workspaceUrl = memberAuthorizationWorkspaceUrl()
-  let drawerObserver: MutationObserver | null = null
-  let frameShell: HTMLElement | null = null
-  let viewportHost: HTMLElement | null = null
+  let portalObserver: MutationObserver | null = null
+  const portaledNodes = new Set<HTMLElement>()
   let loadTimer: number | null = null
   let loadTimeout: number | null = null
   let active = true
 
-  const setViewportOverlay = (overlayOpen: boolean, hideWorkspaceApp = overlayOpen): void => {
-    frameShell ||= frame.value?.closest<HTMLElement>('.account-management-frame-shell') || null
-    viewportHost ||= frame.value?.closest<HTMLElement>('.standard-system-content') || null
-    setClassState(frameShell, 'is-workspace-overlay-open', overlayOpen)
-    setClassState(viewportHost, 'has-authz-workspace-overlay', overlayOpen)
-    setClassState(document.body, 'authz-workspace-overlay-active', overlayOpen)
+  const restorePortaledNodes = (): void => {
     try {
-      setClassState(frame.value?.contentDocument?.body, 'authz-workspace-portal-overlay-active', hideWorkspaceApp)
+      const frameBody = frame.value?.contentDocument?.body
+      portaledNodes.forEach((node) => {
+        node.classList.remove('authz-workspace-host', 'authz-workspace-auxiliary')
+        if (node.isConnected && frameBody) frameBody.appendChild(node)
+        else if (node.isConnected) node.remove()
+      })
     } catch {
-      // Supported deployments render this iframe on the same origin.
+      portaledNodes.forEach((node) => node.remove())
     }
+    portaledNodes.clear()
   }
 
   const disconnectObserver = (): void => {
-    drawerObserver?.disconnect()
-    drawerObserver = null
-    setViewportOverlay(false, false)
+    portalObserver?.disconnect()
+    portalObserver = null
+    restorePortaledNodes()
   }
 
   const observeFrame = (): void => {
@@ -53,32 +54,35 @@ export const useMemberAuthorizationWorkspace = () => {
       const frameDocument = frame.value?.contentDocument
       const frameWindow = frame.value?.contentWindow
       if (!frameDocument?.body || !frameWindow) return
-      const sync = (): void => {
-        const overlays = Array.from(frameDocument.getElementsByClassName('el-overlay'))
-        overlays.forEach((overlay) => {
-          setClassState(overlay, 'authz-workspace-host', Boolean(overlay.querySelector(WORKSPACE_SURFACE_SELECTOR)))
-        })
-        const activeOverlays = overlays.filter((overlay) => {
-          if (!overlay.querySelector(WORKSPACE_SURFACE_SELECTOR)) return false
-          const style = frameWindow.getComputedStyle(overlay)
-          return style.display !== 'none' && style.visibility !== 'hidden'
-        })
-        setViewportOverlay(
-          activeOverlays.length > 0,
-          activeOverlays.some((overlay) => !overlay.closest('#app'))
-        )
+
+      const portalNode = (node: HTMLElement, primary: boolean): void => {
+        node.classList.add(primary ? 'authz-workspace-host' : 'authz-workspace-auxiliary')
+        const primaryHost = Array.from(portaledNodes).find((item) => item.classList.contains('authz-workspace-host'))
+        if (primary) document.body.appendChild(node)
+        else (primaryHost || document.body).appendChild(node)
+        portaledNodes.add(node)
       }
+      const sync = (): void => {
+        portaledNodes.forEach((node) => {
+          if (!node.isConnected) portaledNodes.delete(node)
+        })
+
+        const overlays = Array.from(frameDocument.querySelectorAll<HTMLElement>('.el-overlay'))
+        overlays
+          .filter((overlay) => overlay.querySelector(WORKSPACE_SURFACE_SELECTOR))
+          .forEach((overlay) => portalNode(overlay, true))
+        if (!Array.from(portaledNodes).some((node) => node.classList.contains('authz-workspace-host'))) return
+
+        Array.from(frameDocument.body.querySelectorAll<HTMLElement>(WORKSPACE_PORTAL_SELECTOR))
+          .forEach((node) => portalNode(node, false))
+      }
+
       const FrameMutationObserver = (frameWindow as unknown as { MutationObserver: typeof MutationObserver }).MutationObserver
-      drawerObserver = new FrameMutationObserver(sync)
-      drawerObserver.observe(frameDocument.body, {
-        attributes: true,
-        attributeFilter: ['class', 'style'],
-        childList: true,
-        subtree: true
-      })
+      portalObserver = new FrameMutationObserver(sync)
+      portalObserver.observe(frameDocument.body, { childList: true, subtree: true })
       sync()
     } catch (error) {
-      state.errorMessage = error instanceof Error ? error.message : 'ECP 工作台抽屉联动不可用'
+      state.errorMessage = error instanceof Error ? error.message : 'ECP 工作台浮层联动不可用'
     }
   }
 
@@ -98,8 +102,6 @@ export const useMemberAuthorizationWorkspace = () => {
   const bindFrame = (element: unknown): void => {
     if (!(element instanceof HTMLIFrameElement) || frame.value === element) return
     frame.value = element
-    frameShell = element.closest<HTMLElement>('.account-management-frame-shell')
-    viewportHost = element.closest<HTMLElement>('.standard-system-content')
     requestWorkspace(element)
   }
 
@@ -122,8 +124,6 @@ export const useMemberAuthorizationWorkspace = () => {
     if (loadTimer !== null) window.clearTimeout(loadTimer)
     if (loadTimeout !== null) window.clearTimeout(loadTimeout)
     disconnectObserver()
-    frameShell = null
-    viewportHost = null
   })
 
   onDeactivated(() => {
