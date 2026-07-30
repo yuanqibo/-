@@ -73,6 +73,20 @@ class EcpDirectoryUserServiceTest {
     }
 
     @Test
+    void reusesProfilesTrustedByTheSessionSelectableDirectory() {
+        EcpClient client = mock(EcpClient.class);
+        EcpDirectoryUserService service = new EcpDirectoryUserService(client);
+
+        service.rememberAll(List.of(profile("user-1")));
+        EcpDirectoryUserService.DirectoryParty party = service.requireBySubject("user-1");
+
+        assertThat(party.name()).isEqualTo("李雷");
+        assertThat(party.company()).isEqualTo("示例公司");
+        assertThat(party.department()).isEqualTo("销售部");
+        verify(client, never()).directory();
+    }
+
+    @Test
     void findsAnExactSubjectFromPagedDirectoryWhenSearchDoesNotIndexUnionIds() {
         EcpClient client = mock(EcpClient.class);
         DirectoryOperations directory = mock(DirectoryOperations.class);

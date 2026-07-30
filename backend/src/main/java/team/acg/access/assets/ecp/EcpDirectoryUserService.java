@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -64,6 +65,11 @@ public class EcpDirectoryUserService {
             department == null ? "" : text(department.name()),
             company == null ? "" : text(company.unionId()),
             company == null ? "" : text(company.name()));
+    }
+
+    public void rememberAll(Collection<EcpUserProfile> values) {
+        if (values == null) return;
+        values.forEach(this::remember);
     }
 
     private EcpUserProfile findInApplicationDirectory(String subject) {
