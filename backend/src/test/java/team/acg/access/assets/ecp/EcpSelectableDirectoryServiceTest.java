@@ -24,8 +24,8 @@ class EcpSelectableDirectoryServiceTest {
                   "name": "袁其博",
                   "employeeNo": "A001",
                   "email": "yuan@example.com",
-                  "path": "杭州艾柯塞斯品牌管理有限公司/IT与信息安全部",
-                  "fullPath": "杭州艾柯塞斯品牌管理有限公司/IT与信息安全部/袁其博"
+                  "path": "飞书/杭州艾柯塞斯品牌管理有限公司/IT与信息安全部",
+                  "fullPath": "飞书/杭州艾柯塞斯品牌管理有限公司/IT与信息安全部/袁其博"
                 },
                 {
                   "nodeType": "ORG",

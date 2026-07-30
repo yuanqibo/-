@@ -116,12 +116,15 @@ public class EcpSelectableDirectoryService {
 
         String path = first(node, "path", "departmentPath", "fullPath");
         List<String> pathParts = pathParts(path, name);
+        String accountSetUnionId = first(node, "accountSetUnionId", "accountSetId");
         String companyName = first(node, "companyName");
-        if (companyName.isEmpty() && !pathParts.isEmpty()) companyName = pathParts.get(0);
+        if (companyName.isEmpty() && !pathParts.isEmpty()) {
+            int companyIndex = !accountSetUnionId.isEmpty() && pathParts.size() > 1 ? 1 : 0;
+            companyName = pathParts.get(companyIndex);
+        }
         String departmentName = first(node, "departmentName", "primaryDepartmentName");
         if (departmentName.isEmpty() && pathParts.size() > 1) departmentName = pathParts.get(pathParts.size() - 1);
 
-        String accountSetUnionId = first(node, "accountSetUnionId", "accountSetId");
         String companyUnionId = first(node, "companyUnionId", "companyId");
         EcpUserProfile.CompanySummary company = companyName.isEmpty() && companyUnionId.isEmpty() ? null
             : new EcpUserProfile.CompanySummary(companyUnionId, "", companyName, accountSetUnionId);
