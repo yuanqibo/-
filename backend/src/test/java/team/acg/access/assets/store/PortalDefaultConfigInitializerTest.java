@@ -42,6 +42,12 @@ class PortalDefaultConfigInitializerTest {
             .path("receiveAsset").path("approvalRequired").asBoolean()).isTrue();
         assertThat(repository.find("assetPortalSelfServiceSettingsV9").orElseThrow().value()
             .path("borrowAsset").path("approvalRequired").asBoolean()).isTrue();
+        assertThat(repository.find("assetPortalSelfServiceSettingsV9").orElseThrow().value()
+            .path("signSettings").path("assetReceive").path("employeeSign").asBoolean()).isFalse();
+        assertThat(repository.find("assetPortalSelfServiceSettingsV9").orElseThrow().value()
+            .path("signSettings").path("assetBorrow").path("employeeSign").asBoolean()).isFalse();
+        assertThat(repository.find("assetPortalSelfServiceSettingsV9").orElseThrow().value()
+            .path("signSettings").path("assetHandover").path("employeeSign").asBoolean()).isFalse();
         assertThat(repository.find("assetLabelCustomTemplatesV1")).isPresent();
         assertThat(repository.find("assetLabelPrintSettingsV2")).isPresent();
     }

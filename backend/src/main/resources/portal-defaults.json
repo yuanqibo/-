@@ -159,61 +159,61 @@
     "deviceRequest": { "enabled": false, "remarkRequired": false, "remarkPrompt": "", "allowEmployeeAddDevice": true },
     "signSettings": {
       "assetReceive": {
-        "employeeSign": true,
+        "employeeSign": false,
         "noticeEnabled": false,
         "noticeContent": "请核对资产名称、编号、配置和附件状态。确认无误后完成签字，系统将记录为本人领用。",
         "timings": {}
       },
       "selfReceiveAsset": {
-        "employeeSign": true,
+        "employeeSign": false,
         "noticeEnabled": false,
         "noticeContent": "请确认申请资产用于真实办公需要，并在接收时核对资产信息。领用后请妥善保管，按公司要求使用。",
         "timings": { "start": false, "receive": false }
       },
       "assetHandover": {
-        "employeeSign": true,
+        "employeeSign": false,
         "noticeEnabled": false,
         "noticeContent": "交接双方需确认资产状态、配件和使用责任。接收人签字后，资产责任人将同步变更。",
         "timings": {}
       },
       "selfHandoverAsset": {
-        "employeeSign": true,
+        "employeeSign": false,
         "noticeEnabled": false,
         "noticeContent": "请与接收员工确认资产实物、编号和状态。接收方确认后，系统将完成资产交接记录。",
-        "timings": { "receive": true }
+        "timings": { "receive": false }
       },
       "assetBorrow": {
-        "employeeSign": true,
+        "employeeSign": false,
         "noticeEnabled": false,
         "noticeContent": "请确认借用资产、预计归还日期和使用责任。借用期间请妥善保管，并按时归还。",
         "timings": {}
       },
       "selfBorrowAsset": {
-        "employeeSign": true,
+        "employeeSign": false,
         "noticeEnabled": false,
         "noticeContent": "请根据实际办公需要发起借用申请，填写预计归还时间。借用资产仅限本人使用，不得私自转借。",
         "timings": { "start": false, "receive": false }
       },
       "assetGiveBack": {
-        "employeeSign": true,
+        "employeeSign": false,
         "noticeEnabled": false,
         "noticeContent": "归还前请清点资产及配件，确认外观和功能状态。管理员确认后，资产将恢复为可用状态。",
         "timings": {}
       },
       "selfGiveBackAsset": {
-        "employeeSign": true,
+        "employeeSign": false,
         "noticeEnabled": false,
         "noticeContent": "请选择本人名下借用资产并确认归还信息。归还前请清理个人数据并交回相关配件。",
-        "timings": { "return": true }
+        "timings": { "return": false }
       },
       "materialReceive": {
-        "employeeSign": true,
+        "employeeSign": false,
         "noticeEnabled": false,
         "noticeContent": "请核对物料名称、规格和数量。确认无误后完成签字，系统将记录本次物料领用。",
         "timings": {}
       },
       "selfMaterialReceive": {
-        "employeeSign": true,
+        "employeeSign": false,
         "noticeEnabled": false,
         "noticeContent": "请按实际办公消耗申请物料，确认名称、规格和数量。领取后请合理使用，避免浪费。",
         "timings": { "start": false, "receive": false }

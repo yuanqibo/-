@@ -31,13 +31,13 @@ const signPages: SignPage[] = [
     { key: 'assetReceive', title: '资产领用', help: '管理员操作资产领用后，员工接收时需签字确认。', noticeLabel: '领用须知', defaultNoticeContent: '请核对资产名称、编号、配置和附件状态。确认无误后完成签字，系统将记录为本人领用。' },
     { key: 'selfReceiveAsset', title: '自助领用资产', help: '员工在申请领用资产时，可查阅领用须知。', noticeLabel: '领用须知', defaultNoticeContent: '请确认申请资产用于真实办公需要，并在接收时核对资产信息。领用后请妥善保管，按公司要求使用。', timings: [{ key: 'start', label: '发起时' }, { key: 'receive', label: '接收时' }] },
     { key: 'assetHandover', title: '资产交接', help: '管理员操作资产交接后，员工接收时需签字确认。', noticeLabel: '交接须知', defaultNoticeContent: '交接双方需确认资产状态、配件和使用责任。接收人签字后，资产责任人将同步变更。' },
-    { key: 'selfHandoverAsset', title: '自助交接资产', help: '员工在交接资产时，接收员工可查阅交接须知。', noticeLabel: '交接须知', defaultNoticeContent: '请与接收员工确认资产实物、编号和状态。接收方确认后，系统将完成资产交接记录。', timings: [{ key: 'receive', label: '接收时', defaultValue: true, disabled: true }] }
+    { key: 'selfHandoverAsset', title: '自助交接资产', help: '员工在交接资产时，接收员工可查阅交接须知。', noticeLabel: '交接须知', defaultNoticeContent: '请与接收员工确认资产实物、编号和状态。接收方确认后，系统将完成资产交接记录。', timings: [{ key: 'receive', label: '接收时' }] }
   ] },
   { key: 'assetBorrow', title: '资产借用', items: [
     { key: 'assetBorrow', title: '资产借用', help: '管理员操作资产借用后，员工接收时需签字确认。', noticeLabel: '借用须知', defaultNoticeContent: '请确认借用资产、预计归还日期和使用责任。借用期间请妥善保管，并按时归还。' },
     { key: 'selfBorrowAsset', title: '自助借用资产', help: '员工在申请借用资产时，可查阅借用须知。', noticeLabel: '借用须知', defaultNoticeContent: '请根据实际办公需要发起借用申请，填写预计归还时间。借用资产仅限本人使用，不得私自转借。', timings: [{ key: 'start', label: '发起时' }, { key: 'receive', label: '接收时' }] },
     { key: 'assetGiveBack', title: '资产归还', help: '管理员操作资产归还后，员工归还时需签字确认。', noticeLabel: '归还须知', defaultNoticeContent: '归还前请清点资产及配件，确认外观和功能状态。管理员确认后，资产将恢复为可用状态。' },
-    { key: 'selfGiveBackAsset', title: '自助归还资产', help: '员工在归还资产时，可查阅归还须知。', noticeLabel: '归还须知', defaultNoticeContent: '请选择本人名下借用资产并确认归还信息。归还前请清理个人数据并交回相关配件。', timings: [{ key: 'return', label: '归还时', defaultValue: true, disabled: true }] }
+    { key: 'selfGiveBackAsset', title: '自助归还资产', help: '员工在归还资产时，可查阅归还须知。', noticeLabel: '归还须知', defaultNoticeContent: '请选择本人名下借用资产并确认归还信息。归还前请清理个人数据并交回相关配件。', timings: [{ key: 'return', label: '归还时' }] }
   ] },
   { key: 'materialReceive', title: '物料领用', items: [
     { key: 'materialReceive', title: '物料领用', help: '管理员操作物料领用后，员工接收时需签字确认。', noticeLabel: '领用须知', defaultNoticeContent: '请核对物料名称、规格和数量。确认无误后完成签字，系统将记录本次物料领用。' },
@@ -59,7 +59,7 @@ const ensureSignItem = (key: string): SelfServiceSignItem => {
   const current = form.signSettings[key]
   if (!current) {
     form.signSettings[key] = {
-      employeeSign: true,
+      employeeSign: false,
       noticeEnabled: Boolean(definition.defaultNoticeEnabled),
       noticeContent: definition.defaultNoticeContent,
       timings: Object.fromEntries((definition.timings || []).map((item) => [item.key, Boolean(item.defaultValue)]))

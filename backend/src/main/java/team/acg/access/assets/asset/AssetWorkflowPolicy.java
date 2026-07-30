@@ -19,10 +19,9 @@ public class AssetWorkflowPolicy {
 
     public boolean requiresEmployeeSignature(String operationType) {
         JsonNode policy = signaturePolicy(operationType);
-        return !policy.isObject()
-            ? "HANDOVER".equalsIgnoreCase(operationType)
-            : policy.path("employeeSign").asBoolean(true)
-            || policy.path("noticeEnabled").asBoolean(false);
+        return policy.isObject() && (
+            policy.path("employeeSign").asBoolean(false)
+                || policy.path("noticeEnabled").asBoolean(false));
     }
 
     public String noticeContent(String operationType) {
@@ -35,8 +34,7 @@ public class AssetWorkflowPolicy {
     public boolean requiresEmployeeSignature(String operationType, boolean selfService) {
         if (!selfService) return requiresEmployeeSignature(operationType);
         JsonNode policy = selfServiceSignaturePolicy(operationType);
-        return policy.path("timings").path("receive").asBoolean(false)
-            || policy.path("noticeEnabled").asBoolean(false);
+        return policy.path("timings").path("receive").asBoolean(false);
     }
 
     public String noticeContent(String operationType, boolean selfService) {
