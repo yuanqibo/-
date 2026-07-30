@@ -33,12 +33,15 @@ public class EcpIdentityService {
 
     private final EcpClient client;
     private final long cacheTtlMillis;
+    private final boolean authoritativeRoleLookupEnabled;
     private final Map<String, CachedIdentity> identityCache = new ConcurrentHashMap<>();
 
     public EcpIdentityService(EcpClient client,
-                              @Value("${asset-portal.security.identity-cache-ttl:1m}") Duration cacheTtl) {
+                              @Value("${asset-portal.security.identity-cache-ttl:1m}") Duration cacheTtl,
+                              @Value("${ecp.sdk.permission.enabled:false}") boolean authoritativeRoleLookupEnabled) {
         this.client = client;
         this.cacheTtlMillis = Math.max(0, cacheTtl.toMillis());
+        this.authoritativeRoleLookupEnabled = authoritativeRoleLookupEnabled;
     }
 
     public Map<String, Object> resolve(String token) {
@@ -63,6 +66,7 @@ public class EcpIdentityService {
     private Map<String, Object> resolveFresh(String token) {
         EcpSessionContext context = client.session(token).context();
         Map<String, Object> identity = normalize(context);
+        if (!authoritativeRoleLookupEnabled) return identity;
         try {
             mergeAuthoritativeAccountRoles(identity, context.user(), loadAccountRoles(context.user()));
         } catch (RuntimeException error) {

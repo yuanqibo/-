@@ -1,10 +1,5 @@
 package team.acg.access.assets.ecp;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.idanchuang.ecp.api.common.model.role.ApplicationRoleAssignmentSubjectSummary;
-import com.idanchuang.ecp.sdk.client.EcpClient;
-import com.idanchuang.ecp.sdk.client.operation.AssignmentsOperations;
-import com.idanchuang.ecp.sdk.client.operation.RolesOperations;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,13 +10,12 @@ import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import team.acg.access.assets.auth.EcpIdentityService;
 import team.acg.access.assets.auth.RequestIdentityService;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -29,11 +23,10 @@ import static org.mockito.Mockito.when;
 class EcpProxyControllerTest {
     private HttpServer upstream;
     private EcpProxyController controller;
-    private EcpClient ecpClient;
     private RequestIdentityService identityService;
-    private AssignmentsOperations assignments;
-    private ObjectProvider<EcpClient> ecpClientProvider;
     private EcpIdentityService identityCache;
+    private final AtomicReference<String> forwardedAuthorization = new AtomicReference<>();
+    private final AtomicReference<String> forwardedBody = new AtomicReference<>();
 
     @BeforeEach
     void startUpstream() throws Exception {
@@ -57,20 +50,23 @@ class EcpProxyControllerTest {
             exchange.getResponseBody().write(body);
             exchange.close();
         });
+        upstream.createContext("/applications/WLY5YG/app-role-assignment-subjects", exchange -> {
+            forwardedAuthorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            forwardedBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] body = "{\"subjectKey\":\"account:user-1\",\"assignmentCount\":1}"
+                .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
         upstream.start();
-        ecpClient = mock(EcpClient.class);
-        ecpClientProvider = mock(ObjectProvider.class);
         ObjectProvider<EcpIdentityService> identityCacheProvider = mock(ObjectProvider.class);
         identityCache = mock(EcpIdentityService.class);
         identityService = mock(RequestIdentityService.class);
-        RolesOperations roles = mock(RolesOperations.class);
-        assignments = mock(AssignmentsOperations.class);
-        when(ecpClient.roles()).thenReturn(roles);
-        when(ecpClientProvider.getIfAvailable()).thenReturn(ecpClient);
         when(identityCacheProvider.getIfAvailable()).thenReturn(identityCache);
-        when(roles.assignments()).thenReturn(assignments);
         controller = new EcpProxyController("http://127.0.0.1:" + upstream.getAddress().getPort(), "WLY5YG",
-            ecpClientProvider, identityCacheProvider, identityService, new ObjectMapper());
+            identityCacheProvider, identityService);
     }
 
     @AfterEach
@@ -141,10 +137,7 @@ class EcpProxyControllerTest {
     }
 
     @Test
-    void executesRoleAssignmentWritesWithTheApplicationSdkAfterAuthorizingTheOperator() throws Exception {
-        var summary = new ApplicationRoleAssignmentSubjectSummary(
-            "ACCOUNT", "account:user-1", "测试用户", List.of(1L), List.of(9L), 1);
-        when(assignments.syncSubjects(any())).thenReturn(summary);
+    void forwardsRoleAssignmentWritesWithTheOperatorSessionAfterAuthorizingTheOperator() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest(
             "PUT", "/api/v1/applications/WLY5YG/app-role-assignment-subjects");
         request.addHeader("Authorization", "Bearer session-token");
@@ -156,8 +149,9 @@ class EcpProxyControllerTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(new String(response.getBody(), StandardCharsets.UTF_8)).contains("account:user-1", "assignmentCount");
+        assertThat(forwardedAuthorization).hasValue("Bearer session-token");
+        assertThat(forwardedBody.get()).contains("account:user-1", "appRoleIds");
         verify(identityService).requirePermission(request, "authz:app_role:assign");
-        verify(assignments).syncSubjects(any());
         verify(identityCache).invalidateAll();
     }
 }

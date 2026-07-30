@@ -35,7 +35,7 @@ class EcpIdentityServiceTest {
         when(roles.list()).thenReturn(List.of());
         when(roles.assignments()).thenReturn(assignments);
         when(assignments.list(anyString(), isNull())).thenReturn(List.of());
-        EcpIdentityService service = new EcpIdentityService(client, Duration.ofMinutes(1));
+        EcpIdentityService service = new EcpIdentityService(client, Duration.ofMinutes(1), true);
 
         service.resolve("session-token");
         service.invalidateAll();
@@ -56,14 +56,14 @@ class EcpIdentityServiceTest {
         when(roles.list()).thenReturn(List.of());
         when(roles.assignments()).thenReturn(assignments);
         when(assignments.list(anyString(), isNull())).thenReturn(List.of());
-        EcpIdentityService service = new EcpIdentityService(client, Duration.ofSeconds(10));
+        EcpIdentityService service = new EcpIdentityService(client, Duration.ofSeconds(10), false);
 
         Map<String, Object> first = service.resolve("same-session-token");
         Map<String, Object> second = service.resolve("same-session-token");
 
         assertThat(second).isSameAs(first);
         verify(session, times(1)).context();
-        verify(roles, times(1)).list();
+        verify(roles, times(0)).list();
     }
 
     @Test
