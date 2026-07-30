@@ -129,8 +129,8 @@ class EcpSelectableDirectoryServiceTest {
                   "subject":"account:user-1",
                   "accountUnionId":"user-1",
                   "accountSetUnionId":"account-set-1",
-                  "orgNodeUnionId":"department-1",
-                  "name":"任吉财"
+                  "name":"任吉财",
+                  "path":"示例公司/行政管理"
                 }],"total":1}
                 """);
         });

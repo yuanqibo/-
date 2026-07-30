@@ -199,6 +199,10 @@ public class EcpSelectableDirectoryService {
                                          Map<String, EcpCompanyProfile> companiesById) {
         String orgNodeUnionId = first(node, "orgNodeUnionId", "orgNodeId", "departmentUnionId");
         EcpDepartmentProfile department = departmentsById.get(orgNodeUnionId);
+        if (department == null) {
+            department = resolveDepartment(profile, root, departmentsById.values());
+            if (department != null) orgNodeUnionId = text(department.unionId());
+        }
         EcpCompanyProfile companyProfile = department == null ? null : companiesById.get(text(department.companyUnionId()));
         if (companyProfile == null && root != null) companyProfile = companiesById.get(root.companyUnionId());
 
@@ -223,6 +227,37 @@ public class EcpSelectableDirectoryService {
             profile.email(), profile.phone(), profile.status(), profile.employeeNo(), profile.jobTitle(),
             orgNodeUnionId, departmentName, departmentPath, company,
             departments == null ? List.of() : departments);
+    }
+
+    private static EcpDepartmentProfile resolveDepartment(EcpUserProfile profile, DirectoryRoot root,
+                                                          java.util.Collection<EcpDepartmentProfile> departments) {
+        String profilePath = normalizedPath(profile.orgNodePath());
+        if (!profilePath.isEmpty()) {
+            List<EcpDepartmentProfile> pathMatches = departments.stream()
+                .filter(value -> root == null || root.companyUnionId().equals(text(value.companyUnionId())))
+                .filter(value -> {
+                    String departmentPath = normalizedPath(value.path());
+                    return departmentPath.equals(profilePath)
+                        || departmentPath.endsWith("/" + profilePath)
+                        || profilePath.endsWith("/" + departmentPath);
+                })
+                .toList();
+            if (pathMatches.size() == 1) return pathMatches.get(0);
+        }
+        String departmentName = text(profile.orgNodeName());
+        if (departmentName.isEmpty()) return null;
+        List<EcpDepartmentProfile> nameMatches = departments.stream()
+            .filter(value -> departmentName.equals(text(value.name())))
+            .filter(value -> root == null || root.companyUnionId().equals(text(value.companyUnionId())))
+            .toList();
+        return nameMatches.size() == 1 ? nameMatches.get(0) : null;
+    }
+
+    private static String normalizedPath(String value) {
+        return java.util.Arrays.stream(text(value).split("/"))
+            .map(String::trim)
+            .filter(part -> !part.isEmpty())
+            .collect(java.util.stream.Collectors.joining("/"));
     }
 
     static ParsedOrganization parseOrganization(JsonNode root) {
