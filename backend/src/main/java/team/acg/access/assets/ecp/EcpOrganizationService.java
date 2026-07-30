@@ -19,9 +19,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -46,15 +49,18 @@ public class EcpOrganizationService {
         .build();
     private final ObjectMapper objectMapper;
     private final String baseUrl;
+    private final EcpSelectableDirectoryService selectableDirectory;
     private final Map<String, CachedOrganization> organizations = new ConcurrentHashMap<>();
 
     public EcpOrganizationService(EcpClient client,
                                   ObjectMapper objectMapper,
+                                  EcpSelectableDirectoryService selectableDirectory,
                                   @Value("${ecp.sdk.base-url}") String baseUrl,
                                   @Value("${ecp.sdk.app-code}") String appCode,
                                   @Value("${ecp.sdk.app-secret}") String appSecret) {
         this.client = client;
         this.objectMapper = objectMapper;
+        this.selectableDirectory = selectableDirectory;
         this.baseUrl = baseUrl.replaceAll("/$", "");
         this.transportClient = EcpTransportClient.builder()
             .baseUrl(baseUrl)
@@ -65,7 +71,7 @@ public class EcpOrganizationService {
     }
 
     public OrganizationConsole load(String tenantId, String authorization) {
-        String cacheKey = text(tenantId);
+        String cacheKey = text(tenantId) + ":" + digest(text(authorization));
         long now = System.currentTimeMillis();
         CachedOrganization cached = organizations.compute(cacheKey, (ignored, current) -> {
             if (current != null && current.expiresAtMillis() > now) return current;
@@ -77,12 +83,28 @@ public class EcpOrganizationService {
 
     private OrganizationConsole loadFresh(String tenantId, String authorization) {
         List<String> warnings = java.util.Collections.synchronizedList(new ArrayList<>());
-        CompletableFuture<List<EcpCompanyProfile>> companiesFuture = CompletableFuture.supplyAsync(() -> safeCompanies(warnings));
-        CompletableFuture<List<EcpDepartmentProfile>> departmentsFuture = CompletableFuture.supplyAsync(() -> loadDepartments(warnings));
-        CompletableFuture<List<EcpUserProfile>> usersFuture = CompletableFuture.supplyAsync(() -> loadUsers(warnings));
-        List<EcpCompanyProfile> companies = companiesFuture.join();
-        List<EcpDepartmentProfile> departments = departmentsFuture.join();
-        List<EcpUserProfile> users = usersFuture.join();
+        List<EcpCompanyProfile> companies;
+        List<EcpDepartmentProfile> departments;
+        List<EcpUserProfile> users;
+        if (text(authorization).startsWith("Bearer ")) {
+            try {
+                EcpSelectableDirectoryService.DirectorySnapshot snapshot = selectableDirectory.snapshot(authorization);
+                companies = snapshot.companies();
+                departments = snapshot.departments();
+                users = snapshot.users();
+            } catch (RuntimeException error) {
+                warnings.add("ECP 可选目录读取失败，已尝试应用目录：" + readable(error));
+                DirectoryData fallback = loadApplicationDirectory(warnings);
+                companies = fallback.companies();
+                departments = fallback.departments();
+                users = fallback.users();
+            }
+        } else {
+            DirectoryData fallback = loadApplicationDirectory(warnings);
+            companies = fallback.companies();
+            departments = fallback.departments();
+            users = fallback.users();
+        }
         List<AccountSetView> accountSets = loadAccountSets(tenantId, authorization, companies, users, warnings);
         OrganizationBuilder builder = new OrganizationBuilder();
         companies.forEach(builder::addCompany);
@@ -99,6 +121,13 @@ public class EcpOrganizationService {
                 ""),
             List.copyOf(warnings),
             OffsetDateTime.now());
+    }
+
+    private DirectoryData loadApplicationDirectory(List<String> warnings) {
+        CompletableFuture<List<EcpCompanyProfile>> companiesFuture = CompletableFuture.supplyAsync(() -> safeCompanies(warnings));
+        CompletableFuture<List<EcpDepartmentProfile>> departmentsFuture = CompletableFuture.supplyAsync(() -> loadDepartments(warnings));
+        CompletableFuture<List<EcpUserProfile>> usersFuture = CompletableFuture.supplyAsync(() -> loadUsers(warnings));
+        return new DirectoryData(companiesFuture.join(), departmentsFuture.join(), usersFuture.join());
     }
 
     private List<AccountSetView> loadAccountSets(String tenantId, String authorization, List<EcpCompanyProfile> companies,
@@ -235,11 +264,24 @@ public class EcpOrganizationService {
         return value == null ? "" : value.trim();
     }
 
+    private static String digest(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception error) {
+            throw new IllegalStateException("SHA-256 is unavailable", error);
+        }
+    }
+
     public record OrganizationConsole(List<AccountSetView> accountSets, List<OrganizationNode> roots,
                                       List<UserView> users, OrganizationCapabilities capabilities,
                                       List<String> warnings, OffsetDateTime fetchedAt) {}
 
     private record CachedOrganization(OrganizationConsole console, long expiresAtMillis) {}
+
+    private record DirectoryData(List<EcpCompanyProfile> companies,
+                                 List<EcpDepartmentProfile> departments,
+                                 List<EcpUserProfile> users) {}
 
     public record OrganizationCapabilities(boolean sync, boolean syncConfiguration, boolean accountSetSettings,
                                            String unavailableReason) {}

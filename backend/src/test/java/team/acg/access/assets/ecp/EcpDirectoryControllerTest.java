@@ -79,6 +79,24 @@ class EcpDirectoryControllerTest {
     }
 
     @Test
+    void fallsBackToTheSessionSelectableDirectoryWhenTheAppDirectoryIsEmpty() {
+        EcpDirectoryUserService directoryUsers = mock(EcpDirectoryUserService.class);
+        EcpSelectableDirectoryService selectableDirectory = mock(EcpSelectableDirectoryService.class);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        EcpPage<EcpUserProfile> selectablePage = new EcpPage<>(List.of(profile()), 1, 50, 1);
+        when(directoryUsers.page("", 1, 50)).thenReturn(new EcpPage<>(List.of(), 1, 50, 0));
+        when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn("Bearer session-token");
+        when(selectableDirectory.page("", 1, 50, "Bearer session-token")).thenReturn(selectablePage);
+
+        EcpDirectoryController.DirectoryUserPage result =
+            new EcpDirectoryController(directoryUsers, selectableDirectory).users("", 1, 50, request);
+
+        assertThat(result.items()).extracting(EcpDirectoryController.DirectoryUser::subject)
+            .containsExactly("user-1");
+        verify(directoryUsers).rememberAll(selectablePage.items());
+    }
+
+    @Test
     void boundsDirectoryQueriesBeforeCallingEcp() {
         EcpDirectoryController controller = new EcpDirectoryController(
             mock(EcpDirectoryUserService.class), mock(EcpSelectableDirectoryService.class));

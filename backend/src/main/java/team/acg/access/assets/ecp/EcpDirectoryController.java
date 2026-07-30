@@ -56,6 +56,11 @@ public class EcpDirectoryController {
         EcpPage<EcpUserProfile> result;
         try {
             result = directoryUsers.page(normalizedQuery, page, size);
+            if (result.items().isEmpty()) {
+                result = selectableDirectory.page(normalizedQuery, page, size,
+                    request.getHeader(HttpHeaders.AUTHORIZATION));
+                directoryUsers.rememberAll(result.items());
+            }
         } catch (EcpPermissionDeniedException ignored) {
             result = selectableDirectory.page(normalizedQuery, page, size,
                 request.getHeader(HttpHeaders.AUTHORIZATION));
