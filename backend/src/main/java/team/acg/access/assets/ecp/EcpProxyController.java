@@ -75,8 +75,9 @@ public class EcpProxyController {
         if (body.length > MAX_REQUEST_BODY_BYTES) {
             return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new byte[0]);
         }
+        String upstreamPath = managedAssignmentPath(path, servletRequest.getMethod());
         String query = servletRequest.getQueryString() == null ? "" : "?" + servletRequest.getQueryString();
-        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path + query))
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + upstreamPath + query))
             .timeout(Duration.ofSeconds(30));
 
         servletRequest.getHeaderNames().asIterator().forEachRemaining(name -> {
@@ -129,6 +130,20 @@ public class EcpProxyController {
             return false;
         }
         return true;
+    }
+
+    private String managedAssignmentPath(String path, String method) {
+        String applicationPath = "/applications/" + appCode;
+        if ("POST".equals(method) && path.equals(applicationPath + "/app-role-assignments")) {
+            return applicationPath + "/managed-app-role-assignments";
+        }
+        if ("PUT".equals(method) && path.equals(applicationPath + "/app-role-assignment-subjects")) {
+            return applicationPath + "/managed-app-role-assignment-subjects";
+        }
+        if ("POST".equals(method) && path.equals(applicationPath + "/app-role-assignments/batch-remove")) {
+            return applicationPath + "/managed-app-role-assignments/batch-remove";
+        }
+        return path;
     }
 
     private String forwardedPort(HttpServletRequest request) {
