@@ -53,24 +53,19 @@ class EcpProxyControllerTest {
         });
         upstream.createContext("/applications/WLY5YG/app-role-assignments", exchange -> {
             forwardedPath.set(exchange.getRequestURI().getPath());
-            byte[] body = "[]".getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, body.length);
-            exchange.getResponseBody().write(body);
-            exchange.close();
-        });
-        upstream.createContext("/applications/WLY5YG/managed-app-role-assignments", exchange -> {
-            forwardedPath.set(exchange.getRequestURI().getPath());
+            byte[] requestBody = exchange.getRequestBody().readAllBytes();
             forwardedAuthorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
-            forwardedBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-            byte[] body = "{\"id\":11,\"appRoleId\":1,\"subjectKey\":\"account:user-1\"}"
-                .getBytes(StandardCharsets.UTF_8);
+            forwardedBody.set(new String(requestBody, StandardCharsets.UTF_8));
+            byte[] body = requestBody.length == 0
+                ? "[]".getBytes(StandardCharsets.UTF_8)
+                : "{\"id\":11,\"appRoleId\":1,\"subjectKey\":\"account:user-1\"}"
+                    .getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, body.length);
             exchange.getResponseBody().write(body);
             exchange.close();
         });
-        upstream.createContext("/applications/WLY5YG/managed-app-role-assignment-subjects", exchange -> {
+        upstream.createContext("/applications/WLY5YG/app-role-assignment-subjects", exchange -> {
             forwardedPath.set(exchange.getRequestURI().getPath());
             forwardedAuthorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             forwardedBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
@@ -158,7 +153,7 @@ class EcpProxyControllerTest {
     }
 
     @Test
-    void forwardsRoleAssignmentWritesToTheManagedEndpointWithTheOperatorSession() throws Exception {
+    void forwardsRoleAssignmentWritesToTheEmbeddedWorkspaceEndpointWithTheOperatorSession() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest(
             "PUT", "/api/v1/applications/WLY5YG/app-role-assignment-subjects");
         request.addHeader("Authorization", "Bearer session-token");
@@ -170,7 +165,7 @@ class EcpProxyControllerTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(new String(response.getBody(), StandardCharsets.UTF_8)).contains("account:user-1", "assignmentCount");
-        assertThat(forwardedPath).hasValue("/applications/WLY5YG/managed-app-role-assignment-subjects");
+        assertThat(forwardedPath).hasValue("/applications/WLY5YG/app-role-assignment-subjects");
         assertThat(forwardedAuthorization).hasValue("Bearer session-token");
         assertThat(forwardedBody.get()).contains("account:user-1", "appRoleIds");
         verify(identityService).requirePermission(request, "authz:app_role:assign");
@@ -178,7 +173,7 @@ class EcpProxyControllerTest {
     }
 
     @Test
-    void forwardsRoleAssignmentCreatesToTheManagedEndpoint() throws Exception {
+    void forwardsRoleAssignmentCreatesToTheEmbeddedWorkspaceEndpoint() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest(
             "POST", "/api/v1/applications/WLY5YG/app-role-assignments");
         request.addHeader("Authorization", "Bearer session-token");
@@ -189,7 +184,7 @@ class EcpProxyControllerTest {
         ResponseEntity<byte[]> response = controller.proxy(request);
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
-        assertThat(forwardedPath).hasValue("/applications/WLY5YG/managed-app-role-assignments");
+        assertThat(forwardedPath).hasValue("/applications/WLY5YG/app-role-assignments");
         assertThat(forwardedAuthorization).hasValue("Bearer session-token");
         verify(identityService).requirePermission(request, "authz:app_role:assign");
         verify(identityCache).invalidateAll();
