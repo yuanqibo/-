@@ -1,6 +1,6 @@
 import { createEcpSdk } from '@acg/ecp-sdk'
 import { initAuthzSdk } from '@acg/ecp-auth'
-import { createBundleFromGlob } from '@acg/ecp-auth-vue'
+import { createBundleFromGlob, validateAuthzBundle } from '@acg/ecp-auth-vue'
 import type { App as VueApp } from 'vue'
 import type { Router } from 'vue-router'
 import type { DoctorReport, EcpAuthConfigSourceMode } from '@acg/ecp-sdk'
@@ -9,10 +9,6 @@ import {
   primeEmployeeSelfServiceSession,
   withEmployeeSelfServiceSnapshot
 } from './core/auth/employee-self-service-access'
-import {
-  applyTrustedPermissionSnapshot,
-  loadTrustedPortalIdentity
-} from './core/auth/trusted-identity'
 
 export type { AuthzSessionContext } from '@acg/ecp-sdk'
 
@@ -25,11 +21,7 @@ const authzBundle = createBundleFromGlob({
   ...import.meta.glob('/src/views/**/*.vue')
 })
 
-const appAdminRole = authzBundle.roles?.roles?.find((role) => role.code === 'APP_ADMIN')
-export const bundledAppAdminAccess = {
-  permissionCodes: [...(appAdminRole?.permissions || [])],
-  featureCodes: [...(appAdminRole?.features || [])]
-}
+export const localAuthzValidationReport = validateAuthzBundle(authzBundle)
 
 authzBundle.catalog?.resources?.forEach((resource) => {
   resource.permissions?.forEach((catalogPermission) => {
@@ -65,17 +57,8 @@ export const ecp = createEcpSdk({
       permission: {
         noPermissionPath: '/no-permission',
         loadPermissionSnapshot: async ({ appCode }) => {
-          const [snapshot, trustedIdentity] = await Promise.all([
-            initAuthzSdk(appCode).loadPermissionSnapshot(),
-            loadTrustedPortalIdentity()
-          ])
-          return snapshot
-            ? withEmployeeSelfServiceSnapshot(applyTrustedPermissionSnapshot(
-                snapshot,
-                trustedIdentity,
-                bundledAppAdminAccess
-              ))
-            : null
+          const snapshot = await initAuthzSdk(appCode).loadPermissionSnapshot()
+          return snapshot ? withEmployeeSelfServiceSnapshot(snapshot) : null
         }
       },
       menu: {
@@ -83,10 +66,14 @@ export const ecp = createEcpSdk({
         sync: true
       },
       workspace: {
-        parentRouteName: 'app-shell',
+        parentRouteName: 'system-workspace-shell',
         mountPath: '/workspace',
         noPermissionPath: '/no-permission',
-        styleScopeMode: 'strict'
+        styleScopeMode: 'strict',
+        routeMeta: {
+          title: '成员授权',
+          portalMenuId: 'authz.workspace'
+        }
       },
       quickstart: {
         layoutRouteName: 'app-shell',
@@ -102,22 +89,14 @@ export const ecp = createEcpSdk({
 
 let ecpReadyPromise: Promise<void> = Promise.resolve()
 let localDoctorReport: DoctorReport | null = null
-let workspacePreloadPromise: Promise<void> | null = null
-
-export const preloadMemberAuthorizationWorkspace = (): Promise<void> => {
-  if (!workspacePreloadPromise) {
-    workspacePreloadPromise = Promise.all([
-      import('@acg/ecp-auth-vue/workspace/loader').then((module) => module.registerAuthzWorkspaceElement()),
-      import('@acg/ecp-auth-vue/workspace/style.strict.css')
-    ]).then(() => undefined).catch((error) => {
-      workspacePreloadPromise = null
-      console.warn('[asset-portal] member authorization preload failed', error)
-    })
-  }
-  return workspacePreloadPromise
-}
 
 export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
+  if (!localAuthzValidationReport.ok) {
+    const failures = localAuthzValidationReport.errors
+      .map((issue) => `${issue.code}: ${issue.message}`)
+      .join('; ')
+    return Promise.reject(new Error(`ECP local bundle validation failed${failures ? `: ${failures}` : ''}`))
+  }
   ecpReadyPromise = ecp.setup({
       app,
       router,

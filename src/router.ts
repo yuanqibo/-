@@ -1,10 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import AppRouteLayout from './components/AppRouteLayout.vue'
-import MemberAuthorizationPage from './views/MemberAuthorizationPage.vue'
-import {
-  MEMBER_AUTHORIZATION_PORTAL_PATH,
-  MEMBER_AUTHORIZATION_WORKSPACE_PATH
-} from './core/routing/standard-routes'
+import SystemWorkspaceRouteLayout from './components/SystemWorkspaceRouteLayout.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -13,10 +9,10 @@ const routes: RouteRecordRaw[] = [
     component: AppRouteLayout,
     children: [
       {
-        path: MEMBER_AUTHORIZATION_PORTAL_PATH,
-        name: 'member-authorization-portal',
-        component: MemberAuthorizationPage,
-        meta: { portalMenuId: 'authz.workspace' }
+        path: '/__ecp_workspace_layout',
+        name: 'system-workspace-shell',
+        component: SystemWorkspaceRouteLayout,
+        children: []
       }
     ]
   }
@@ -25,11 +21,4 @@ const routes: RouteRecordRaw[] = [
 export const router = createRouter({
   history: createWebHistory(),
   routes
-})
-
-router.beforeEach((to) => {
-  if (to.path === MEMBER_AUTHORIZATION_WORKSPACE_PATH && to.query.embedded !== '1') {
-    return { path: MEMBER_AUTHORIZATION_PORTAL_PATH, replace: true }
-  }
-  return true
 })

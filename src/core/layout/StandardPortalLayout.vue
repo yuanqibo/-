@@ -6,8 +6,6 @@ import { ElNotification } from 'element-plus'
 import { usePortalSession } from '../auth/portal-session'
 import { useTerminalMode, type PortalTerminalMode } from '../auth/terminal-mode'
 import type { PortalMenuItem } from '../auth/portal-context'
-import { MEMBER_AUTHORIZATION_PORTAL_PATH } from '../routing/standard-routes'
-import { preloadMemberAuthorizationWorkspace } from '../../ecp'
 import ApprovalNotificationDialog from '../../features/approvals/components/ApprovalNotificationDialog.vue'
 import { useApprovals } from '../../features/approvals/composables/useApprovals'
 import type { ApprovalRecord } from '../../features/approvals/types/approval'
@@ -76,12 +74,13 @@ const assetChildren = (parentId: string): PortalMenuItem[] => menuItems.value
 
 const primaryActive = (item: PortalMenuItem): boolean => {
   if (item.id === 'assets') return route.path.startsWith('/assets')
-  if (item.id === 'settings') return route.path.startsWith('/system')
+  if (item.id === 'settings') {
+    return route.path.startsWith('/system') || systemMenus.value.some((menu) => menu.path === route.path)
+  }
   return route.path === item.path
 }
 
-const routePathForMenu = (item: PortalMenuItem): string =>
-  item.id === 'authz.workspace' ? MEMBER_AUTHORIZATION_PORTAL_PATH : item.path
+const routePathForMenu = (item: PortalMenuItem): string => item.path
 
 const preloadPath = (path: string): Promise<void> => {
   const existing = routePreloads.get(path)
@@ -94,10 +93,7 @@ const preloadPath = (path: string): Promise<void> => {
   routePreloads.set(path, preload)
   return preload
 }
-const preloadMenuRoute = (item: PortalMenuItem): void => {
-  void preloadPath(routePathForMenu(item))
-  if (item.id === 'authz.workspace') void preloadMemberAuthorizationWorkspace()
-}
+const preloadMenuRoute = (item: PortalMenuItem): void => { void preloadPath(routePathForMenu(item)) }
 const primaryTarget = (item: PortalMenuItem): PortalMenuItem =>
   item.id === 'settings' ? systemMenus.value[0] || item : item
 const preloadPrimaryMenuRoute = (item: PortalMenuItem): void => preloadMenuRoute(primaryTarget(item))

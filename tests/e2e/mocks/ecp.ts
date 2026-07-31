@@ -19,10 +19,6 @@ const allPermissions = [
   'authz:application:view', 'authz:model:view', 'authz:app_role:view', 'authz:app_role:assign'
 ]
 const allFeatures = ['PORTAL_HOME', 'PORTAL_ASSETS', 'PORTAL_REQUESTS', 'PORTAL_SETTINGS', 'APP_WORKSPACE']
-export const bundledAppAdminAccess = {
-  permissionCodes: [...allPermissions],
-  featureCodes: [...allFeatures]
-}
 
 const routes: Array<RouteRecordRaw & { path: string }> = [
   { path: '/', name: 'e2e-home', component: () => import('../../../src/views/HomePage.vue') },
@@ -102,8 +98,11 @@ export const ecp = {
 
 export const configureEcp = async (_app: VueApp, router: Router): Promise<void> => {
   configureAuthzBrowserRuntime({ defaultAppCode: 'WLY5YG', baseUrl: '/api/v1' })
-  routes.forEach((route) => { if (!router.hasRoute(String(route.name))) router.addRoute(route) })
+  routes.forEach((route) => {
+    if (router.hasRoute(String(route.name))) return
+    if (route.path === '/workspace') router.addRoute('system-workspace-shell', route)
+    else router.addRoute(route)
+  })
 }
 export const waitForEcpReady = async (): Promise<void> => undefined
-export const preloadMemberAuthorizationWorkspace = async (): Promise<void> => undefined
 export const getLocalDoctorReport = () => ({ ok: true, checks: [] })

@@ -1,7 +1,7 @@
 import { readonly, reactive, toRefs } from 'vue'
 import { useRouter, type Router } from 'vue-router'
 import type { AuthzSessionContext, MenuTreeNode } from '@acg/ecp-sdk'
-import { bundledAppAdminAccess, ecp, waitForEcpReady } from '../../ecp'
+import { ecp, waitForEcpReady } from '../../ecp'
 import type { PortalMenuItem, PortalUser } from './portal-context'
 import { resolvePortalRoleCode } from './portal-role'
 import { revokeEcpSession } from './ecp-session-logout'
@@ -62,16 +62,13 @@ const isMenuItemAllowed = (item: Partial<MenuTreeNode>): boolean => {
     : Boolean(ecp.auth?.permission.all(input))
 }
 
-const loadAccessiblePortalMenu = async (unrestricted = false): Promise<PortalMenuItem[]> => {
-  const menuPromise = unrestricted
-    ? ecp.auth?.menu.getNavTree()
-    : ecp.auth?.menu.getAccessibleNavTree()
-  const tree = await menuPromise?.catch((error) => {
+const loadAccessiblePortalMenu = async (): Promise<PortalMenuItem[]> => {
+  const tree = await ecp.auth?.menu.getAccessibleNavTree().catch((error) => {
     console.warn('[asset-portal] ECP accessible menu unavailable', error)
     return []
   }) ?? []
   const accessibleMenu = flattenMenuTree(tree)
-    .filter((item) => unrestricted || isMenuItemAllowed(item))
+    .filter(isMenuItemAllowed)
     .map(toPortalMenuItem)
     .filter((item): item is PortalMenuItem => Boolean(item))
     .sort((left, right) => left.order - right.order)
@@ -147,11 +144,11 @@ const installPortalContext = (router: Router): void => {
 
 const applySession = async (session: AuthzSessionContext, router: Router): Promise<void> => {
   const trustedIdentity = await loadTrustedPortalIdentity()
-  const trustedSession = applyTrustedPortalIdentity(session, trustedIdentity, bundledAppAdminAccess)
+  const trustedSession = applyTrustedPortalIdentity(session, trustedIdentity)
   const augmentedSession = primeEmployeeSelfServiceSession(trustedSession)
   state.session = augmentedSession
   state.user = buildPortalUser(augmentedSession)
-  state.menuItems = await loadAccessiblePortalMenu(state.user.roleCode === 'super_admin')
+  state.menuItems = await loadAccessiblePortalMenu()
   installPortalContext(router)
 }
 

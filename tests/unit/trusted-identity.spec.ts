@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { AuthzPermissionSnapshot, AuthzSessionContext } from '@acg/ecp-sdk'
-import {
-  applyTrustedPermissionSnapshot,
-  applyTrustedPortalIdentity
-} from '../../src/core/auth/trusted-identity'
+import type { AuthzSessionContext } from '@acg/ecp-sdk'
+import { applyTrustedPortalIdentity } from '../../src/core/auth/trusted-identity'
 
 const session = {
   appCode: 'WLY5YG',
@@ -15,69 +12,35 @@ const session = {
   featureCodes: ['PORTAL_HOME']
 } satisfies AuthzSessionContext
 
-const snapshot = {
-  permissionCodes: ['asset:item:view'],
-  roleCodes: ['JPNYHJ'],
-  roleNamesByCode: { JPNYHJ: '员工自助' },
-  featureCodes: ['PORTAL_HOME'],
-  source: 'REMOTE'
-} satisfies AuthzPermissionSnapshot
-
 describe('trusted portal identity', () => {
-  it('restores an authoritative ECP application administrator', () => {
+  it('maps the backend administrator identity without inventing local catalog grants', () => {
     const result = applyTrustedPortalIdentity(session, {
       roleCode: 'super_admin',
       permissionCodes: ['asset:item:create', 'authz:app_role:assign'],
       featureCodes: ['PORTAL_ASSETS', 'PORTAL_SETTINGS', 'APP_WORKSPACE']
-    }, {
-      permissionCodes: ['asset:disposal:view', 'asset:disposal:create'],
-      featureCodes: ['PORTAL_REQUESTS']
     })
 
     expect(result.roles).toContainEqual({ code: 'APP_ADMIN', name: '应用管理员', type: 'APP_ADMIN' })
     expect(result.permissionCodes).toEqual(expect.arrayContaining([
-      'asset:item:view', 'asset:item:create', 'authz:app_role:assign', 'asset:disposal:view', 'asset:disposal:create'
+      'asset:item:view', 'asset:item:create', 'authz:app_role:assign'
     ]))
     expect(result.featureCodes).toEqual(expect.arrayContaining([
-      'PORTAL_HOME', 'PORTAL_SETTINGS', 'APP_WORKSPACE', 'PORTAL_REQUESTS'
+      'PORTAL_HOME', 'PORTAL_SETTINGS', 'APP_WORKSPACE'
     ]))
+    expect(result.permissionCodes).not.toContain('asset:disposal:create')
   })
 
   it('does not elevate an ordinary employee response', () => {
     expect(applyTrustedPortalIdentity(session, { roleCode: 'employee' })).toBe(session)
   })
 
-  it('restores the same administrator grant in the route permission snapshot', () => {
-    const result = applyTrustedPermissionSnapshot(snapshot, {
-      roleCode: 'super_admin',
-      permissionCodes: ['asset:employee:view', 'authz:app_role:assign'],
-      featureCodes: ['PORTAL_SETTINGS', 'APP_WORKSPACE']
-    }, {
-      permissionCodes: ['asset:disposal:view', 'asset:disposal:complete'],
-      featureCodes: ['PORTAL_ASSETS']
-    })
-
-    expect(result.roleCodes).toEqual(expect.arrayContaining(['JPNYHJ', 'APP_ADMIN']))
-    expect(result.roleNamesByCode?.APP_ADMIN).toBe('应用管理员')
-    expect(result.permissionCodes).toEqual(expect.arrayContaining([
-      'asset:item:view', 'asset:employee:view', 'asset:disposal:view', 'asset:disposal:complete'
-    ]))
-    expect(result.featureCodes).toEqual(expect.arrayContaining(['PORTAL_HOME', 'PORTAL_SETTINGS', 'PORTAL_ASSETS']))
-  })
-
-  it('does not grant the local administrator catalog to a non-super administrator', () => {
+  it('keeps non-super administrator permissions scoped to the trusted response', () => {
     const result = applyTrustedPortalIdentity(session, {
       roleCode: 'admin',
       permissionCodes: ['asset:item:update']
-    }, {
-      permissionCodes: ['asset:disposal:view']
     })
 
     expect(result.permissionCodes).toContain('asset:item:update')
     expect(result.permissionCodes).not.toContain('asset:disposal:view')
-  })
-
-  it('does not elevate an ordinary employee permission snapshot', () => {
-    expect(applyTrustedPermissionSnapshot(snapshot, { roleCode: 'employee' })).toBe(snapshot)
   })
 })

@@ -123,7 +123,7 @@ test.describe('登录后门户质量回归', () => {
       ['/assets/settings', '资产设置'], ['/assets/settings/locations', '位置管理'], ['/assets/settings/categories', '资产分类'],
       ['/assets/settings/code-rules', '资产编码规则'], ['/assets/settings/label-templates', '标签模板设置'], ['/requests', '审批'],
       ['/system/employees', '员工信息'], ['/system/departments', '组织架构'], ['/system/self-service', '员工自助'],
-      ['/system/member-authorization', '成员授权'], ['/system/integrations', '系统对接'], ['/system/forms', '表单管理']
+      ['/workspace', '成员授权'], ['/system/integrations', '系统对接'], ['/system/forms', '表单管理']
     ] as const
     for (const [path, text] of routes) {
       await page.goto(path)
@@ -297,17 +297,17 @@ test.describe('登录后门户质量回归', () => {
     expect(geometry.paginationButtonWidth).toBe(28)
   })
 
-  test('成员授权窗口按 ECP 视口样式展示且切换菜单后不残留', async ({ page, isMobile }) => {
+  test('成员授权由 ECP 工作台直接接管且键盘检索保持原生行为', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '成员授权工作区布局在桌面项目执行')
-    await openApp(page, '/system/member-authorization')
+    await openApp(page, '/workspace')
 
     const activeMenu = page.locator('.system-menu .asset-subnav-item.active')
     await expect(activeMenu).toHaveText('成员授权')
-    const shell = page.locator('.member-authorization-view .account-management-frame-shell')
-    const frame = page.frameLocator('iframe[title="ECP 成员授权工作台"]')
-    await expect(frame.getByText('应用角色', { exact: true }).first()).toBeVisible()
+    const workspace = page.locator('.standard-system-content > .authz-workspace-host')
+    await expect(workspace.getByText('应用角色', { exact: true }).first()).toBeVisible()
+    await expect(page.locator('iframe')).toHaveCount(0)
 
-    const geometry = await shell.evaluate((element) => {
+    const geometry = await workspace.evaluate((element) => {
       const rect = element.getBoundingClientRect()
       const content = element.closest('.standard-system-content')?.getBoundingClientRect()
       return {
@@ -322,16 +322,15 @@ test.describe('登录后门户质量回归', () => {
     expect(geometry.left).toBeGreaterThanOrEqual(geometry.contentLeft)
     expect(geometry.right).toBeLessThanOrEqual(geometry.contentRight)
 
-    await frame.getByRole('button', { name: '分配给成员', exact: true }).click()
+    await workspace.getByRole('button', { name: '分配给成员', exact: true }).click()
     const assignmentDialog = page.getByRole('dialog', { name: '分配 应用管理员 角色' })
     await expect(assignmentDialog).toBeVisible()
-    const workspaceOverlay = page.locator('body > .el-overlay.authz-workspace-host')
+    const workspaceOverlay = page.locator('body > .el-overlay')
     await expect(workspaceOverlay).toBeVisible()
     await expect.poll(() => workspaceOverlay.evaluate((element) => getComputedStyle(element).getPropertyValue('--ecp-primary-500').trim())).toBe('#3370ff')
-    await expect(shell).not.toHaveClass(/is-workspace-overlay-open/)
-    await expect(shell).not.toHaveCSS('position', 'fixed')
+    await expect(workspace).not.toHaveCSS('position', 'fixed')
     await expect(page.locator('.system-menu')).toBeVisible()
-    const shellBox = await shell.boundingBox()
+    const shellBox = await workspace.boundingBox()
     const overlayBox = await workspaceOverlay.boundingBox()
     const dialogBox = await assignmentDialog.boundingBox()
     const viewport = page.viewportSize()
@@ -356,10 +355,10 @@ test.describe('登录后门户质量回归', () => {
     await expect(assignmentDialog.locator('[data-member-search-count]')).toHaveText('检索次数 1')
 
     await page.getByRole('button', { name: '取消', exact: true }).click()
-    await expect(page.locator('body > .el-overlay.authz-workspace-host')).toHaveCount(0)
-    await expect.poll(() => shell.evaluate((element) => getComputedStyle(element).position)).not.toBe('fixed')
+    await expect(page.locator('body > .el-overlay')).toBeHidden()
+    await expect.poll(() => workspace.evaluate((element) => getComputedStyle(element).position)).not.toBe('fixed')
 
-    await frame.getByRole('button', { name: '详情', exact: true }).click()
+    await workspace.getByRole('button', { name: '详情', exact: true }).click()
     const roleDrawer = page.getByRole('dialog', { name: '编辑应用角色' })
     await expect(roleDrawer).toBeVisible()
     const roleDrawerBox = await roleDrawer.boundingBox()
@@ -368,10 +367,10 @@ test.describe('登录后门户质量回归', () => {
     expect(roleDrawerBox!.width).toBeLessThanOrEqual(620)
     expect(Math.abs(roleDrawerBox!.x + roleDrawerBox!.width - viewport!.width)).toBeLessThanOrEqual(1)
     await page.getByRole('button', { name: '关闭角色详情', exact: true }).click()
-    await expect(page.locator('body > .el-overlay.authz-workspace-host')).toHaveCount(0)
+    await expect(roleDrawer).toBeHidden()
 
-    await frame.getByRole('button', { name: '02 账号管理 3 条授权', exact: true }).click()
-    await frame.getByRole('button', { name: '添加权限', exact: true }).click()
+    await workspace.getByRole('button', { name: '02 账号管理 3 条授权', exact: true }).click()
+    await workspace.getByRole('button', { name: '添加权限', exact: true }).click()
     const accountDrawer = page.getByRole('dialog', { name: '新增权限配置' })
     await expect(accountDrawer).toBeVisible()
     const accountDrawerBox = await accountDrawer.boundingBox()
@@ -379,15 +378,15 @@ test.describe('登录后门户质量回归', () => {
     expect(accountDrawerBox!.width).toBe(roleDrawerBox!.width)
     expect(Math.abs(accountDrawerBox!.x + accountDrawerBox!.width - viewport!.width)).toBeLessThanOrEqual(1)
     await page.getByRole('button', { name: '关闭账号授权', exact: true }).click()
-    await expect(page.locator('body > .el-overlay.authz-workspace-host')).toHaveCount(0)
+    await expect(accountDrawer).toBeHidden()
 
     await page.getByRole('button', { name: '员工信息', exact: true }).click()
     await expect(page).toHaveURL('/system/employees')
     await expect(page.getByText('员工信息', { exact: true }).first()).toBeVisible()
-    await expect(page.locator('.account-management-frame-shell')).toHaveCount(0)
+    await expect(page.locator('.authz-workspace-host')).toHaveCount(0)
 
     await page.goto('/workspace')
-    await expect(page).toHaveURL('/system/member-authorization')
+    await expect(page).toHaveURL('/workspace')
   })
 
   test('资产导航保留迁移前的选中样式与展开交互', async ({ page, isMobile }) => {
@@ -476,7 +475,7 @@ test.describe('登录后门户质量回归', () => {
       { path: '/assets/settings/categories', label: '资产' },
       { path: '/requests', label: '审批' },
       { path: '/system/employees', label: '系统' },
-      { path: '/system/member-authorization', label: '系统' }
+      { path: '/workspace', label: '系统' }
     ] as const
 
     await installApiMocks(page)

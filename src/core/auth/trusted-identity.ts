@@ -1,13 +1,8 @@
-import type { AuthzPermissionSnapshot, AuthzSessionContext } from '@acg/ecp-sdk'
+import type { AuthzSessionContext } from '@acg/ecp-sdk'
 import { apiRequest } from '../../shared/api/http'
 
 export type TrustedPortalIdentity = {
   roleCode?: string
-  permissionCodes?: string[]
-  featureCodes?: string[]
-}
-
-export type TrustedAppAdminAccess = {
   permissionCodes?: string[]
   featureCodes?: string[]
 }
@@ -33,39 +28,16 @@ export const loadTrustedPortalIdentity = (): Promise<TrustedPortalIdentity | nul
 
 export const applyTrustedPortalIdentity = (
   session: AuthzSessionContext,
-  identity: TrustedPortalIdentity | null | undefined,
-  appAdminAccess?: TrustedAppAdminAccess
+  identity: TrustedPortalIdentity | null | undefined
 ): AuthzSessionContext => {
   const roleCode = String(identity?.roleCode || '').trim().toLowerCase()
   const role = trustedRole(roleCode)
   if (!role) return session
 
-  const elevatedAccess = roleCode === 'super_admin' ? appAdminAccess : undefined
-
   return {
     ...session,
     roles: [...session.roles.filter((item) => item.code !== role.code), role],
-    permissionCodes: merge(merge(session.permissionCodes, identity?.permissionCodes), elevatedAccess?.permissionCodes),
-    featureCodes: merge(merge(session.featureCodes, identity?.featureCodes), elevatedAccess?.featureCodes)
-  }
-}
-
-export const applyTrustedPermissionSnapshot = (
-  snapshot: AuthzPermissionSnapshot,
-  identity: TrustedPortalIdentity | null | undefined,
-  appAdminAccess?: TrustedAppAdminAccess
-): AuthzPermissionSnapshot => {
-  const roleCode = String(identity?.roleCode || '').trim().toLowerCase()
-  const role = trustedRole(roleCode)
-  if (!role) return snapshot
-
-  const elevatedAccess = roleCode === 'super_admin' ? appAdminAccess : undefined
-
-  return {
-    ...snapshot,
-    roleCodes: merge(snapshot.roleCodes, [role.code]),
-    roleNamesByCode: { ...snapshot.roleNamesByCode, [role.code]: role.name },
-    permissionCodes: merge(merge(snapshot.permissionCodes, identity?.permissionCodes), elevatedAccess?.permissionCodes),
-    featureCodes: merge(merge(snapshot.featureCodes, identity?.featureCodes), elevatedAccess?.featureCodes)
+    permissionCodes: merge(session.permissionCodes, identity?.permissionCodes),
+    featureCodes: merge(session.featureCodes, identity?.featureCodes)
   }
 }
