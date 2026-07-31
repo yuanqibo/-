@@ -13,6 +13,13 @@ const asInput = (element: HTMLElement | null): HTMLInputElement | null => (
   element?.tagName === 'INPUT' ? element as HTMLInputElement : null
 )
 
+type ComposingInput = HTMLInputElement & { composing?: boolean }
+
+const normalizePinyinQuery = (value: string): string => {
+  const trimmed = value.trim()
+  return /^[\x00-\x7f]+$/.test(trimmed) ? trimmed.replace(/\s+/g, '') : trimmed
+}
+
 const dispatchSearch = (input: HTMLInputElement): void => {
   const KeyboardEventConstructor = input.ownerDocument.defaultView?.KeyboardEvent
   if (!KeyboardEventConstructor) return
@@ -51,6 +58,7 @@ const positionTooltip = (tooltip: HTMLElement, target: HTMLElement): void => {
 
 export const enhanceMemberSelector = (host: HTMLElement): (() => void) => {
   const searchTimers = new Map<HTMLInputElement, number>()
+  const internalInputEvents = new WeakSet<HTMLInputElement>()
   let tooltip: HTMLElement | null = null
   let tooltipTarget: HTMLElement | null = null
 
@@ -60,11 +68,30 @@ export const enhanceMemberSelector = (host: HTMLElement): (() => void) => {
     searchTimers.delete(input)
   }
 
-  const scheduleSearch = (input: HTMLInputElement): void => {
+  const runSearch = (input: HTMLInputElement, rawQuery: string, syncComposingValue: boolean): void => {
+    const query = normalizePinyinQuery(rawQuery)
+    const composingInput = input as ComposingInput
+    const originalValue = input.value
+    const wasComposing = composingInput.composing === true
+    if (query !== originalValue || syncComposingValue || wasComposing) {
+      const EventConstructor = input.ownerDocument.defaultView?.Event
+      if (!EventConstructor) return
+      input.value = query
+      composingInput.composing = false
+      internalInputEvents.add(input)
+      input.dispatchEvent(new EventConstructor('input', { bubbles: true }))
+      internalInputEvents.delete(input)
+    }
+    dispatchSearch(input)
+    input.value = originalValue
+    composingInput.composing = wasComposing
+  }
+
+  const scheduleSearch = (input: HTMLInputElement, rawQuery = input.value, syncComposingValue = false): void => {
     clearSearchTimer(input)
     const timer = host.ownerDocument.defaultView?.setTimeout(() => {
       searchTimers.delete(input)
-      if (input.isConnected) dispatchSearch(input)
+      if (input.isConnected) runSearch(input, rawQuery, syncComposingValue)
     }, SEARCH_DEBOUNCE_MS)
     if (timer !== undefined) searchTimers.set(input, timer)
   }
@@ -90,7 +117,13 @@ export const enhanceMemberSelector = (host: HTMLElement): (() => void) => {
 
   const onInput = (event: Event): void => {
     const input = asInput(matchingElement(event, ASSIGNMENT_SEARCH_INPUT, host))
-    if (input) scheduleSearch(input)
+    if (input && !internalInputEvents.has(input)) {
+      scheduleSearch(input, input.value, 'isComposing' in event && event.isComposing === true)
+    }
+  }
+  const onCompositionUpdate = (event: CompositionEvent): void => {
+    const input = asInput(matchingElement(event, ASSIGNMENT_SEARCH_INPUT, host))
+    if (input) scheduleSearch(input, event.data || input.value, true)
   }
   const onKeyup = (event: KeyboardEvent): void => {
     if (event.key !== 'Enter') return
@@ -110,6 +143,7 @@ export const enhanceMemberSelector = (host: HTMLElement): (() => void) => {
   }
 
   host.addEventListener('input', onInput)
+  host.addEventListener('compositionupdate', onCompositionUpdate as EventListener)
   host.addEventListener('keyup', onKeyup as EventListener)
   host.addEventListener('mouseover', onMouseover as EventListener)
   host.addEventListener('mouseout', onMouseout as EventListener)
@@ -120,6 +154,7 @@ export const enhanceMemberSelector = (host: HTMLElement): (() => void) => {
     searchTimers.clear()
     hideTooltip()
     host.removeEventListener('input', onInput)
+    host.removeEventListener('compositionupdate', onCompositionUpdate as EventListener)
     host.removeEventListener('keyup', onKeyup as EventListener)
     host.removeEventListener('mouseover', onMouseover as EventListener)
     host.removeEventListener('mouseout', onMouseout as EventListener)

@@ -34,8 +34,33 @@ describe('member selector enhancer', () => {
     await vi.advanceTimersByTimeAsync(179)
     expect(searches).toEqual([])
     await vi.advanceTimersByTimeAsync(1)
-    expect(searches).toEqual(['zhou zhou'])
+    expect(searches).toEqual(['zhouzhou'])
 
+    cleanup()
+  })
+
+  it('searches unconfirmed IME pinyin with the compact query expected by ECP', async () => {
+    vi.useFakeTimers()
+    const host = selectorHost()
+    const input = host.querySelector<HTMLInputElement>('input')! as HTMLInputElement & { composing?: boolean }
+    let sdkQuery = ''
+    const searches: string[] = []
+    input.addEventListener('input', () => {
+      if (!input.composing) sdkQuery = input.value
+    })
+    input.addEventListener('keyup', (event) => {
+      if (event.key === 'Enter') searches.push(sdkQuery)
+    })
+    const cleanup = enhanceMemberSelector(host)
+
+    input.composing = true
+    input.value = 'zhou zhou'
+    input.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: 'zhou zhou' }))
+    await vi.advanceTimersByTimeAsync(180)
+
+    expect(searches).toEqual(['zhouzhou'])
+    expect(input.value).toBe('zhou zhou')
+    expect(input.composing).toBe(true)
     cleanup()
   })
 
