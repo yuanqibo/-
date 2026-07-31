@@ -12,6 +12,7 @@ import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, As
 import { hasPortalPermission } from '../../../authz/permission-aliases'
 import AssetLabelPrintPreview from './AssetLabelPrintPreview.vue'
 import AssetOrderPrintPreview, { type AssetOrderPrintKind } from './AssetOrderPrintPreview.vue'
+import AssetDisposalCreateDrawer from '../../disposals/components/AssetDisposalCreateDrawer.vue'
 
 type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
@@ -79,6 +80,8 @@ const editOpen = ref(false)
 const advancedOpen = ref(false)
 const importOpen = ref(false)
 const printOpen = ref(false)
+const disposalOpen = ref(false)
+const disposalPresetAssetIds = ref<string[]>([])
 const orderPrintOpen = ref(false)
 const orderPrintKind = ref<AssetOrderPrintKind>('inbound')
 const orderPrintRows = ref<AssetRecord[]>([])
@@ -954,8 +957,10 @@ const terminateReceipt = async (item: AssetRecord): Promise<void> => {
 const disposeSelected = (): void => {
   if (!selected.value.length) { ElMessage.warning('请先选择空闲资产'); return }
   if (selected.value.some((item) => item.status !== '空闲')) { ElMessage.warning('仅空闲资产可以发起处置'); return }
-  void router.push({ path: '/assets/disposals', query: { assetIds: selected.value.map((item) => item.id).join(',') } })
+  disposalPresetAssetIds.value = selected.value.map((item) => item.id)
+  disposalOpen.value = true
 }
+const handleAssetDisposalCreated = (): void => { selected.value = [] }
 onMounted(() => void load())
 </script>
 
@@ -1376,5 +1381,7 @@ onMounted(() => void load())
       <AssetOrderPrintPreview :kind="orderPrintKind" :rows="orderPrintRows" :current-user="user?.name" />
       <template #footer><el-button @click="orderPrintOpen = false">取消</el-button><el-button type="primary" @click="printOrderNow">打印</el-button></template>
     </el-dialog>
+
+    <AssetDisposalCreateDrawer v-if="mode === 'list'" v-model="disposalOpen" :preset-asset-ids="disposalPresetAssetIds" @created="handleAssetDisposalCreated" />
   </section>
 </template>

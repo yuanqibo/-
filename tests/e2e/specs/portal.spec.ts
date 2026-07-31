@@ -139,12 +139,12 @@ test.describe('登录后门户质量回归', () => {
       { id: 'DISP-OWN-2', name: '自有显示器', status: '空闲', category: '显示器', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '管理员', model: 'U2724', brand: 'Dell', sn: 'OWN-SN-2', assetTag: '', supplier: '普通供应商', price: 3200, purchaseDate: '2026-07-01', warrantyDate: '', note: '' }
     ]
     const state = await openApp(page, '/assets/disposals', { assets: disposableAssets })
-    await page.getByRole('button', { name: '新增', exact: true }).click()
+    await page.getByRole('button', { name: '＋ 新增', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '新增处置单' })
-    await expect(dialog.getByPlaceholder('请选择')).toHaveValue('')
+    await expect(dialog.getByText('请选择', { exact: true })).toBeVisible()
     await expect(dialog.getByLabel('处置金额')).toHaveValue('')
     await expect(dialog.getByLabel('处置费用')).toHaveValue('')
-    await dialog.getByPlaceholder('请选择').click()
+    await dialog.getByText('请选择', { exact: true }).click()
     await page.getByRole('option', { name: '退租', exact: true }).click()
     await dialog.getByLabel('处置说明').fill('租期结束，设备退还供应商')
     await dialog.getByLabel('导入资产编码文件').setInputFiles({
@@ -176,6 +176,58 @@ test.describe('登录后门户质量回归', () => {
     expect(state.requests.some((request) => request.method === 'POST' && request.path.endsWith('/cancel'))).toBe(true)
     expect(state.requests.some((request) => request.method === 'PATCH' && request.path.endsWith('/complete'))).toBe(true)
     await expectNoPageOverflow(page)
+  })
+
+  test('资产列表可在当前页直接发起处置', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '资产列表批量操作在桌面项目执行')
+    const disposableAsset = {
+      id: 'DISP-DIRECT-1', name: '待退租笔记本', status: '空闲', category: 'IT设备', type: '设备',
+      owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '管理员',
+      model: 'T14', brand: 'Lenovo', sn: 'DIRECT-SN-1', assetTag: '', supplier: '凌雄租赁', price: 6800,
+      purchaseDate: '2026-07-01', warrantyDate: '', note: ''
+    }
+    const state = await openApp(page, '/assets', { assets: [disposableAsset] })
+    await page.getByLabel('选择DISP-DIRECT-1').check()
+    await page.getByRole('button', { name: '操作', exact: true }).click()
+    await page.getByRole('menuitem', { name: '处置', exact: true }).click()
+
+    await expect(page).toHaveURL('/assets')
+    const dialog = page.getByRole('dialog', { name: '新增处置单' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText('DISP-DIRECT-1', { exact: true })).toBeVisible()
+    await dialog.getByText('请选择', { exact: true }).click()
+    await page.getByRole('option', { name: '退租', exact: true }).click()
+    await dialog.getByLabel('处置说明').fill('从资产列表直接发起处置')
+    await dialog.getByRole('button', { name: '保存并提交', exact: true }).click()
+
+    await expect(page).toHaveURL('/assets')
+    await expect(dialog).toBeHidden()
+    expect(state.requests.some((request) => request.method === 'POST'
+      && request.path === '/api/asset-disposals'
+      && (request.body as { assetIds?: string[] })?.assetIds?.includes('DISP-DIRECT-1'))).toBe(true)
+  })
+
+  test('处置空列表保持单一纯白区域且无悬停底色', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '处置明细密集表格在桌面项目执行')
+    await openApp(page, '/assets/disposals')
+    const empty = page.locator('.disposal-table-empty')
+    await expect(empty).toBeVisible()
+    await expect(page.locator('.disposal-table tbody tr')).toHaveCount(0)
+    await empty.hover()
+    const appearance = await empty.evaluate((element) => {
+      const content = element.closest('.disposal-table-content')
+      const scroll = element.closest('.disposal-table-scroll')
+      const rect = element.getBoundingClientRect()
+      const scrollRect = scroll?.getBoundingClientRect()
+      return {
+        background: getComputedStyle(element).backgroundColor,
+        contentBackground: content ? getComputedStyle(content).backgroundColor : '',
+        fillsRemainingHeight: scrollRect ? Math.abs(rect.bottom - scrollRect.bottom) <= 1 : false
+      }
+    })
+    expect(appearance.background).toBe('rgb(255, 255, 255)')
+    expect(appearance.contentBackground).toBe('rgb(255, 255, 255)')
+    expect(appearance.fillsRemainingHeight).toBe(true)
   })
 
   test('系统主导航直接进入首个系统页面且不经过全屏中转状态', async ({ page, isMobile }) => {

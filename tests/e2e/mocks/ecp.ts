@@ -19,6 +19,10 @@ const allPermissions = [
   'authz:application:view', 'authz:model:view', 'authz:app_role:view', 'authz:app_role:assign'
 ]
 const allFeatures = ['PORTAL_HOME', 'PORTAL_ASSETS', 'PORTAL_REQUESTS', 'PORTAL_SETTINGS', 'APP_WORKSPACE']
+export const bundledAppAdminAccess = {
+  permissionCodes: [...allPermissions],
+  featureCodes: [...allFeatures]
+}
 
 const routes: Array<RouteRecordRaw & { path: string }> = [
   { path: '/', name: 'e2e-home', component: () => import('../../../src/views/HomePage.vue') },
