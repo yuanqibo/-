@@ -18,7 +18,7 @@ class SpaControllerTest {
         for (String path : List.of(
             "/", "/login", "/login/callback/feishu", "/no-permission", "/workspace",
             "/assets", "/assets/inbound", "/assets/receive-return", "/assets/borrow-return",
-            "/assets/stocktake", "/assets/consumables", "/assets/repairs", "/assets/contracts",
+            "/assets/stocktake", "/assets/disposals", "/assets/consumables", "/assets/repairs", "/assets/contracts",
             "/assets/settings", "/assets/settings/locations", "/assets/settings/categories",
             "/assets/settings/code-rules", "/assets/settings/label-templates", "/requests", "/signatures",
             "/system", "/system/employees", "/system/departments", "/system/self-service",

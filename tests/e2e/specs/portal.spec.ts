@@ -119,7 +119,7 @@ test.describe('登录后门户质量回归', () => {
     await installApiMocks(page)
     const routes = [
       ['/', '仪表盘'], ['/assets', '资产列表'], ['/assets/inbound', '资产入库'],
-      ['/assets/receive-return', '领用退库'], ['/assets/borrow-return', '借用归还'], ['/assets/stocktake', '资产盘点'],
+      ['/assets/receive-return', '领用退库'], ['/assets/borrow-return', '借用归还'], ['/assets/stocktake', '资产盘点'], ['/assets/disposals', '资产处置'],
       ['/assets/settings', '资产设置'], ['/assets/settings/locations', '位置管理'], ['/assets/settings/categories', '资产分类'],
       ['/assets/settings/code-rules', '资产编码规则'], ['/assets/settings/label-templates', '标签模板设置'], ['/requests', '审批'],
       ['/system/employees', '员工信息'], ['/system/departments', '组织架构'], ['/system/self-service', '员工自助'],
@@ -130,6 +130,52 @@ test.describe('登录后门户质量回归', () => {
       await expect(page.getByText(text, { exact: true }).first()).toBeVisible()
       await expectNoPageOverflow(page)
     }
+  })
+
+  test('资产处置支持退租、部分取消与完成流转', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '处置明细密集表格在桌面项目执行')
+    const disposableAssets = [
+      { id: 'DISP-LX-1', name: '凌雄租赁笔记本', status: '空闲', category: 'IT设备', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '管理员', model: 'LX-14', brand: 'Lenovo', sn: 'LX-SN-1', assetTag: '', supplier: '凌雄租赁', price: 6800, purchaseDate: '2026-07-01', warrantyDate: '', note: '' },
+      { id: 'DISP-OWN-2', name: '自有显示器', status: '空闲', category: '显示器', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '管理员', model: 'U2724', brand: 'Dell', sn: 'OWN-SN-2', assetTag: '', supplier: '普通供应商', price: 3200, purchaseDate: '2026-07-01', warrantyDate: '', note: '' }
+    ]
+    const state = await openApp(page, '/assets/disposals', { assets: disposableAssets })
+    await page.getByRole('button', { name: '新增', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '新增处置单' })
+    await expect(dialog.getByPlaceholder('请选择')).toHaveValue('')
+    await expect(dialog.getByLabel('处置金额')).toHaveValue('')
+    await expect(dialog.getByLabel('处置费用')).toHaveValue('')
+    await dialog.getByPlaceholder('请选择').click()
+    await page.getByRole('option', { name: '退租', exact: true }).click()
+    await dialog.getByLabel('处置说明').fill('租期结束，设备退还供应商')
+    await dialog.getByLabel('导入资产编码文件').setInputFiles({
+      name: '处置资产.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from('资产编码\nDISP-LX-1')
+    })
+    await expect(dialog.getByText('DISP-LX-1', { exact: true })).toBeVisible()
+    await dialog.getByRole('button', { name: '选择资产', exact: true }).click()
+    const assetPicker = page.getByRole('dialog', { name: '选择处置资产' })
+    await expect(assetPicker.getByLabel('选择资产DISP-LX-1')).toBeChecked()
+    await assetPicker.getByLabel('选择资产DISP-OWN-2').check()
+    await assetPicker.getByRole('button', { name: '确认选择', exact: true }).click()
+    await dialog.getByRole('button', { name: '保存并提交', exact: true }).click()
+
+    const drawer = page.getByRole('dialog', { name: '处置单详情' })
+    await expect(drawer).toContainText('CZ202607310001')
+    await expect(drawer).not.toContainText('集成任务')
+    await drawer.getByLabel('选择取消DISP-LX-1').check()
+    await drawer.getByRole('button', { name: '取消所选（1）', exact: true }).click()
+    await page.getByRole('button', { name: '确认', exact: true }).click()
+    await expect(drawer.getByText('部分取消', { exact: true })).toBeVisible()
+    await expect(drawer.getByText('已取消', { exact: true })).toBeVisible()
+
+    await drawer.getByRole('button', { name: '完成处置', exact: true }).click()
+    await page.getByRole('button', { name: '确认', exact: true }).click()
+    await expect(drawer.getByText('已处置', { exact: true })).toBeVisible()
+    expect(state.requests.some((request) => request.method === 'POST' && request.path === '/api/asset-disposals')).toBe(true)
+    expect(state.requests.some((request) => request.method === 'POST' && request.path.endsWith('/cancel'))).toBe(true)
+    expect(state.requests.some((request) => request.method === 'PATCH' && request.path.endsWith('/complete'))).toBe(true)
+    await expectNoPageOverflow(page)
   })
 
   test('系统主导航直接进入首个系统页面且不经过全屏中转状态', async ({ page, isMobile }) => {

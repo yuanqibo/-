@@ -160,6 +160,50 @@ class BusinessDataControllerTest {
     }
 
     @Test
+    void createsCompletesAndPartiallyCancelsAssetDisposals() throws Exception {
+        insertDisposalAsset("D-LX-1", "凌雄租赁");
+        insertDisposalAsset("D-OTHER-2", "普通供应商");
+
+        mvc.perform(post("/api/asset-disposals").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"disposalType\":\"变卖\",\"description\":\"不再支持的处置类型\",\"assetIds\":[]}"))
+            .andExpect(status().isBadRequest());
+
+        String response = mvc.perform(post("/api/asset-disposals").contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"disposalType":"退租","company":"示例公司","operator":"管理员",
+                     "description":"租期结束退还设备","returnDate":"2026-08-01",
+                     "assetIds":["D-LX-1","D-OTHER-2"]}
+                    """))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.item.status").value("待处置"))
+            .andExpect(jsonPath("$.item.integrationRequired").doesNotExist())
+            .andExpect(jsonPath("$.item.lingxiongAssetIds").doesNotExist())
+            .andExpect(jsonPath("$.item.syncStatus").doesNotExist())
+            .andExpect(jsonPath("$.item.managerReminderStatus").doesNotExist())
+            .andExpect(jsonPath("$.item.amount").value(0))
+            .andExpect(jsonPath("$.item.fee").value(0))
+            .andReturn().getResponse().getContentAsString();
+        String id = new ObjectMapper().readTree(response).path("item").path("id").asText();
+        assertThat(assetStatus("D-LX-1")).isEqualTo("处置中");
+        assertThat(assetStatus("D-OTHER-2")).isEqualTo("处置中");
+
+        mvc.perform(post("/api/asset-disposals/" + id + "/cancel").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"assetIds\":[\"D-LX-1\"],\"reason\":\"退租信息有误\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("部分取消"))
+            .andExpect(jsonPath("$.items[0].assets[0].status").value("已取消"));
+        assertThat(assetStatus("D-LX-1")).isEqualTo("空闲");
+        assertThat(assetStatus("D-OTHER-2")).isEqualTo("处置中");
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                "/api/asset-disposals/" + id + "/complete"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("部分取消"))
+            .andExpect(jsonPath("$.items[0].assets[1].status").value("已处置"));
+        assertThat(assetStatus("D-OTHER-2")).isEqualTo("已处置");
+    }
+
+    @Test
     void createsEveryBusinessRecordWithAPrefixedUuid() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         insertRepairAsset("A-UUID");
@@ -206,6 +250,26 @@ class BusinessDataControllerTest {
         asset.put("status", "空闲");
         asset.put("price", 0);
         asset.put("rent", 0);
+        asset.set("lifecycle", mapper.createArrayNode());
+        jdbc.update("INSERT INTO asset_record (asset_id, status, document, version, updated_at) VALUES (?, ?, ?, ?, ?)",
+            id, "空闲", asset.toString(), 1L, java.sql.Timestamp.from(java.time.Instant.now()));
+    }
+
+    private void insertDisposalAsset(String id, String supplier) throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode asset = mapper.createObjectNode();
+        asset.put("id", id);
+        asset.put("name", "处置测试资产 " + id);
+        asset.put("category", "笔记本电脑");
+        asset.put("type", "笔记本电脑");
+        asset.put("location", "杭州公司 / 19幢1楼");
+        asset.put("owner", "未分配");
+        asset.put("ownerSubject", "");
+        asset.put("company", "示例公司");
+        asset.put("supplier", supplier);
+        asset.put("status", "空闲");
+        asset.put("price", 5000);
+        asset.put("rent", 100);
         asset.set("lifecycle", mapper.createArrayNode());
         jdbc.update("INSERT INTO asset_record (asset_id, status, document, version, updated_at) VALUES (?, ?, ?, ?, ?)",
             id, "空闲", asset.toString(), 1L, java.sql.Timestamp.from(java.time.Instant.now()));

@@ -28,7 +28,7 @@ public class AssetService {
     private static final int MAX_ASSETS = 5_000;
     private static final Set<String> ALLOWED_STATUS = Set.of(
         "空闲", "闲置", "上架", "待验收", "在用", "借用中", "维修中", "审批中",
-        "领用待签字", "借用待签字", "交接待签字", "已报废");
+        "领用待签字", "借用待签字", "交接待签字", "处置中", "已处置", "已报废");
     private static final Set<String> UNASSIGNED = Set.of("空闲", "闲置", "上架", "待验收");
     private static final Set<String> ASSIGNABLE = Set.of("空闲");
     private final AssetRepository repository;
@@ -399,6 +399,34 @@ public class AssetService {
                 asset.remove(List.of("repairPreviousStatus", "repairStartedAt"));
                 lifecycle(asset, fields, "维修归档", requiredField(fields, "operator") + " 完成 " + name + " 维修");
             }
+            case "disposal-start" -> {
+                requireStatus(asset, ASSIGNABLE);
+                asset.put("disposalPreviousStatus", asset.path("status").asText("空闲"));
+                asset.put("disposalId", requiredField(fields, "disposalId"));
+                asset.put("status", "处置中");
+                asset.put("disposalStartedAt", date(fields.path("date").asText()));
+                lifecycle(asset, fields, "发起资产处置", requiredField(fields, "operator") + " 提交 " + name + " 处置");
+            }
+            case "disposal-complete" -> {
+                requireStatus(asset, Set.of("处置中"));
+                if (!requiredField(fields, "disposalId").equals(asset.path("disposalId").asText())) {
+                    throw new IllegalArgumentException("Asset belongs to another disposal order: " + asset.path("id").asText());
+                }
+                asset.put("status", "已处置");
+                asset.put("disposedAt", date(fields.path("date").asText()));
+                lifecycle(asset, fields, "完成资产处置", requiredField(fields, "operator") + " 完成 " + name + " 处置");
+            }
+            case "disposal-cancel" -> {
+                requireStatus(asset, Set.of("处置中", "已处置"));
+                if (!requiredField(fields, "disposalId").equals(asset.path("disposalId").asText())) {
+                    throw new IllegalArgumentException("Asset belongs to another disposal order: " + asset.path("id").asText());
+                }
+                String restored = asset.path("disposalPreviousStatus").asText("空闲");
+                if (!ALLOWED_STATUS.contains(restored) || Set.of("处置中", "已处置").contains(restored)) restored = "空闲";
+                asset.put("status", restored);
+                asset.remove(List.of("disposalPreviousStatus", "disposalId", "disposalStartedAt", "disposedAt"));
+                lifecycle(asset, fields, "取消资产处置", requiredField(fields, "operator") + " 取消 " + name + " 处置");
+            }
             case "cancel-inbound" -> {
                 requireStatus(asset, UNASSIGNED);
                 String owner = asset.path("owner").asText("").trim();
@@ -572,7 +600,7 @@ public class AssetService {
                         operation.put("expectedReturnDate", asset.path("expectedReturnDate").asText());
                         operation.put("updatedAt", java.time.Instant.now().toString());
                     });
-                case "repair-start", "repair-complete" -> {
+                case "repair-start", "repair-complete", "disposal-start", "disposal-complete", "disposal-cancel" -> {
                     // Repair state is represented by the repair business record and asset audit log.
                 }
                 case "cancel-inbound" -> operationRepository.updateLatest(
@@ -858,7 +886,7 @@ public class AssetService {
         if (before.equals(after)) return;
         boolean allowed = switch (before) {
             case "空闲", "闲置", "上架", "待验收" -> Set.of(
-                "在用", "借用中", "领用待签字", "借用待签字", "维修中", "审批中", "已报废").contains(after);
+                "在用", "借用中", "领用待签字", "借用待签字", "维修中", "审批中", "处置中", "已报废").contains(after);
             case "在用" -> Set.of("空闲", "闲置", "维修中", "审批中", "交接待签字", "已报废").contains(after);
             case "借用中" -> Set.of("空闲", "闲置", "维修中", "审批中", "交接待签字").contains(after);
             case "维修中" -> Set.of("空闲", "闲置", "在用", "借用中", "已报废").contains(after);
@@ -866,6 +894,8 @@ public class AssetService {
             case "交接待签字" -> Set.of("在用", "借用中").contains(after);
             case "领用待签字" -> Set.of("空闲", "闲置", "上架", "待验收", "在用").contains(after);
             case "借用待签字" -> Set.of("空闲", "闲置", "上架", "待验收", "借用中").contains(after);
+            case "处置中" -> Set.of("空闲", "已处置").contains(after);
+            case "已处置" -> "空闲".equals(after);
             case "已报废" -> false;
             default -> false;
         };

@@ -11,6 +11,7 @@ type TestMenu = { id: string; parentId?: string; title: string; path: string; pa
 const allPermissions = [
   'asset:item:view', 'asset:item:create', 'asset:item:receive', 'asset:item:return', 'asset:item:borrow', 'asset:item:borrowReturn', 'asset:item:handover', 'asset:item:update', 'asset:item:delete', 'asset:item:copy', 'asset:item:batchUpdate', 'asset:item:assetImport', 'asset:item:updateImport', 'asset:item:receiveImport', 'asset:item:export', 'asset:item:printLabel', 'asset:item:advancedSearch', 'asset:item:columnSettings',
   'asset:inbound:view', 'asset:inbound:cancel', 'asset:receive_return:view', 'asset:receive_return:receive', 'asset:receive_return:return', 'asset:receive_return:handover', 'asset:receive_return:sign', 'asset:receive_return:cancel', 'asset:borrow_return:view', 'asset:borrow_return:borrow', 'asset:borrow_return:return', 'asset:borrow_return:extend', 'asset:stocktake:view', 'asset:stocktake:create', 'asset:stocktake:update',
+  'asset:disposal:view', 'asset:disposal:create', 'asset:disposal:complete', 'asset:disposal:cancel', 'asset:disposal:export',
   'asset:location_settings:view', 'asset:location_settings:create', 'asset:location_settings:update', 'asset:location_settings:delete', 'asset:location_settings:toggleCode', 'asset:location_settings:template', 'asset:location_settings:import', 'asset:location_settings:export',
   'asset:category_settings:view', 'asset:category_settings:create', 'asset:category_settings:update', 'asset:category_settings:delete', 'asset:category_settings:toggleCode', 'asset:category_settings:template', 'asset:category_settings:import', 'asset:category_settings:export',
   'asset:code_rules:view', 'asset:code_rules:update', 'asset:label_template_settings:view', 'asset:label_template_settings:create', 'asset:label_template_settings:update', 'asset:label_template_settings:delete', 'asset:label_template_settings:save',
@@ -26,6 +27,7 @@ const routes: Array<RouteRecordRaw & { path: string }> = [
   { path: '/assets/receive-return', name: 'e2e-receive-return', component: () => import('../../../src/views/AssetReceiveReturnPage.vue') },
   { path: '/assets/borrow-return', name: 'e2e-borrow-return', component: () => import('../../../src/views/AssetBorrowReturnPage.vue') },
   { path: '/assets/stocktake', name: 'e2e-stocktake', component: () => import('../../../src/views/StocktakePage.vue') },
+  { path: '/assets/disposals', name: 'e2e-disposals', component: () => import('../../../src/views/AssetDisposalsPage.vue') },
   { path: '/assets/settings', name: 'e2e-asset-settings', component: () => import('../../../src/views/AssetSettingsPage.vue') },
   { path: '/assets/settings/locations', name: 'e2e-locations', component: () => import('../../../src/views/AssetLocationSettingsPage.vue') },
   { path: '/assets/settings/categories', name: 'e2e-categories', component: () => import('../../../src/views/AssetCategorySettingsPage.vue') },
@@ -54,6 +56,7 @@ const menuTree: TestMenu[] = [
     { id: 'assetReceiveReturn', parentId: 'assets', title: '领用退库', path: '/assets/receive-return', pageKey: 'asset.portal.receive-return', order: 22, permissionCodes: ['asset:receive_return:view'], featureCodes: ['PORTAL_ASSETS'] },
     { id: 'assetBorrowReturn', parentId: 'assets', title: '借用归还', path: '/assets/borrow-return', pageKey: 'asset.portal.borrow-return', order: 23, permissionCodes: ['asset:borrow_return:view'], featureCodes: ['PORTAL_ASSETS'] },
     { id: 'stocktake', parentId: 'assets', title: '资产盘点', path: '/assets/stocktake', pageKey: 'asset.portal.stocktake', order: 24, permissionCodes: ['asset:stocktake:view'], featureCodes: ['PORTAL_ASSETS'] },
+    { id: 'assetDisposals', parentId: 'assets', title: '资产处置', path: '/assets/disposals', pageKey: 'asset.portal.disposals', order: 25, permissionCodes: ['asset:disposal:view'], featureCodes: ['PORTAL_ASSETS'] },
     { id: 'assetSettings', parentId: 'assets', title: '资产设置', path: '/assets/settings', pageKey: 'asset.portal.settings', order: 30, permissionCodes: ['asset:location_settings:view'], featureCodes: ['PORTAL_ASSETS'], children: assetSettingsChildren }
   ] },
   { id: 'requests', title: '审批', path: '/requests', pageKey: 'asset.portal.requests', order: 40, permissionCodes: ['asset:request:view'], featureCodes: ['PORTAL_REQUESTS'] },

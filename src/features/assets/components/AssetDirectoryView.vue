@@ -951,6 +951,11 @@ const terminateReceipt = async (item: AssetRecord): Promise<void> => {
     if (error !== 'cancel' && error !== 'close') ElMessage.error(error instanceof Error ? error.message : '终止失败')
   }
 }
+const disposeSelected = (): void => {
+  if (!selected.value.length) { ElMessage.warning('请先选择空闲资产'); return }
+  if (selected.value.some((item) => item.status !== '空闲')) { ElMessage.warning('仅空闲资产可以发起处置'); return }
+  void router.push({ path: '/assets/disposals', query: { assetIds: selected.value.map((item) => item.id).join(',') } })
+}
 onMounted(() => void load())
 </script>
 
@@ -970,6 +975,7 @@ onMounted(() => void load())
               <el-dropdown-item v-if="can('asset:item:return')" :disabled="selected.length > 0 && !assetsAllowAction(selected, 'return')" @click="openActionForIds(selected, 'return')">领用退还</el-dropdown-item>
               <el-dropdown-item v-if="can('asset:item:borrowReturn')" :disabled="selected.length > 0 && !assetsAllowAction(selected, 'borrow-return')" @click="openActionForIds(selected, 'borrow-return')">借用归还</el-dropdown-item>
               <el-dropdown-item v-if="can('asset:item:handover')" :disabled="selected.length > 0 && !assetsAllowAction(selected, 'handover')" @click="openActionForIds(selected, 'handover')">资产交接</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:disposal:create')" :disabled="!selected.length || selected.some((item) => item.status !== '空闲')" @click="disposeSelected">处置</el-dropdown-item>
             </el-dropdown-menu></template>
           </el-dropdown>
           <el-dropdown placement="bottom-start" trigger="click">

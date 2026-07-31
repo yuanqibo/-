@@ -77,6 +77,7 @@ const jsonBody = (request: Request): unknown => {
 
 export const installApiMocks = async (page: Page, options: ApiMockOptions = {}): Promise<ApiMockState> => {
   const currentAssets: Array<Record<string, unknown>> = (options.assets || assets).map((item) => ({ ...item }))
+  const currentDisposals: Array<Record<string, unknown>> = []
   const businessRequests: Array<Record<string, unknown>> = requests.map((item) => ({ ...item }))
   const state: ApiMockState = { requests: [], approvals: businessRequests }
   const approvalRequired = options.handoverApprovalRequired !== false
@@ -124,6 +125,55 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
     if (url.pathname === '/api/assets' && method === 'POST') return fulfill({ item: { ...assets[0], ...(body as { item?: object })?.item, id: 'AST-NEW' } }, 201)
     if (url.pathname === '/api/assets/import') return fulfill({ items: [] }, 201)
     if (url.pathname.startsWith('/api/assets/commands/')) return fulfill({ items: currentAssets.slice(0, 1) })
+    if (url.pathname === '/api/asset-disposals' && method === 'GET') return fulfill({ items: currentDisposals, version: 1 })
+    if (url.pathname === '/api/asset-disposals' && method === 'POST') {
+      const draft = body as { disposalType?: string; company?: string; operator?: string; amount?: number; fee?: number; description?: string; returnDate?: string; assetIds?: string[] }
+      const ids = new Set((draft.assetIds || []).map(String))
+      const lines: Array<Record<string, unknown>> = currentAssets.filter((asset) => ids.has(String(asset.id))).map((asset) => {
+        const previousStatus = String(asset.status || '空闲')
+        asset.status = '处置中'
+        return { ...asset, assetId: asset.id, status: '待处置', previousStatus }
+      })
+      const item = {
+        id: 'CZ202607310001', status: '待处置', disposalType: draft.disposalType, company: draft.company,
+        operator: draft.operator, amount: draft.amount || 0, fee: draft.fee || 0, description: draft.description,
+        returnDate: draft.returnDate, createdAt: '2026-07-31T08:00:00Z', createdDate: '2026-07-31',
+        assetCount: lines.length, assets: lines
+      }
+      currentDisposals.unshift(item)
+      return fulfill({ item, version: 2 }, 201)
+    }
+    if (url.pathname.endsWith('/complete') && url.pathname.startsWith('/api/asset-disposals/') && method === 'PATCH') {
+      const id = decodeURIComponent(url.pathname.split('/')[3] || '')
+      const item = currentDisposals.find((row) => row.id === id) as { status?: string; completedAt?: string; assets?: Array<Record<string, unknown>> } | undefined
+      item?.assets?.forEach((line) => {
+        if (line.status !== '待处置') return
+        line.status = '已处置'
+        const asset = currentAssets.find((candidate) => candidate.id === line.assetId)
+        if (asset) asset.status = '已处置'
+      })
+      if (item) {
+        const statuses = new Set(item.assets?.map((line) => String(line.status)) || [])
+        item.status = statuses.has('已取消') ? '部分取消' : '已处置'
+        item.completedAt = '2026-07-31T09:00:00Z'
+      }
+      return fulfill({ items: currentDisposals, version: 3 })
+    }
+    if (url.pathname.endsWith('/cancel') && url.pathname.startsWith('/api/asset-disposals/') && method === 'POST') {
+      const id = decodeURIComponent(url.pathname.split('/')[3] || '')
+      const command = body as { assetIds?: string[] }
+      const item = currentDisposals.find((row) => row.id === id) as { status?: string; assets?: Array<Record<string, unknown>> } | undefined
+      const requested = new Set(command.assetIds?.length ? command.assetIds : item?.assets?.filter((line) => line.status !== '已取消').map((line) => String(line.assetId)))
+      item?.assets?.forEach((line) => {
+        if (!requested.has(String(line.assetId))) return
+        line.status = '已取消'
+        const asset = currentAssets.find((candidate) => candidate.id === line.assetId)
+        if (asset) asset.status = line.previousStatus || '空闲'
+      })
+      const statuses = new Set(item?.assets?.map((line) => String(line.status)) || [])
+      if (item) item.status = statuses.size === 1 && statuses.has('已取消') ? '已取消' : '部分取消'
+      return fulfill({ items: currentDisposals, version: 4 })
+    }
     if (url.pathname === '/api/business-data' && method === 'GET') return fulfill({ values: { requests: businessRequests, stocktakes: [{ id: 'STK-001', name: '季度盘点', scope: '全部资产', owner: '管理员', progress: '盘点中', total: 45, checked: 20, diff: 1, date: '2026-07-20' }], consumables: [], repairs: [], contracts: [] }, versions: {} })
     if (url.pathname === '/api/business-data/requests' && method === 'POST') {
       const draft = body as { type?: string; applicant?: string; asset?: string; reason?: string; details?: Record<string, unknown> }

@@ -91,6 +91,15 @@ resources:
       - { code: asset:stocktake:view, action: view, riskLevel: L1, approvalRequired: false }
       - { code: asset:stocktake:create, action: create, riskLevel: L2, approvalRequired: false }
       - { code: asset:stocktake:update, action: update, riskLevel: L2, approvalRequired: false }
+  - code: asset:disposal
+    name: 资产处置
+    scopes: [ALL]
+    permissions:
+      - { code: asset:disposal:view, action: view, riskLevel: L1, approvalRequired: false }
+      - { code: asset:disposal:create, action: create, riskLevel: L2, approvalRequired: false }
+      - { code: asset:disposal:complete, action: update, riskLevel: L2, approvalRequired: false }
+      - { code: asset:disposal:cancel, action: update, riskLevel: L3, approvalRequired: false }
+      - { code: asset:disposal:export, action: view, riskLevel: L2, approvalRequired: false }
   - code: asset:consumable
     name: 耗材库存
     scopes: [ALL]

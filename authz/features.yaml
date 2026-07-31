@@ -23,6 +23,11 @@ features:
       - asset:borrow_return:view
       - asset:stocktake:view
       - asset:stocktake:update
+      - asset:disposal:view
+      - asset:disposal:create
+      - asset:disposal:complete
+      - asset:disposal:cancel
+      - asset:disposal:export
       - asset:consumable:view
       - asset:consumable:create
       - asset:consumable:adjust

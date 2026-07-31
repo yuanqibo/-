@@ -66,6 +66,17 @@ menus:
       - asset:stocktake:view
     featureCodes:
       - PORTAL_ASSETS
+  - id: assetDisposals
+    parentId: assets
+    title: 资产处置
+    path: /assets/disposals
+    pageKey: asset.portal.disposals
+    file: /src/views/AssetDisposalsPage.vue
+    order: 25
+    permissionCodes:
+      - asset:disposal:view
+    featureCodes:
+      - PORTAL_ASSETS
   - id: assetSettings
     parentId: assets
     title: 资产设置
