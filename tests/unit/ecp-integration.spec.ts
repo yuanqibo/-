@@ -7,7 +7,7 @@ describe('ECP local integration', () => {
 
   it('passes the real SDK local doctor with strict app-code matching', async () => {
     vi.stubEnv('VITE_ECP_AUTH_CONFIG_SOURCE_MODE', 'local')
-    const { ecp } = await import('../../src/ecp')
+    const { bundledAppAdminAccess, ecp } = await import('../../src/ecp')
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [{
@@ -23,6 +23,12 @@ describe('ECP local integration', () => {
 
     expect(report?.ok).toBe(true)
     expect(report?.checks.filter((check) => check.status === 'FAIL')).toEqual([])
+    expect(bundledAppAdminAccess.permissionCodes).toEqual(expect.arrayContaining([
+      'asset:disposal:view',
+      'asset:disposal:create',
+      'asset:disposal:complete',
+      'asset:disposal:cancel'
+    ]))
     for (const path of ['/login', '/no-permission', '/workspace']) {
       expect(router.resolve(path).matched.some((route) => route.path === path)).toBe(true)
     }

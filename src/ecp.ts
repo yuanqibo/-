@@ -25,6 +25,12 @@ const authzBundle = createBundleFromGlob({
   ...import.meta.glob('/src/views/**/*.vue')
 })
 
+const appAdminRole = authzBundle.roles?.roles?.find((role) => role.code === 'APP_ADMIN')
+export const bundledAppAdminAccess = {
+  permissionCodes: [...(appAdminRole?.permissions || [])],
+  featureCodes: [...(appAdminRole?.features || [])]
+}
+
 authzBundle.catalog?.resources?.forEach((resource) => {
   resource.permissions?.forEach((catalogPermission) => {
     const permission = catalogPermission as typeof catalogPermission & { name?: string }
@@ -64,7 +70,11 @@ export const ecp = createEcpSdk({
             loadTrustedPortalIdentity()
           ])
           return snapshot
-            ? withEmployeeSelfServiceSnapshot(applyTrustedPermissionSnapshot(snapshot, trustedIdentity))
+            ? withEmployeeSelfServiceSnapshot(applyTrustedPermissionSnapshot(
+                snapshot,
+                trustedIdentity,
+                bundledAppAdminAccess
+              ))
             : null
         }
       },

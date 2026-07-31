@@ -7,6 +7,11 @@ export type TrustedPortalIdentity = {
   featureCodes?: string[]
 }
 
+export type TrustedAppAdminAccess = {
+  permissionCodes?: string[]
+  featureCodes?: string[]
+}
+
 const merge = (left: string[] | undefined, right: string[] | undefined): string[] =>
   Array.from(new Set([...(left || []), ...(right || [])].filter(Boolean)))
 
@@ -28,33 +33,39 @@ export const loadTrustedPortalIdentity = (): Promise<TrustedPortalIdentity | nul
 
 export const applyTrustedPortalIdentity = (
   session: AuthzSessionContext,
-  identity: TrustedPortalIdentity | null | undefined
+  identity: TrustedPortalIdentity | null | undefined,
+  appAdminAccess?: TrustedAppAdminAccess
 ): AuthzSessionContext => {
   const roleCode = String(identity?.roleCode || '').trim().toLowerCase()
   const role = trustedRole(roleCode)
   if (!role) return session
 
+  const elevatedAccess = roleCode === 'super_admin' ? appAdminAccess : undefined
+
   return {
     ...session,
     roles: [...session.roles.filter((item) => item.code !== role.code), role],
-    permissionCodes: merge(session.permissionCodes, identity?.permissionCodes),
-    featureCodes: merge(session.featureCodes, identity?.featureCodes)
+    permissionCodes: merge(merge(session.permissionCodes, identity?.permissionCodes), elevatedAccess?.permissionCodes),
+    featureCodes: merge(merge(session.featureCodes, identity?.featureCodes), elevatedAccess?.featureCodes)
   }
 }
 
 export const applyTrustedPermissionSnapshot = (
   snapshot: AuthzPermissionSnapshot,
-  identity: TrustedPortalIdentity | null | undefined
+  identity: TrustedPortalIdentity | null | undefined,
+  appAdminAccess?: TrustedAppAdminAccess
 ): AuthzPermissionSnapshot => {
   const roleCode = String(identity?.roleCode || '').trim().toLowerCase()
   const role = trustedRole(roleCode)
   if (!role) return snapshot
 
+  const elevatedAccess = roleCode === 'super_admin' ? appAdminAccess : undefined
+
   return {
     ...snapshot,
     roleCodes: merge(snapshot.roleCodes, [role.code]),
     roleNamesByCode: { ...snapshot.roleNamesByCode, [role.code]: role.name },
-    permissionCodes: merge(snapshot.permissionCodes, identity?.permissionCodes),
-    featureCodes: merge(snapshot.featureCodes, identity?.featureCodes)
+    permissionCodes: merge(merge(snapshot.permissionCodes, identity?.permissionCodes), elevatedAccess?.permissionCodes),
+    featureCodes: merge(merge(snapshot.featureCodes, identity?.featureCodes), elevatedAccess?.featureCodes)
   }
 }

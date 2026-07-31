@@ -29,11 +29,18 @@ describe('trusted portal identity', () => {
       roleCode: 'super_admin',
       permissionCodes: ['asset:item:create', 'authz:app_role:assign'],
       featureCodes: ['PORTAL_ASSETS', 'PORTAL_SETTINGS', 'APP_WORKSPACE']
+    }, {
+      permissionCodes: ['asset:disposal:view', 'asset:disposal:create'],
+      featureCodes: ['PORTAL_REQUESTS']
     })
 
     expect(result.roles).toContainEqual({ code: 'APP_ADMIN', name: '应用管理员', type: 'APP_ADMIN' })
-    expect(result.permissionCodes).toEqual(expect.arrayContaining(['asset:item:view', 'asset:item:create', 'authz:app_role:assign']))
-    expect(result.featureCodes).toEqual(expect.arrayContaining(['PORTAL_HOME', 'PORTAL_SETTINGS', 'APP_WORKSPACE']))
+    expect(result.permissionCodes).toEqual(expect.arrayContaining([
+      'asset:item:view', 'asset:item:create', 'authz:app_role:assign', 'asset:disposal:view', 'asset:disposal:create'
+    ]))
+    expect(result.featureCodes).toEqual(expect.arrayContaining([
+      'PORTAL_HOME', 'PORTAL_SETTINGS', 'APP_WORKSPACE', 'PORTAL_REQUESTS'
+    ]))
   })
 
   it('does not elevate an ordinary employee response', () => {
@@ -45,12 +52,29 @@ describe('trusted portal identity', () => {
       roleCode: 'super_admin',
       permissionCodes: ['asset:employee:view', 'authz:app_role:assign'],
       featureCodes: ['PORTAL_SETTINGS', 'APP_WORKSPACE']
+    }, {
+      permissionCodes: ['asset:disposal:view', 'asset:disposal:complete'],
+      featureCodes: ['PORTAL_ASSETS']
     })
 
     expect(result.roleCodes).toEqual(expect.arrayContaining(['JPNYHJ', 'APP_ADMIN']))
     expect(result.roleNamesByCode?.APP_ADMIN).toBe('应用管理员')
-    expect(result.permissionCodes).toEqual(expect.arrayContaining(['asset:item:view', 'asset:employee:view']))
-    expect(result.featureCodes).toEqual(expect.arrayContaining(['PORTAL_HOME', 'PORTAL_SETTINGS']))
+    expect(result.permissionCodes).toEqual(expect.arrayContaining([
+      'asset:item:view', 'asset:employee:view', 'asset:disposal:view', 'asset:disposal:complete'
+    ]))
+    expect(result.featureCodes).toEqual(expect.arrayContaining(['PORTAL_HOME', 'PORTAL_SETTINGS', 'PORTAL_ASSETS']))
+  })
+
+  it('does not grant the local administrator catalog to a non-super administrator', () => {
+    const result = applyTrustedPortalIdentity(session, {
+      roleCode: 'admin',
+      permissionCodes: ['asset:item:update']
+    }, {
+      permissionCodes: ['asset:disposal:view']
+    })
+
+    expect(result.permissionCodes).toContain('asset:item:update')
+    expect(result.permissionCodes).not.toContain('asset:disposal:view')
   })
 
   it('does not elevate an ordinary employee permission snapshot', () => {
