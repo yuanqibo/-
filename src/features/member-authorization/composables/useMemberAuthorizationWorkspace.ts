@@ -1,5 +1,6 @@
 import { onActivated, onBeforeUnmount, onDeactivated, reactive, ref } from 'vue'
 import { memberAuthorizationWorkspaceUrl } from '../api/member-authorization.api'
+import { enhanceMemberSelector } from '../member-selector-enhancer'
 import type { MemberAuthorizationWorkspaceState } from '../types/member-authorization'
 
 const WORKSPACE_SURFACE_SELECTOR = [
@@ -26,11 +27,14 @@ export const useMemberAuthorizationWorkspace = () => {
   let hostObserver: MutationObserver | null = null
   const portaledNodes = new Set<HTMLElement>()
   const copiedThemeProperties = new WeakMap<HTMLElement, string[]>()
+  const surfaceCleanups = new WeakMap<HTMLElement, () => void>()
   let loadTimer: number | null = null
   let loadTimeout: number | null = null
   let active = true
 
   const clearPortalState = (node: HTMLElement): void => {
+    surfaceCleanups.get(node)?.()
+    surfaceCleanups.delete(node)
     node.classList.remove('authz-workspace-host', 'authz-workspace-auxiliary')
     copiedThemeProperties.get(node)?.forEach((property) => node.style.removeProperty(property))
     copiedThemeProperties.delete(node)
@@ -85,7 +89,10 @@ export const useMemberAuthorizationWorkspace = () => {
         if (primary) document.body.appendChild(node)
         else (primaryHost || document.body).appendChild(node)
         portaledNodes.add(node)
-        if (primary) hostObserver?.observe(node, { attributes: true, attributeFilter: ['class', 'style'] })
+        if (primary) {
+          if (!surfaceCleanups.has(node)) surfaceCleanups.set(node, enhanceMemberSelector(node))
+          hostObserver?.observe(node, { attributes: true, attributeFilter: ['class', 'style'] })
+        }
       }
       const sync = (): void => {
         portaledNodes.forEach((node) => {

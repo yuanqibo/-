@@ -727,6 +727,44 @@ body:has(.authz-workspace-host) .el-overlay:has(.role-editor-wizard-drawer) {
   height: min(560px, calc(100vh - 210px)) !important;
 }
 
+.authz-member-path-tooltip {
+  position: fixed;
+  z-index: 2147483600;
+  max-width: calc(100vw - 32px);
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: #303133;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 20px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+}
+
+.authz-member-path-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  border: 6px solid transparent;
+  border-top-color: #303133;
+  transform: translateX(-50%);
+}
+
+.authz-member-path-tooltip.is-bottom {
+  transform: translate(-50%, 0);
+}
+
+.authz-member-path-tooltip.is-bottom::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: #303133;
+}
+
 :is(.authz-workspace-host, body:has(.authz-workspace-host)) .role-editor-wizard-drawer .el-drawer__footer {
   min-height: 52px !important;
   padding: 8px 20px !important;
