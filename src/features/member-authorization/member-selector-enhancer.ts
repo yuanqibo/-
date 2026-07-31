@@ -4,10 +4,14 @@ const SEARCH_DEBOUNCE_MS = 180
 
 const matchingElement = (event: Event, selector: string, host: HTMLElement): HTMLElement | null => {
   const target = event.target
-  if (!(target instanceof host.ownerDocument.defaultView!.Element)) return null
-  const element = target.closest<HTMLElement>(selector)
+  if (!target || typeof target !== 'object' || !('nodeType' in target) || target.nodeType !== 1) return null
+  const element = (target as Element).closest<HTMLElement>(selector)
   return element && host.contains(element) ? element : null
 }
+
+const asInput = (element: HTMLElement | null): HTMLInputElement | null => (
+  element?.tagName === 'INPUT' ? element as HTMLInputElement : null
+)
 
 const dispatchSearch = (input: HTMLInputElement): void => {
   const KeyboardEventConstructor = input.ownerDocument.defaultView?.KeyboardEvent
@@ -85,13 +89,13 @@ export const enhanceMemberSelector = (host: HTMLElement): (() => void) => {
   }
 
   const onInput = (event: Event): void => {
-    const element = matchingElement(event, ASSIGNMENT_SEARCH_INPUT, host)
-    if (element instanceof host.ownerDocument.defaultView!.HTMLInputElement) scheduleSearch(element)
+    const input = asInput(matchingElement(event, ASSIGNMENT_SEARCH_INPUT, host))
+    if (input) scheduleSearch(input)
   }
   const onKeyup = (event: KeyboardEvent): void => {
     if (event.key !== 'Enter') return
-    const element = matchingElement(event, ASSIGNMENT_SEARCH_INPUT, host)
-    if (element instanceof host.ownerDocument.defaultView!.HTMLInputElement) clearSearchTimer(element)
+    const input = asInput(matchingElement(event, ASSIGNMENT_SEARCH_INPUT, host))
+    if (input) clearSearchTimer(input)
   }
   const onMouseover = (event: MouseEvent): void => {
     const target = matchingElement(event, MEMBER_PATH, host)
@@ -100,7 +104,8 @@ export const enhanceMemberSelector = (host: HTMLElement): (() => void) => {
   const onMouseout = (event: MouseEvent): void => {
     if (!tooltipTarget) return
     const related = event.relatedTarget
-    if (related instanceof host.ownerDocument.defaultView!.Node && tooltipTarget.contains(related)) return
+    if (related && typeof related === 'object' && 'nodeType' in related
+      && tooltipTarget.contains(related as Node)) return
     if (matchingElement(event, MEMBER_PATH, host) === tooltipTarget) hideTooltip()
   }
 
