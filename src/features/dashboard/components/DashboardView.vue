@@ -163,7 +163,7 @@ const metricLabel = (value: number, mode: CategoryMetricMode = 'count'): string 
   <section v-loading="state.loading" class="grid stats-grid">
     <article class="stat-card" data-watermark="ZC"><div class="stat-top"><span>资产总数</span><span class="tag blue">当前范围</span></div><div class="stat-value">{{ assets.length }}</div><div class="stat-note">账号范围内全部资产</div></article>
     <article class="stat-card" data-watermark="ZY"><div class="stat-top"><span>在用资产</span><span class="tag green">在用</span></div><div class="stat-value">{{ activeCount }}</div><div class="stat-note">已分配给员工或部门</div></article>
-    <article class="stat-card" data-watermark="OA"><div class="stat-top"><span>待处理单据</span><span class="tag amber">审批中</span></div><div class="stat-value">{{ pendingCount }}</div><div class="stat-note">资产动作等待审批或执行</div></article>
+    <article class="stat-card" data-watermark="OA"><div class="stat-top"><span>待处理单据</span><span v-if="pendingCount > 0" class="tag amber">审批中</span></div><div class="stat-value">{{ pendingCount }}</div><div class="stat-note">资产动作等待审批或执行</div></article>
     <article class="stat-card" data-watermark="¥"><div class="stat-top"><span>资产原值</span><span class="tag blue">当前范围</span></div><div class="stat-value">¥{{ totalValue.toLocaleString('zh-CN') }}</div><div class="stat-note">后续可接折旧与成本中心</div></article>
   </section>
 

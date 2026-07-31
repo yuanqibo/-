@@ -1,6 +1,7 @@
 import type { Page, Request } from '@playwright/test'
 
 export type ApiMockOptions = {
+  approvals?: Array<Record<string, unknown>>
   assets?: Array<Record<string, unknown>>
   categoryTree?: Array<Record<string, unknown>>
   locationTree?: Array<Record<string, unknown>>
@@ -78,7 +79,7 @@ const jsonBody = (request: Request): unknown => {
 export const installApiMocks = async (page: Page, options: ApiMockOptions = {}): Promise<ApiMockState> => {
   const currentAssets: Array<Record<string, unknown>> = (options.assets || assets).map((item) => ({ ...item }))
   const currentDisposals: Array<Record<string, unknown>> = []
-  const businessRequests: Array<Record<string, unknown>> = requests.map((item) => ({ ...item }))
+  const businessRequests: Array<Record<string, unknown>> = (options.approvals || requests).map((item) => ({ ...item }))
   const state: ApiMockState = { requests: [], approvals: businessRequests }
   const approvalRequired = options.handoverApprovalRequired !== false
   const borrowApprovalRequired = options.borrowApprovalRequired !== false

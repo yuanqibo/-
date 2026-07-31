@@ -940,6 +940,18 @@ test.describe('登录后门户质量回归', () => {
     await expectPortalSelectOpensBelow(page, page.locator('.dashboard-card-filters .el-select').first())
   })
 
+  test('审批列表为空时首页待处理单据不显示审批中', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '首页统计卡片在桌面项目执行')
+    await openApp(page, '/', { approvals: [] })
+
+    const pendingCard = page.locator('.stat-card').filter({ hasText: '待处理单据' })
+    await expect(pendingCard.locator('.stat-value')).toHaveText('0')
+    await expect(pendingCard.getByText('审批中', { exact: true })).toHaveCount(0)
+
+    await page.getByText('审批', { exact: true }).click()
+    await expect(page.getByText('暂无审批单据。', { exact: true })).toBeVisible()
+  })
+
   test('资产搜索、分页、详情和高级筛选可用', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '密集表格业务流在桌面项目执行，移动项目负责布局回归')
     await openApp(page, '/assets')
