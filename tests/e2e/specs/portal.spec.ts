@@ -345,6 +345,16 @@ test.describe('登录后门户质量回归', () => {
     expect(dialogBox!.width).toBeGreaterThanOrEqual(600)
     expect(Math.abs(dialogBox!.x - (overlayBox!.width - dialogBox!.width) / 2)).toBeLessThanOrEqual(2)
 
+    const memberSearch = assignmentDialog.getByRole('textbox', { name: '搜索授权对象' })
+    await memberSearch.fill('zhou')
+    await memberSearch.press('Enter')
+    await expect(memberSearch).toHaveValue('zhou')
+    await expect(assignmentDialog.locator('[data-member-search-count]')).toHaveText('检索次数 1')
+    await memberSearch.press('Backspace')
+    await expect(memberSearch).toHaveValue('zho')
+    await page.waitForTimeout(250)
+    await expect(assignmentDialog.locator('[data-member-search-count]')).toHaveText('检索次数 1')
+
     await page.getByRole('button', { name: '取消', exact: true }).click()
     await expect(page.locator('body > .el-overlay.authz-workspace-host')).toHaveCount(0)
     await expect.poll(() => shell.evaluate((element) => getComputedStyle(element).position)).not.toBe('fixed')

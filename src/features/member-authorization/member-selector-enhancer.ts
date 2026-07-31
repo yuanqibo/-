@@ -1,34 +1,10 @@
-const ASSIGNMENT_SEARCH_INPUT = '.target-workspace-assignment-dialog .ecp-entity-selector__toolbar input'
 const MEMBER_PATH = '.target-workspace-assignment-dialog .ecp-entity-selector__path-line'
-const SEARCH_DEBOUNCE_MS = 180
 
 const matchingElement = (event: Event, selector: string, host: HTMLElement): HTMLElement | null => {
   const target = event.target
   if (!target || typeof target !== 'object' || !('nodeType' in target) || target.nodeType !== 1) return null
   const element = (target as Element).closest<HTMLElement>(selector)
   return element && host.contains(element) ? element : null
-}
-
-const asInput = (element: HTMLElement | null): HTMLInputElement | null => (
-  element?.tagName === 'INPUT' ? element as HTMLInputElement : null
-)
-
-type ComposingInput = HTMLInputElement & { composing?: boolean }
-
-const normalizePinyinQuery = (value: string): string => {
-  const trimmed = value.trim()
-  return /^[\x00-\x7f]+$/.test(trimmed) ? trimmed.replace(/\s+/g, '') : trimmed
-}
-
-const dispatchSearch = (input: HTMLInputElement): void => {
-  const KeyboardEventConstructor = input.ownerDocument.defaultView?.KeyboardEvent
-  if (!KeyboardEventConstructor) return
-  input.dispatchEvent(new KeyboardEventConstructor('keyup', {
-    bubbles: true,
-    cancelable: true,
-    key: 'Enter',
-    code: 'Enter'
-  }))
 }
 
 const positionTooltip = (tooltip: HTMLElement, target: HTMLElement): void => {
@@ -57,44 +33,8 @@ const positionTooltip = (tooltip: HTMLElement, target: HTMLElement): void => {
 }
 
 export const enhanceMemberSelector = (host: HTMLElement): (() => void) => {
-  const searchTimers = new Map<HTMLInputElement, number>()
-  const internalInputEvents = new WeakSet<HTMLInputElement>()
   let tooltip: HTMLElement | null = null
   let tooltipTarget: HTMLElement | null = null
-
-  const clearSearchTimer = (input: HTMLInputElement): void => {
-    const timer = searchTimers.get(input)
-    if (timer !== undefined) host.ownerDocument.defaultView?.clearTimeout(timer)
-    searchTimers.delete(input)
-  }
-
-  const runSearch = (input: HTMLInputElement, rawQuery: string, syncComposingValue: boolean): void => {
-    const query = normalizePinyinQuery(rawQuery)
-    const composingInput = input as ComposingInput
-    const originalValue = input.value
-    const wasComposing = composingInput.composing === true
-    if (query !== originalValue || syncComposingValue || wasComposing) {
-      const EventConstructor = input.ownerDocument.defaultView?.Event
-      if (!EventConstructor) return
-      input.value = query
-      composingInput.composing = false
-      internalInputEvents.add(input)
-      input.dispatchEvent(new EventConstructor('input', { bubbles: true }))
-      internalInputEvents.delete(input)
-    }
-    dispatchSearch(input)
-    input.value = originalValue
-    composingInput.composing = wasComposing
-  }
-
-  const scheduleSearch = (input: HTMLInputElement, rawQuery = input.value, syncComposingValue = false): void => {
-    clearSearchTimer(input)
-    const timer = host.ownerDocument.defaultView?.setTimeout(() => {
-      searchTimers.delete(input)
-      if (input.isConnected) runSearch(input, rawQuery, syncComposingValue)
-    }, SEARCH_DEBOUNCE_MS)
-    if (timer !== undefined) searchTimers.set(input, timer)
-  }
 
   const hideTooltip = (): void => {
     tooltip?.remove()
@@ -115,21 +55,6 @@ export const enhanceMemberSelector = (host: HTMLElement): (() => void) => {
     positionTooltip(tooltip, target)
   }
 
-  const onInput = (event: Event): void => {
-    const input = asInput(matchingElement(event, ASSIGNMENT_SEARCH_INPUT, host))
-    if (input && !internalInputEvents.has(input)) {
-      scheduleSearch(input, input.value, 'isComposing' in event && event.isComposing === true)
-    }
-  }
-  const onCompositionUpdate = (event: CompositionEvent): void => {
-    const input = asInput(matchingElement(event, ASSIGNMENT_SEARCH_INPUT, host))
-    if (input) scheduleSearch(input, event.data || input.value, true)
-  }
-  const onKeyup = (event: KeyboardEvent): void => {
-    if (event.key !== 'Enter') return
-    const input = asInput(matchingElement(event, ASSIGNMENT_SEARCH_INPUT, host))
-    if (input) clearSearchTimer(input)
-  }
   const onMouseover = (event: MouseEvent): void => {
     const target = matchingElement(event, MEMBER_PATH, host)
     if (target && target !== tooltipTarget) showTooltip(target)
@@ -142,20 +67,12 @@ export const enhanceMemberSelector = (host: HTMLElement): (() => void) => {
     if (matchingElement(event, MEMBER_PATH, host) === tooltipTarget) hideTooltip()
   }
 
-  host.addEventListener('input', onInput)
-  host.addEventListener('compositionupdate', onCompositionUpdate as EventListener)
-  host.addEventListener('keyup', onKeyup as EventListener)
   host.addEventListener('mouseover', onMouseover as EventListener)
   host.addEventListener('mouseout', onMouseout as EventListener)
   host.addEventListener('scroll', hideTooltip, true)
 
   return () => {
-    searchTimers.forEach((timer) => host.ownerDocument.defaultView?.clearTimeout(timer))
-    searchTimers.clear()
     hideTooltip()
-    host.removeEventListener('input', onInput)
-    host.removeEventListener('compositionupdate', onCompositionUpdate as EventListener)
-    host.removeEventListener('keyup', onKeyup as EventListener)
     host.removeEventListener('mouseover', onMouseover as EventListener)
     host.removeEventListener('mouseout', onMouseout as EventListener)
     host.removeEventListener('scroll', hideTooltip, true)

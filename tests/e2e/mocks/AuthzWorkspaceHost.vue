@@ -6,6 +6,8 @@ const activeView = ref<'roles' | 'accounts'>('roles')
 const assignmentOpen = ref(false)
 const roleDetailOpen = ref(false)
 const accountPermissionOpen = ref(false)
+const memberQuery = ref('')
+const memberSearchCount = ref(0)
 onMounted(() => {
   document.documentElement.style.setProperty('--ecp-primary-500', '#3370ff')
   emit('loaded')
@@ -36,6 +38,10 @@ onBeforeUnmount(() => document.documentElement.style.removeProperty('--ecp-prima
         <div class="el-overlay-dialog is-align-center" style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%">
           <section class="target-workspace-assignment-dialog el-dialog" style="width: min(1000px, 92vw)" role="dialog" aria-label="分配 应用管理员 角色">
             <h2>分配 应用管理员 角色</h2>
+            <div class="ecp-entity-selector__toolbar">
+              <input v-model="memberQuery" aria-label="搜索授权对象" @keyup.enter="memberSearchCount += 1">
+              <span data-member-search-count>检索次数 {{ memberSearchCount }}</span>
+            </div>
             <button type="button" @click="assignmentOpen = false">取消</button>
           </section>
         </div>

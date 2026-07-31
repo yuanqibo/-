@@ -19,8 +19,7 @@ describe('member selector enhancer', () => {
     document.body.replaceChildren()
   })
 
-  it('runs the SDK search automatically after pinyin input without a physical Enter key', async () => {
-    vi.useFakeTimers()
+  it('lets a physical Enter trigger exactly one SDK search without changing pinyin', () => {
     const host = selectorHost()
     const input = host.querySelector('input')!
     const searches: string[] = []
@@ -29,38 +28,47 @@ describe('member selector enhancer', () => {
     })
     const cleanup = enhanceMemberSelector(host)
 
-    input.value = 'zhou zhou'
-    input.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true }))
-    await vi.advanceTimersByTimeAsync(179)
-    expect(searches).toEqual([])
-    await vi.advanceTimersByTimeAsync(1)
-    expect(searches).toEqual(['zhouzhou'])
+    input.value = 'zhou'
+    input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Enter', code: 'Enter' }))
+    expect(searches).toEqual(['zhou'])
+    expect(input.value).toBe('zhou')
 
     cleanup()
   })
 
-  it('searches unconfirmed IME pinyin with the compact query expected by ECP', async () => {
-    vi.useFakeTimers()
+  it('does not synthesize searches or restore deleted text after Backspace', () => {
     const host = selectorHost()
-    const input = host.querySelector<HTMLInputElement>('input')! as HTMLInputElement & { composing?: boolean }
-    let sdkQuery = ''
+    const input = host.querySelector<HTMLInputElement>('input')!
     const searches: string[] = []
-    input.addEventListener('input', () => {
-      if (!input.composing) sdkQuery = input.value
-    })
     input.addEventListener('keyup', (event) => {
-      if (event.key === 'Enter') searches.push(sdkQuery)
+      if (event.key === 'Enter') searches.push(input.value)
     })
     const cleanup = enhanceMemberSelector(host)
 
-    input.composing = true
-    input.value = 'zhou zhou'
-    input.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: 'zhou zhou' }))
-    await vi.advanceTimersByTimeAsync(180)
+    input.value = 'zhou'
+    input.value = 'zho'
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }))
+    input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Backspace', code: 'Backspace' }))
 
-    expect(searches).toEqual(['zhouzhou'])
-    expect(input.value).toBe('zhou zhou')
-    expect(input.composing).toBe(true)
+    expect(searches).toEqual([])
+    expect(input.value).toBe('zho')
+    cleanup()
+  })
+
+  it('does not mutate or search during an IME composition update', () => {
+    const host = selectorHost()
+    const input = host.querySelector<HTMLInputElement>('input')!
+    let searchCount = 0
+    input.addEventListener('keyup', (event) => {
+      if (event.key === 'Enter') searchCount += 1
+    })
+    const cleanup = enhanceMemberSelector(host)
+
+    input.value = 'zhou'
+    input.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: 'zhou' }))
+
+    expect(input.value).toBe('zhou')
+    expect(searchCount).toBe(0)
     cleanup()
   })
 
@@ -79,8 +87,7 @@ describe('member selector enhancer', () => {
     cleanup()
   })
 
-  it('keeps working after the SDK overlay is adopted from an iframe document', async () => {
-    vi.useFakeTimers()
+  it('keeps native keyboard behavior after the SDK overlay is adopted from an iframe document', () => {
     const frame = document.createElement('iframe')
     document.body.appendChild(frame)
     const frameDocument = frame.contentDocument!
@@ -100,11 +107,12 @@ describe('member selector enhancer', () => {
     const cleanup = enhanceMemberSelector(host)
 
     expect(input instanceof HTMLInputElement).toBe(false)
-    input.value = 'zhou zhou'
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-    await vi.advanceTimersByTimeAsync(180)
+    input.value = 'zhou'
+    const FrameKeyboardEvent = (input.ownerDocument.defaultView as unknown as { KeyboardEvent: typeof KeyboardEvent }).KeyboardEvent
+    input.dispatchEvent(new FrameKeyboardEvent('keyup', { bubbles: true, key: 'Enter', code: 'Enter' }))
 
     expect(searchCount).toBe(1)
+    expect(input.value).toBe('zhou')
     cleanup()
   })
 })
