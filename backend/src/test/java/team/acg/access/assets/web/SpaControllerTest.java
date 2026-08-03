@@ -17,7 +17,7 @@ class SpaControllerTest {
     void forwardsEveryManagedFrontendEntryToTheSpa() throws Exception {
         for (String path : List.of(
             "/", "/login", "/login/callback/feishu", "/no-permission", "/workspace",
-            "/assets", "/assets/inbound", "/assets/receive-return", "/assets/borrow-return",
+            "/assets", "/assets/inbound", "/assets/receive-return", "/assets/borrow-return", "/assets/handover",
             "/assets/stocktake", "/assets/disposals", "/assets/consumables", "/assets/repairs", "/assets/contracts",
             "/assets/settings", "/assets/settings/locations", "/assets/settings/categories",
             "/assets/settings/code-rules", "/assets/settings/label-templates", "/requests", "/signatures",
