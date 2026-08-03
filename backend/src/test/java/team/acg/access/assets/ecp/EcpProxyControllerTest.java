@@ -1,5 +1,11 @@
 package team.acg.access.assets.ecp;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.idanchuang.ecp.api.common.model.role.ApplicationRoleAssignment;
+import com.idanchuang.ecp.api.common.model.role.ApplicationRoleAssignmentSubjectSummary;
+import com.idanchuang.ecp.sdk.client.EcpClient;
+import com.idanchuang.ecp.sdk.client.operation.AssignmentsOperations;
+import com.idanchuang.ecp.sdk.client.operation.RolesOperations;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,12 +16,15 @@ import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import team.acg.access.assets.auth.EcpIdentityService;
 import team.acg.access.assets.auth.RequestIdentityService;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -23,6 +32,7 @@ import static org.mockito.Mockito.when;
 class EcpProxyControllerTest {
     private HttpServer upstream;
     private EcpProxyController controller;
+    private AssignmentsOperations assignments;
     private RequestIdentityService identityService;
     private EcpIdentityService identityCache;
     private final AtomicReference<String> forwardedAuthorization = new AtomicReference<>();
@@ -88,11 +98,18 @@ class EcpProxyControllerTest {
         });
         upstream.start();
         ObjectProvider<EcpIdentityService> identityCacheProvider = mock(ObjectProvider.class);
+        ObjectProvider<EcpClient> ecpClientProvider = mock(ObjectProvider.class);
         identityCache = mock(EcpIdentityService.class);
+        EcpClient ecpClient = mock(EcpClient.class);
+        RolesOperations roles = mock(RolesOperations.class);
+        assignments = mock(AssignmentsOperations.class);
         identityService = mock(RequestIdentityService.class);
         when(identityCacheProvider.getIfAvailable()).thenReturn(identityCache);
+        when(ecpClientProvider.getIfAvailable()).thenReturn(ecpClient);
+        when(ecpClient.roles()).thenReturn(roles);
+        when(roles.assignments()).thenReturn(assignments);
         controller = new EcpProxyController("http://127.0.0.1:" + upstream.getAddress().getPort(), "WLY5YG",
-            identityCacheProvider, identityService);
+            ecpClientProvider, identityCacheProvider, identityService, new ObjectMapper());
     }
 
     @AfterEach
@@ -163,7 +180,9 @@ class EcpProxyControllerTest {
     }
 
     @Test
-    void forwardsRoleAssignmentSyncWithTheOperatorSessionAfterAuthorizingTheOperator() throws Exception {
+    void executesRoleAssignmentSyncWithTheApplicationClientAfterAuthorizingTheOperator() throws Exception {
+        when(assignments.syncSubjects(any())).thenReturn(new ApplicationRoleAssignmentSubjectSummary(
+            "ACCOUNT", "account:user-1", "测试用户", List.of(1L), List.of(11L), 1));
         MockHttpServletRequest request = new MockHttpServletRequest(
             "PUT", "/api/v1/applications/WLY5YG/app-role-assignment-subjects");
         request.addHeader("Authorization", "Bearer session-token");
@@ -175,15 +194,17 @@ class EcpProxyControllerTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(new String(response.getBody(), StandardCharsets.UTF_8)).contains("account:user-1", "assignmentCount");
-        assertThat(forwardedPath).hasValue("/applications/WLY5YG/app-role-assignment-subjects");
-        assertThat(forwardedAuthorization).hasValue("Bearer session-token");
-        assertThat(forwardedBody.get()).contains("account:user-1", "appRoleIds");
+        assertThat(forwardedPath.get()).isNull();
         verify(identityService).requirePermission(request, "authz:app_role:assign");
+        verify(assignments).syncSubjects(any());
         verify(identityCache).invalidateAll();
     }
 
     @Test
-    void forwardsRoleAssignmentCreateWithTheOperatorSession() throws Exception {
+    void executesRoleAssignmentCreateWithTheApplicationClientAfterAuthorizingTheOperator() throws Exception {
+        when(assignments.create(any())).thenReturn(new ApplicationRoleAssignment(
+            11L, 1L, null, "ACCOUNT", "account:user-1", "测试用户", null, null,
+            null, null, null, null, null, Map.of()));
         MockHttpServletRequest request = new MockHttpServletRequest(
             "POST", "/api/v1/applications/WLY5YG/app-role-assignments");
         request.addHeader("Authorization", "Bearer session-token");
@@ -195,15 +216,15 @@ class EcpProxyControllerTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(new String(response.getBody(), StandardCharsets.UTF_8)).contains("account:user-1", "appRoleId");
-        assertThat(forwardedPath).hasValue("/applications/WLY5YG/app-role-assignments");
-        assertThat(forwardedAuthorization).hasValue("Bearer session-token");
-        assertThat(forwardedBody.get()).contains("account:user-1", "appRoleId");
+        assertThat(forwardedPath.get()).isNull();
         verify(identityService).requirePermission(request, "authz:app_role:assign");
+        verify(assignments).create(any());
         verify(identityCache).invalidateAll();
     }
 
     @Test
-    void forwardsRoleAssignmentRemovalWithTheOperatorSession() throws Exception {
+    void executesRoleAssignmentRemovalWithTheApplicationClientAfterAuthorizingTheOperator() throws Exception {
+        when(assignments.batchRemove(any())).thenReturn(List.of(11L));
         MockHttpServletRequest request = new MockHttpServletRequest(
             "POST", "/api/v1/applications/WLY5YG/app-role-assignments/batch-remove");
         request.addHeader("Authorization", "Bearer session-token");
@@ -214,10 +235,9 @@ class EcpProxyControllerTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(new String(response.getBody(), StandardCharsets.UTF_8)).contains("removedIds", "11");
-        assertThat(forwardedPath).hasValue("/applications/WLY5YG/app-role-assignments/batch-remove");
-        assertThat(forwardedAuthorization).hasValue("Bearer session-token");
-        assertThat(forwardedBody.get()).contains("assignmentIds", "11");
+        assertThat(forwardedPath.get()).isNull();
         verify(identityService).requirePermission(request, "authz:app_role:assign");
+        verify(assignments).batchRemove(any());
         verify(identityCache).invalidateAll();
     }
 

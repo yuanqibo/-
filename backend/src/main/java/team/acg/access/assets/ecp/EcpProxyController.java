@@ -1,5 +1,8 @@
 package team.acg.access.assets.ecp;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.idanchuang.ecp.sdk.client.EcpClient;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +21,7 @@ import java.time.Duration;
 import java.util.Set;
 import java.util.Map;
 import java.util.Locale;
+import java.util.Optional;
 import team.acg.access.assets.auth.EcpIdentityService;
 import team.acg.access.assets.auth.RequestIdentityService;
 
@@ -44,20 +48,26 @@ public class EcpProxyController {
         .build();
     private final String baseUrl;
     private final String appCode;
+    private final ObjectProvider<EcpClient> ecpClientProvider;
     private final ObjectProvider<EcpIdentityService> identityCacheProvider;
     private final RequestIdentityService identityService;
+    private final ObjectMapper mapper;
 
     public EcpProxyController(@Value("${asset-portal.ecp-api-base-url}") String baseUrl,
                               @Value("${ecp.sdk.app-code}") String appCode,
+                              ObjectProvider<EcpClient> ecpClientProvider,
                               ObjectProvider<EcpIdentityService> identityCacheProvider,
-                              RequestIdentityService identityService) {
+                              RequestIdentityService identityService,
+                              ObjectMapper mapper) {
         this.baseUrl = baseUrl.replaceAll("/$", "");
         if (!EcpSecurityPolicy.APP_CODE.equals(appCode)) {
             throw new IllegalArgumentException("ECP proxy app-code must be " + EcpSecurityPolicy.APP_CODE);
         }
         this.appCode = appCode;
+        this.ecpClientProvider = ecpClientProvider;
         this.identityCacheProvider = identityCacheProvider;
         this.identityService = identityService;
+        this.mapper = mapper;
     }
 
     @RequestMapping({"/api/v1", "/api/v1/**"})
@@ -74,7 +84,14 @@ public class EcpProxyController {
         if (body.length > MAX_REQUEST_BODY_BYTES) {
             return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new byte[0]);
         }
-        boolean roleMutation = authorizeRoleMutation(servletRequest, path);
+        Optional<byte[]> assignmentMutation = executeAssignmentMutation(servletRequest, path, body);
+        if (assignmentMutation.isPresent()) {
+            invalidateIdentityCache();
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .body(assignmentMutation.get());
+        }
+        boolean roleMutation = authorizeForwardedRoleMutation(servletRequest, path);
         String query = servletRequest.getQueryString() == null ? "" : "?" + servletRequest.getQueryString();
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path + query))
             .timeout(Duration.ofSeconds(30));
@@ -104,15 +121,32 @@ public class EcpProxyController {
         return ResponseEntity.status(upstream.statusCode()).headers(headers).body(upstream.body());
     }
 
-    private boolean authorizeRoleMutation(HttpServletRequest request, String path) {
+    private Optional<byte[]> executeAssignmentMutation(HttpServletRequest request, String path, byte[] body)
+        throws Exception {
+        String applicationPath = "/applications/" + appCode;
+        String method = request.getMethod();
+        Object result;
+
+        if (path.equals(applicationPath + "/app-role-assignments") && "POST".equals(method)) {
+            identityService.requirePermission(request, "authz:app_role:assign");
+            result = requiredEcpClient().roles().assignments().create(requiredPayload(body));
+        } else if (path.equals(applicationPath + "/app-role-assignment-subjects") && "PUT".equals(method)) {
+            identityService.requirePermission(request, "authz:app_role:assign");
+            result = requiredEcpClient().roles().assignments().syncSubjects(requiredPayload(body));
+        } else if (path.equals(applicationPath + "/app-role-assignments/batch-remove") && "POST".equals(method)) {
+            identityService.requirePermission(request, "authz:app_role:assign");
+            result = Map.of("removedIds", requiredEcpClient().roles().assignments().batchRemove(requiredPayload(body)));
+        } else {
+            return Optional.empty();
+        }
+        return Optional.of(mapper.writeValueAsBytes(result));
+    }
+
+    private boolean authorizeForwardedRoleMutation(HttpServletRequest request, String path) {
         String applicationPath = "/applications/" + appCode;
         String method = request.getMethod();
 
-        if ((path.equals(applicationPath + "/app-role-assignments") && "POST".equals(method))
-            || (path.equals(applicationPath + "/app-role-assignment-subjects") && "PUT".equals(method))
-            || (path.equals(applicationPath + "/app-role-assignments/batch-remove") && "POST".equals(method))) {
-            identityService.requirePermission(request, "authz:app_role:assign");
-        } else if (path.equals(applicationPath + "/app-roles") && "POST".equals(method)) {
+        if (path.equals(applicationPath + "/app-roles") && "POST".equals(method)) {
             identityService.requirePermission(request, "authz:app_role:create");
         } else if (path.matches(java.util.regex.Pattern.quote(applicationPath) + "/app-roles/[A-Za-z0-9_-]{1,64}")) {
             if ("PUT".equals(method)) {
@@ -126,6 +160,20 @@ public class EcpProxyController {
             return false;
         }
         return true;
+    }
+
+    private EcpClient requiredEcpClient() {
+        EcpClient ecpClient = ecpClientProvider.getIfAvailable();
+        if (ecpClient == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE, "ECP application client is unavailable");
+        }
+        return ecpClient;
+    }
+
+    private JsonNode requiredPayload(byte[] body) throws Exception {
+        if (body.length == 0) throw new IllegalArgumentException("ECP mutation payload is required");
+        return mapper.readTree(body);
     }
 
     private void invalidateIdentityCache() {
