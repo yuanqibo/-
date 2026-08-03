@@ -106,6 +106,7 @@ roles:
       - asset:form:update
       - asset:form:delete
       - authz:application:view
+      - authz:application:edit
       - authz:model:view
       - authz:app_role:view
       - authz:app_role:create
