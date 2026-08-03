@@ -119,7 +119,7 @@ test.describe('登录后门户质量回归', () => {
     await installApiMocks(page)
     const routes = [
       ['/', '仪表盘'], ['/assets', '资产列表'], ['/assets/inbound', '资产入库'],
-      ['/assets/receive-return', '领用退库'], ['/assets/borrow-return', '借用归还'], ['/assets/stocktake', '资产盘点'], ['/assets/disposals', '资产处置'],
+      ['/assets/receive-return', '领用退库'], ['/assets/borrow-return', '借用归还'], ['/assets/handover', '资产交接'], ['/assets/stocktake', '资产盘点'], ['/assets/disposals', '资产处置'],
       ['/assets/settings', '资产设置'], ['/assets/settings/locations', '位置管理'], ['/assets/settings/categories', '资产分类'],
       ['/assets/settings/code-rules', '资产编码规则'], ['/assets/settings/label-templates', '标签模板设置'], ['/requests', '审批'],
       ['/system/employees', '员工信息'], ['/system/departments', '组织架构'], ['/system/self-service', '员工自助'],
@@ -130,6 +130,15 @@ test.describe('登录后门户质量回归', () => {
       await expect(page.getByText(text, { exact: true }).first()).toBeVisible()
       await expectNoPageOverflow(page)
     }
+  })
+
+  test('资产交接作为独立模块直接打开交接台账', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '资产交接台账在桌面项目执行')
+    await openApp(page, '/assets/handover')
+    await expect(page.getByText('资产交接', { exact: true }).first()).toBeVisible()
+    await expect(page.locator('.receive-return-tabs')).toHaveCount(0)
+    await expect(page.locator('.receive-return-table')).toContainText('交接单号')
+    await expect(page.getByRole('button', { name: '＋ 新增', exact: true })).toBeVisible()
   })
 
   test('资产处置支持退租、部分取消与完成流转', async ({ page, isMobile }) => {

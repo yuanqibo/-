@@ -14,7 +14,7 @@ import AssetLabelPrintPreview from './AssetLabelPrintPreview.vue'
 import AssetOrderPrintPreview, { type AssetOrderPrintKind } from './AssetOrderPrintPreview.vue'
 import AssetDisposalCreateDrawer from '../../disposals/components/AssetDisposalCreateDrawer.vue'
 
-type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return'
+type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return' | 'handover'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
 type ListColumnKey = 'status' | 'code' | 'name' | 'category' | 'phone' | 'email' | 'date' | 'location' | 'price' | 'purchase' | 'rent' | 'supplier' | 'owner' | 'usage'
 type TableDensity = 'compact' | 'standard' | 'roomy'
@@ -69,7 +69,7 @@ const status = ref('全部')
 const category = ref('全部')
 const page = ref(1)
 const pageSize = ref(20)
-const receiveReturnTab = ref<ReceiveReturnTab>('receive')
+const receiveReturnTab = ref<ReceiveReturnTab>(props.mode === 'handover' ? 'handover' : 'receive')
 const borrowReturnTab = ref<BorrowReturnTab>('borrow')
 const selected = ref<AssetRecord[]>([])
 const detail = ref<AssetRecord | null>(null)
@@ -111,8 +111,10 @@ const viewClass = computed(() => {
   if (props.mode === 'list') return 'asset-list-page asset-directory-view'
   if (props.mode === 'inbound') return 'asset-list-page asset-inbound-ledger asset-directory-view'
   if (props.mode === 'borrow-return') return 'asset-list-page receive-return-ledger borrow-return-ledger asset-directory-view'
+  if (props.mode === 'handover') return 'asset-list-page receive-return-ledger handover-ledger asset-directory-view'
   return 'asset-list-page receive-return-ledger asset-directory-view'
 })
+const isReceiveFlowMode = computed(() => props.mode === 'receive-return' || props.mode === 'handover')
 const permissions = computed(() => new Set(user.value?.permissionCodes || []))
 const employeeTerminalPermissions = new Set(['asset:item:view', 'asset:item:advancedSearch', 'asset:item:columnSettings'])
 const can = (code: string): boolean => hasPortalPermission(permissions.value, code)
@@ -293,7 +295,7 @@ const dateInRange = (value: unknown, range: DateRange): boolean => {
 const filteredAssets = computed(() => {
   const keyword = query.value.trim().toLowerCase()
   return assets.value.filter((item) => {
-    const modeMatch = props.mode === 'receive-return'
+    const modeMatch = isReceiveFlowMode.value
       ? ['闲置', '空闲', '在用', '领用中'].includes(item.status)
       : props.mode === 'borrow-return'
         ? ['闲置', '空闲', '借用中'].includes(item.status)
@@ -420,7 +422,7 @@ const borrowSourceRows = computed<AssetRecord[]>(() => borrowReturnTab.value ===
   : operationRows('BORROW'))
 const modeRows = computed<AssetRecord[]>(() => {
   if (props.mode === 'inbound') return operationRows('INBOUND').filter(matchesInboundFilters)
-  if (props.mode === 'receive-return') return receiveSourceRows.value.filter(matchesReceiveFilters)
+  if (isReceiveFlowMode.value) return receiveSourceRows.value.filter(matchesReceiveFilters)
   if (props.mode === 'borrow-return') return borrowSourceRows.value.filter(matchesBorrowFilters)
   return filteredAssets.value
 })
@@ -521,7 +523,7 @@ const updateAdvancedDateRange = (range: DateRange, index: 0 | 1, value: string):
 const syncAdvancedDraft = (): void => {
   if (props.mode === 'list') Object.assign(assetAdvancedDraft, assetAdvanced)
   else if (props.mode === 'inbound') Object.assign(inboundAdvancedDraft, inboundAdvanced, { dateRange: cloneDateRange(inboundAdvanced.dateRange) })
-  else if (props.mode === 'receive-return') Object.assign(receiveAdvancedDraft, receiveAdvanced, { dateRange: cloneDateRange(receiveAdvanced.dateRange) })
+  else if (isReceiveFlowMode.value) Object.assign(receiveAdvancedDraft, receiveAdvanced, { dateRange: cloneDateRange(receiveAdvanced.dateRange) })
   else Object.assign(borrowAdvancedDraft, borrowAdvanced, { borrowDateRange: cloneDateRange(borrowAdvanced.borrowDateRange), expectedReturnDateRange: cloneDateRange(borrowAdvanced.expectedReturnDateRange) })
 }
 const openAdvancedSearch = (): void => {
@@ -544,7 +546,7 @@ const setAllListColumns = (checked: boolean): void => {
 const applyAdvanced = (): void => {
   if (props.mode === 'list') Object.assign(assetAdvanced, assetAdvancedDraft)
   else if (props.mode === 'inbound') Object.assign(inboundAdvanced, inboundAdvancedDraft, { dateRange: cloneDateRange(inboundAdvancedDraft.dateRange) })
-  else if (props.mode === 'receive-return') Object.assign(receiveAdvanced, receiveAdvancedDraft, { dateRange: cloneDateRange(receiveAdvancedDraft.dateRange) })
+  else if (isReceiveFlowMode.value) Object.assign(receiveAdvanced, receiveAdvancedDraft, { dateRange: cloneDateRange(receiveAdvancedDraft.dateRange) })
   else Object.assign(borrowAdvanced, borrowAdvancedDraft, { borrowDateRange: cloneDateRange(borrowAdvancedDraft.borrowDateRange), expectedReturnDateRange: cloneDateRange(borrowAdvancedDraft.expectedReturnDateRange) })
   advancedOpen.value = false
   page.value = 1
@@ -552,7 +554,7 @@ const applyAdvanced = (): void => {
 const clearAdvanced = (): void => {
   if (props.mode === 'list') { Object.assign(assetAdvanced, defaultAssetAdvanced()); Object.assign(assetAdvancedDraft, defaultAssetAdvanced()) }
   else if (props.mode === 'inbound') { Object.assign(inboundAdvanced, defaultInboundAdvanced()); Object.assign(inboundAdvancedDraft, defaultInboundAdvanced()) }
-  else if (props.mode === 'receive-return') { Object.assign(receiveAdvanced, defaultReceiveAdvanced()); Object.assign(receiveAdvancedDraft, defaultReceiveAdvanced()) }
+  else if (isReceiveFlowMode.value) { Object.assign(receiveAdvanced, defaultReceiveAdvanced()); Object.assign(receiveAdvancedDraft, defaultReceiveAdvanced()) }
   else { Object.assign(borrowAdvanced, defaultBorrowAdvanced()); Object.assign(borrowAdvancedDraft, defaultBorrowAdvanced()) }
   page.value = 1
   advancedOpen.value = false
@@ -1064,12 +1066,12 @@ onMounted(() => void load())
       </div>
     </template>
 
-    <template v-else-if="mode === 'receive-return'">
-      <div class="receive-return-tabs"><button v-for="tab in ([['receive','领用'],['return','退库'],['employee','员工申领'],['handover','交接']] as const)" :key="tab[0]" class="receive-return-tab" :class="{ active: receiveReturnTab === tab[0] }" type="button" @click="receiveReturnTab = tab[0]">{{ tab[1] }}</button></div>
+    <template v-else-if="isReceiveFlowMode">
+      <div v-if="mode === 'receive-return'" class="receive-return-tabs"><button v-for="tab in ([['receive','领用'],['return','退库'],['employee','员工申领']] as const)" :key="tab[0]" class="receive-return-tab" :class="{ active: receiveReturnTab === tab[0] }" type="button" @click="receiveReturnTab = tab[0]">{{ tab[1] }}</button></div>
       <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button v-if="canRunAction(receiveAction)" class="table-action primary" type="button" @click="openBlankAction(receiveAction)">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openOrderPrint(flowOrderPrintKind)">打印{{ receiveReturnTab === 'handover' ? '交接单' : receiveReturnTab === 'employee' ? '员工申领单' : receiveReturnTab === 'return' ? '领用退库单' : '领用单' }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
-      <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="openAdvancedSearch">高级搜索</button><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置" @click="openAdvancedColumns">⚙</button></div><div class="asset-table-scroll receive-return-table-scroll"><table v-resizable-columns="`assets:receive-return:${receiveReturnTab}`" class="asset-list-table receive-return-table" style="min-width: 1040px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选领用退库单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>{{ receiveReturnTab === 'handover' ? '交接状态' : receiveReturnTab === 'employee' ? '申领状态' : receiveReturnTab === 'return' ? '退库状态' : '领用状态' }}</th><th>{{ receiveReturnTab === 'handover' ? '交接单号' : receiveReturnTab === 'employee' ? '申领单号' : receiveReturnTab === 'return' ? '退库单号' : '领用单号' }}</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领日期' : receiveReturnTab === 'return' ? '退库日期' : '领用日期' }}</th><th>经办人</th><th>{{ receiveReturnTab === 'handover' ? '接收人' : receiveReturnTab === 'employee' ? '申领人' : '领用人' }}</th><th v-if="receiveReturnTab !== 'handover'">工号</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领后位置' : receiveReturnTab === 'return' ? '退库后位置' : '领用后位置' }}</th><th>{{ receiveReturnTab === 'handover' ? '接收公司' : '所属公司' }}</th><th v-if="receiveReturnTab === 'handover'">接收部门</th><th v-else>资产编码</th><th>操作</th></tr></thead><tbody>
+      <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="openAdvancedSearch">高级搜索</button><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置" @click="openAdvancedColumns">⚙</button></div><div class="asset-table-scroll receive-return-table-scroll"><table v-resizable-columns="`assets:receive-return:${receiveReturnTab}`" class="asset-list-table receive-return-table" style="min-width: 1040px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" :aria-label="receiveReturnTab === 'handover' ? '全选交接单' : '全选领用退库单'" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>{{ receiveReturnTab === 'handover' ? '交接状态' : receiveReturnTab === 'employee' ? '申领状态' : receiveReturnTab === 'return' ? '退库状态' : '领用状态' }}</th><th>{{ receiveReturnTab === 'handover' ? '交接单号' : receiveReturnTab === 'employee' ? '申领单号' : receiveReturnTab === 'return' ? '退库单号' : '领用单号' }}</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领日期' : receiveReturnTab === 'return' ? '退库日期' : '领用日期' }}</th><th>经办人</th><th>{{ receiveReturnTab === 'handover' ? '接收人' : receiveReturnTab === 'employee' ? '申领人' : '领用人' }}</th><th v-if="receiveReturnTab !== 'handover'">工号</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领后位置' : receiveReturnTab === 'return' ? '退库后位置' : '领用后位置' }}</th><th>{{ receiveReturnTab === 'handover' ? '接收公司' : '所属公司' }}</th><th v-if="receiveReturnTab === 'handover'">接收部门</th><th v-else>资产编码</th><th>操作</th></tr></thead><tbody>
         <tr v-for="item in displayedRows" :key="operationId(item, 'FLOW')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'FLOW')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="assetStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, receiveReturnTab === 'handover' ? 'JJ' : receiveReturnTab === 'return' ? 'TK' : 'LY') }}</button></td><td v-if="receiveReturnTab !== 'handover'">{{ operationDate(item) }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.employeeCode || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.location || '-' }}</td><td>{{ item.company || item.ownerCompany || '-' }}</td><td v-if="receiveReturnTab === 'handover'">{{ item.department || '-' }}</td><td v-else>{{ item.id }}</td><td><button class="link receive-return-action-link" type="button" @click="detail = item">查看</button><button v-if="item.operationStatus === '待签字' && can('asset:receive_return:cancel')" class="link receive-return-action-link" type="button" @click="terminateReceipt(item)">终止</button></td></tr>
-        <tr v-if="!displayedRows.length" class="empty-row"><td :colspan="receiveReturnTab === 'handover' ? 9 : 11">{{ query ? '没有匹配的领用退库记录。' : '暂无领用退库记录。' }}</td></tr>
+        <tr v-if="!displayedRows.length" class="empty-row"><td :colspan="receiveReturnTab === 'handover' ? 9 : 11">{{ receiveReturnTab === 'handover' ? (query ? '没有匹配的交接记录。' : '暂无交接记录。') : (query ? '没有匹配的领用退库记录。' : '暂无领用退库记录。') }}</td></tr>
       </tbody></table></div></div>
     </template>
 
@@ -1128,7 +1130,7 @@ onMounted(() => void load())
             </div>
           </template>
 
-          <template v-else-if="mode === 'receive-return'">
+          <template v-else-if="isReceiveFlowMode">
             <div class="advanced-filter-section receive-return-advanced-fields">
               <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.status }}</span><el-select v-model="receiveAdvancedDraft.status" :aria-label="receiveAdvancedLabels.status" :placeholder="receiveAdvancedLabels.status"><el-option label="全部" value="" /><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></label>
               <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.order }}</span><input v-model="receiveAdvancedDraft.id" placeholder="请输入"></label>
@@ -1181,7 +1183,7 @@ onMounted(() => void load())
           </div>
           <div v-else class="custom-column-panel">
             <p class="advanced-search-hint">当前列设置只覆盖本业务单据字段，不影响资产列表。</p>
-            <div class="custom-column-list"><label v-for="item in (mode === 'inbound' ? inboundColumnLabels : mode === 'receive-return' ? receiveColumnLabels : borrowColumnLabels)" :key="item"><input type="checkbox" checked disabled> {{ item }}</label></div>
+            <div class="custom-column-list"><label v-for="item in (mode === 'inbound' ? inboundColumnLabels : isReceiveFlowMode ? receiveColumnLabels : borrowColumnLabels)" :key="item"><input type="checkbox" checked disabled> {{ item }}</label></div>
           </div>
         </template>
       </form>

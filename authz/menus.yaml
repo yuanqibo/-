@@ -61,7 +61,7 @@ menus:
     path: /assets/stocktake
     pageKey: asset.portal.stocktake
     file: /src/views/StocktakePage.vue
-    order: 24
+    order: 25
     permissionCodes:
       - asset:stocktake:view
     featureCodes:
@@ -72,9 +72,20 @@ menus:
     path: /assets/disposals
     pageKey: asset.portal.disposals
     file: /src/views/AssetDisposalsPage.vue
-    order: 25
+    order: 26
     permissionCodes:
       - asset:disposal:view
+    featureCodes:
+      - PORTAL_ASSETS
+  - id: assetHandover
+    parentId: assets
+    title: 资产交接
+    path: /assets/handover
+    pageKey: asset.portal.handover
+    file: /src/views/AssetHandoverPage.vue
+    order: 24
+    permissionCodes:
+      - asset:receive_return:view
     featureCodes:
       - PORTAL_ASSETS
   - id: assetSettings
