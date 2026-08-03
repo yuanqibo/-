@@ -322,6 +322,23 @@ test.describe('登录后门户质量回归', () => {
     expect(geometry.left).toBeGreaterThanOrEqual(geometry.contentLeft)
     expect(geometry.right).toBeLessThanOrEqual(geometry.contentRight)
 
+    const responsiveGeometry = await workspace.evaluate((element) => {
+      const content = element.closest('.standard-system-content')?.getBoundingClientRect()
+      const createButton = Array.from(element.querySelectorAll('button'))
+        .find((button) => button.textContent?.trim() === '新建角色')
+        ?.getBoundingClientRect()
+      const roleTable = element.querySelector('.target-workspace-roles-table')?.getBoundingClientRect()
+      return {
+        contentRight: content?.right || 0,
+        createButtonRight: createButton?.right || 0,
+        roleTableRight: roleTable?.right || 0
+      }
+    })
+    expect(responsiveGeometry.createButtonRight).toBeGreaterThan(0)
+    expect(responsiveGeometry.createButtonRight).toBeLessThanOrEqual(responsiveGeometry.contentRight)
+    expect(responsiveGeometry.roleTableRight).toBeLessThanOrEqual(responsiveGeometry.contentRight)
+    await expectNoPageOverflow(page)
+
     await workspace.getByRole('button', { name: '分配给成员', exact: true }).click()
     const assignmentDialog = page.getByRole('dialog', { name: '分配 应用管理员 角色' })
     await expect(assignmentDialog).toBeVisible()

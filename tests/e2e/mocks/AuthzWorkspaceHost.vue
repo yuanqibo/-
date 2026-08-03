@@ -24,9 +24,13 @@ onBeforeUnmount(() => document.documentElement.style.removeProperty('--ecp-prima
         <div class="workspace-step-strip__item">03 查权限原因</div>
       </div>
       <section v-if="activeView === 'roles'" class="workspace-account-management">
-        <h2>应用角色</h2>
-        <p>应用角色才会真正分给成员。</p>
-        <table><tbody><tr><td>应用管理员</td><td>APP_ADMIN</td><td><button type="button" @click="roleDetailOpen = true">详情</button><button type="button" @click="assignmentOpen = true">分配给成员</button></td></tr></tbody></table>
+        <div class="target-workspace__section-head">
+          <div><h2>应用角色</h2><p>应用角色才会真正分给成员。</p></div>
+          <button type="button">新建角色</button>
+        </div>
+        <div class="target-workspace-roles-table">
+          <table class="target-workspace-roles-table__table"><tbody><tr><td>应用管理员</td><td>APP_ADMIN</td><td><button type="button" @click="roleDetailOpen = true">详情</button><button type="button" @click="assignmentOpen = true">分配给成员</button></td></tr></tbody></table>
+        </div>
       </section>
       <section v-else class="workspace-account-management">
         <h2>账号管理</h2>

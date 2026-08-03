@@ -26,7 +26,7 @@ body:has(.authz-workspace-host) #app {
   box-sizing: border-box !important;
 }
 
-/* Keep the standalone SDK workspace dense inside the portal iframe. */
+/* Keep the SDK workspace dense and constrained by the portal content column. */
 .authz-workspace-host .workspace-account-management {
   display: flex !important;
   flex-direction: column !important;
@@ -40,6 +40,9 @@ body:has(.authz-workspace-host) #app {
 
 .authz-workspace-host,
 .authz-workspace-host .target-workspace {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
   height: 100% !important;
   min-height: 0 !important;
   max-height: 100vh !important;
@@ -47,16 +50,26 @@ body:has(.authz-workspace-host) #app {
 }
 
 .authz-workspace-host {
-  position: fixed !important;
-  inset: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
+  position: relative !important;
+  inset: auto !important;
+  flex: 1 1 auto !important;
+  align-self: stretch !important;
 }
 
 .authz-workspace-host .target-workspace {
   display: flex !important;
   flex-direction: column !important;
   gap: 6px !important;
+}
+
+.authz-workspace-host .target-workspace__hero-card,
+.authz-workspace-host .target-workspace__card,
+.authz-workspace-host .target-workspace__card--content,
+.authz-workspace-host .target-workspace__card--content .ecp-card,
+.authz-workspace-host .target-workspace__card--content .ecp-card__body {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
 }
 
 .authz-workspace-host .target-workspace__hero-card {
@@ -75,6 +88,7 @@ body:has(.authz-workspace-host) #app {
   flex: 1 1 auto !important;
   min-height: 0 !important;
   overflow: hidden !important;
+  container-type: inline-size;
 }
 
 .authz-workspace-host .target-workspace__card--content .ecp-card,
@@ -82,6 +96,56 @@ body:has(.authz-workspace-host) #app {
   height: 100% !important;
   min-height: 0 !important;
   overflow: hidden !important;
+}
+
+.authz-workspace-host .target-workspace__section-head,
+.authz-workspace-host .target-workspace__context-bar,
+.authz-workspace-host .target-workspace__toolbar,
+.authz-workspace-host .target-workspace-roles-table {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.authz-workspace-host .target-workspace__section-head > *,
+.authz-workspace-host .target-workspace__context-bar > *,
+.authz-workspace-host .target-workspace__toolbar > * {
+  min-width: 0 !important;
+}
+
+.authz-workspace-host .target-workspace-roles-table__table th:last-child,
+.authz-workspace-host .target-workspace-roles-table__table td:last-child {
+  position: sticky !important;
+  right: 0 !important;
+  z-index: 2;
+  background: var(--ecp-bg-primary, #ffffff) !important;
+  box-shadow: -1px 0 0 var(--ecp-border-light, #e5e7eb);
+}
+
+.authz-workspace-host .target-workspace-roles-table__table th:last-child {
+  z-index: 3;
+  background: var(--ecp-bg-secondary, #f7f8fa) !important;
+}
+
+@container (max-width: 760px) {
+  .authz-workspace-host .target-workspace__section-head,
+  .authz-workspace-host .target-workspace__context-bar,
+  .authz-workspace-host .target-workspace__toolbar {
+    align-items: stretch !important;
+    flex-wrap: wrap !important;
+  }
+
+  .authz-workspace-host .target-workspace__section-head > .section-header,
+  .authz-workspace-host .target-workspace__context-copy {
+    flex: 1 1 100% !important;
+  }
+
+  .authz-workspace-host .target-workspace__section-tools,
+  .authz-workspace-host .target-workspace__context-tools,
+  .authz-workspace-host .target-workspace__toolbar-actions {
+    max-width: 100% !important;
+    flex-wrap: wrap !important;
+  }
 }
 
 .authz-workspace-host .workspace-step-strip {
