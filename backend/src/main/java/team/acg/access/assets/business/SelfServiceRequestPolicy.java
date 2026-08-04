@@ -34,8 +34,8 @@ public class SelfServiceRequestPolicy {
         "receiveAsset", "borrowAsset", "handoverAsset");
     private static final Map<String, Set<String>> OWNED_ASSET_STATUSES = Map.of(
         "giveBackAsset", Set.of("借用中"),
-        "returnAsset", Set.of("在用"),
-        "handoverAsset", Set.of("在用", "借用中"));
+        "returnAsset", Set.of("领用"),
+        "handoverAsset", Set.of("领用", "借用中"));
 
     private final AppStoreRepository storeRepository;
     private final AssetService assetService;

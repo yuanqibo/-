@@ -49,9 +49,9 @@ class AssetServiceScopeTest {
     @Test
     void employeeWithRequestPermissionSeesOwnAndAvailableAssetsButNotOtherAssignedAssets() throws Exception {
         when(repository.findAll()).thenReturn(List.of(
-            mapper.readTree("{\"id\":\"A-1\",\"owner\":\"李雷\",\"ownerSubject\":\"user-1\",\"status\":\"在用\"}"),
+            mapper.readTree("{\"id\":\"A-1\",\"owner\":\"李雷\",\"ownerSubject\":\"user-1\",\"status\":\"领用\"}"),
             mapper.readTree("{\"id\":\"A-2\",\"owner\":\"未分配\",\"ownerSubject\":\"\",\"status\":\"空闲\"}"),
-            mapper.readTree("{\"id\":\"A-3\",\"owner\":\"韩梅梅\",\"ownerSubject\":\"user-2\",\"status\":\"在用\"}")));
+            mapper.readTree("{\"id\":\"A-3\",\"owner\":\"韩梅梅\",\"ownerSubject\":\"user-2\",\"status\":\"领用\"}")));
 
         var identity = new RequestIdentityService.Identity(
             "李雷", "lilei", "account-1", "user-1", "tenant-1", "销售部", Set.of("dept-sales"), "employee",
@@ -65,7 +65,7 @@ class AssetServiceScopeTest {
     void onlyTheIdleStatusIsAssignable() throws Exception {
         assertThat(service.isAvailable(mapper.readTree("{\"status\":\"空闲\"}"))).isTrue();
         assertThat(service.isAvailable(mapper.readTree("{\"status\":\"闲置\"}"))).isFalse();
-        assertThat(service.isAvailable(mapper.readTree("{\"status\":\"在用\"}"))).isFalse();
+        assertThat(service.isAvailable(mapper.readTree("{\"status\":\"领用\"}"))).isFalse();
         assertThat(service.isAvailable(mapper.readTree("{\"status\":\"借用中\"}"))).isFalse();
     }
 }

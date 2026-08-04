@@ -46,6 +46,3 @@ declare global {
     __ASSET_PORTAL_ECP_CONTEXT__?: PortalEcpContext
   }
 }
-
-export const getPortalContext = (): PortalEcpContext | null =>
-  window.__ASSET_PORTAL_ECP_CONTEXT__ ?? null

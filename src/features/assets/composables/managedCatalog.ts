@@ -11,6 +11,11 @@ export type ManagedCatalogTreeOption = ManagedCatalogOption & {
   children?: ManagedCatalogTreeOption[]
 }
 
+export const managedCatalogNames = (nodes: CatalogNode[]): string[] => nodes.flatMap((node) => [
+  node.name,
+  ...managedCatalogNames(node.children || [])
+])
+
 export const flattenManagedCatalog = (
   nodes: CatalogNode[],
   parentPath: string[] = [],

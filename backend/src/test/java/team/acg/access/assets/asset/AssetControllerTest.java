@@ -62,6 +62,36 @@ class AssetControllerTest {
     }
 
     @Test
+    void replacesOnlyTheAssetCatalogAndNormalizesImportedStatuses() throws Exception {
+        mvc.perform(post("/api/assets/import").contentType(MediaType.APPLICATION_JSON).content("""
+            {"items":[
+              {"id":"PC-KEEP","name":"保留资产","category":"电脑","location":"总部","supplier":"原供应商"},
+              {"id":"PC-REMOVE","name":"移除资产","category":"电脑","location":"总部"}
+            ]}
+            """))
+            .andExpect(status().isOk());
+
+        mvc.perform(post("/api/assets/replace").contentType(MediaType.APPLICATION_JSON).content("""
+            {"items":[
+              {"id":"PC-KEEP","name":"更新资产","category":"电脑","status":"领用","owner":"未分配","brand":"新品牌"},
+              {"id":"PC-NEW","name":"","category":"电脑","status":"借用","owner":"未分配"}
+            ]}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.count").value(2))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-KEEP')].status").value("领用"))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-KEEP')].location").value("总部"))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-KEEP')].supplier").value("原供应商"))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-NEW')].status").value("借用中"))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-NEW')].name").value("电脑资产"));
+
+        mvc.perform(get("/api/assets"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-REMOVE')]").isEmpty());
+    }
+
+    @Test
     void executesLifecycleCommandsWithServerControlledStatusAndHistory() throws Exception {
         mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
             {"item":{"id":"PC-CMD","name":"命令电脑","category":"电脑","location":"总部"}}
@@ -72,7 +102,7 @@ class AssetControllerTest {
             {"assetIds":["PC-CMD"],"fields":{"receiver":"李雷","receiverSubject":"user-1","department":"研发部","company":"默认公司","location":"总部","date":"2026-07-10"}}
             """))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items[0].status").value("在用"))
+            .andExpect(jsonPath("$.items[0].status").value("领用"))
             .andExpect(jsonPath("$.items[0].owner").value("李雷"))
             .andExpect(jsonPath("$.items[0].lifecycle[1][1]").value("资产领用"));
 
@@ -188,7 +218,7 @@ class AssetControllerTest {
             {"assetIds":["PC-HANDOVER"],"fields":{"operator":"管理员","date":"2026-07-11"}}
             """))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items[0].status").value("在用"))
+            .andExpect(jsonPath("$.items[0].status").value("领用"))
             .andExpect(jsonPath("$.items[0].owner").value("原责任人"))
             .andExpect(jsonPath("$.items[0].ownerSubject").value("user-old"))
             .andExpect(jsonPath("$.items[0].handoverPreviousOwner").doesNotExist());
@@ -207,7 +237,7 @@ class AssetControllerTest {
             {"assetIds":["PC-HANDOVER"],"fields":{"operatorSubject":"user-new","date":"2026-07-13"}}
             """))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items[0].status").value("在用"))
+            .andExpect(jsonPath("$.items[0].status").value("领用"))
             .andExpect(jsonPath("$.items[0].owner").value("新责任人"))
             .andExpect(jsonPath("$.items[0].handoverPreviousOwner").doesNotExist());
     }
@@ -238,7 +268,7 @@ class AssetControllerTest {
               "signatureImage":"data:image/png;base64,AA==","date":"2026-07-11"}}
             """))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items[0].status").value("在用"));
+            .andExpect(jsonPath("$.items[0].status").value("领用"));
 
         mvc.perform(get("/api/asset-operations").param("type", "RECEIVE"))
             .andExpect(status().isOk())
@@ -277,7 +307,7 @@ class AssetControllerTest {
               "location":"总部","handoverType":"公共交接","date":"2026-07-13"}}
             """))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items[0].status").value("在用"))
+            .andExpect(jsonPath("$.items[0].status").value("领用"))
             .andExpect(jsonPath("$.items[0].ownerSubject").value("asset:public-area"))
             .andExpect(jsonPath("$.items[0].handoverPreviousOwner").doesNotExist());
     }

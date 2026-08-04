@@ -8,7 +8,6 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -99,15 +98,6 @@ public class AssetOperationRepository {
         arguments.addAll(normalized);
         arguments.addAll(normalized);
         return " AND (party_subject IN (" + placeholders + ") OR previous_party_subject IN (" + placeholders + "))";
-    }
-
-    public List<ObjectNode> findByAssetIds(Collection<String> assetIds) {
-        if (assetIds == null || assetIds.isEmpty()) return List.of();
-        List<String> ids = assetIds.stream().distinct().toList();
-        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
-        return jdbc.query("SELECT document FROM asset_operation_record WHERE asset_id IN (" + placeholders
-                + ") ORDER BY created_at DESC, operation_id DESC",
-            (rs, row) -> read(rs.getString(1)), ids.toArray());
     }
 
     public ObjectNode updateLatest(String assetId, String type, Set<String> statuses,

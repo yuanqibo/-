@@ -75,7 +75,7 @@ class ApprovedAssetRequestExecutorTest {
 
         executor.execute(request, ApprovedAssetRequestExecutor.Operator.ecp());
 
-        verify(assets).requireOwnedForApprovedRequest(List.of("A-1"), "user-1", Set.of("在用", "借用中"));
+        verify(assets).requireOwnedForApprovedRequest(List.of("A-1"), "user-1", Set.of("领用", "借用中"));
         verify(parties).normalizeCommand(eq("handover"), any(ObjectNode.class));
         verify(assets).execute(eq("handover"), eq(List.of("A-1")), any(ObjectNode.class));
     }

@@ -368,7 +368,7 @@ public class BusinessDataController {
         item.put("name", command.name().trim());
         item.put("endDate", command.endDate().trim());
         item.put("amount", Math.max(0, command.amount()));
-        item.put("status", "在用");
+        item.put("status", "领用");
         return append("contracts", item);
     }
 

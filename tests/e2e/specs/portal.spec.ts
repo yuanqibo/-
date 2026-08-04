@@ -587,7 +587,7 @@ test.describe('登录后门户质量回归', () => {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ items: [{
-        id: 'AST-EMP-001', name: '员工显示器', status: '在用', category: 'IT设备', type: '设备',
+        id: 'AST-EMP-001', name: '员工显示器', status: '领用', category: 'IT设备', type: '设备',
         owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司',
         location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'M-1', sn: 'SN-1',
         price: 5000, purchaseDate: '2026-07-01', receiveDate: '2026-07-21'
@@ -655,8 +655,8 @@ test.describe('登录后门户质量回归', () => {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ items: [
-        { id: 'AST-RET-001', name: '待退还笔记本', status: '在用', category: 'IT设备', type: '设备', owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'R-1', sn: 'RET-SN-1', price: 5000 },
-        { id: 'AST-RET-002', name: '待退还显示器', status: '在用', category: 'IT设备', type: '设备', owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'R-2', sn: 'RET-SN-2', price: 3000 }
+        { id: 'AST-RET-001', name: '待退还笔记本', status: '领用', category: 'IT设备', type: '设备', owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'R-1', sn: 'RET-SN-1', price: 5000 },
+        { id: 'AST-RET-002', name: '待退还显示器', status: '领用', category: 'IT设备', type: '设备', owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'R-2', sn: 'RET-SN-2', price: 3000 }
       ] })
     }))
     await page.goto('/requests')
@@ -696,7 +696,7 @@ test.describe('登录后门户质量回归', () => {
       assets: [
         { id: 'AST-GIVE-BACK-001', name: '本人借用笔记本', status: '借用中', category: 'IT设备', type: '设备', owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司', location: '会议室', custodian: '资产管理员', brand: '测试品牌', model: 'GB-1', sn: 'GIVE-BACK-SN-1', assetTag: '', price: 5000, borrowDate: '2026-07-10', expectedReturnDate: '2026-07-30' },
         { id: 'AST-GIVE-BACK-002', name: '他人借用笔记本', status: '借用中', category: 'IT设备', type: '设备', owner: '其他员工', ownerSubject: 'OTHER001', department: '综合部', company: '示例公司', location: '会议室', custodian: '资产管理员', brand: '测试品牌', model: 'GB-2', sn: 'GIVE-BACK-SN-2', assetTag: '', price: 4500, borrowDate: '2026-07-11', expectedReturnDate: '2026-07-31' },
-        { id: 'AST-GIVE-BACK-003', name: '本人领用显示器', status: '在用', category: 'IT设备', type: '设备', owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司', location: '工位', custodian: '资产管理员', brand: '测试品牌', model: 'GB-3', sn: 'GIVE-BACK-SN-3', assetTag: '', price: 3000 }
+        { id: 'AST-GIVE-BACK-003', name: '本人领用显示器', status: '领用', category: 'IT设备', type: '设备', owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司', location: '工位', custodian: '资产管理员', brand: '测试品牌', model: 'GB-3', sn: 'GIVE-BACK-SN-3', assetTag: '', price: 3000 }
       ]
     })
 
@@ -953,7 +953,7 @@ test.describe('登录后门户质量回归', () => {
   test('首页保留迁移前的统计与仪表盘板块', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '仪表盘完整板块在桌面项目执行')
     await openApp(page, '/')
-    for (const text of ['资产总数', '在用资产', '待处理单据', '资产原值', '资产状态占比', '资产分布情况', '在用资产统计', '资产分类统计']) {
+    for (const text of ['资产总数', '领用资产', '待处理单据', '资产原值', '资产状态占比', '资产分布情况', '领用资产统计', '资产分类统计']) {
       await expect(page.getByText(text, { exact: true }).first()).toBeVisible()
     }
     await expect(page.getByText('最近资产', { exact: true })).toHaveCount(0)

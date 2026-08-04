@@ -22,10 +22,10 @@ const requestType = ref('资产退还')
 const requestAssetId = ref('')
 
 const totalValue = computed(() => assets.value.reduce((sum, item) => sum + Number(item.price || 0), 0))
-const activeCount = computed(() => assets.value.filter((item) => item.status === '在用').length)
+const activeCount = computed(() => assets.value.filter((item) => item.status === '领用').length)
 const pendingCount = computed(() => requests.value.filter((item) => ['审批中', '待审批', '待执行'].includes(item.status)).length)
 const employeeAssets = computed(() => {
-  const assigned = assets.value.filter((item) => ['在用', '领用中', '借用中'].includes(item.status))
+  const assigned = assets.value.filter((item) => ['领用', '领用中', '借用中'].includes(item.status))
   return assigned.filter((item) => item.owner === user.value?.name || item.ownerSubject === user.value?.externalSubject)
 })
 const failedAssetImages = ref(new Set<string>())
@@ -55,7 +55,7 @@ const openEmployeeRequest = (action: 'return' | 'handover', item: AssetRecord): 
 }
 
 const statusRows = computed(() => {
-  const receiveCount = assets.value.filter((item) => item.status === '在用').length
+  const receiveCount = assets.value.filter((item) => item.status === '领用').length
   const borrowCount = assets.value.filter((item) => item.status === '借用中').length
   const disposedCount = assets.value.filter((item) => ['报废', '已处置'].includes(item.status)).length
   const idleCount = Math.max(assets.value.length - receiveCount - borrowCount - disposedCount, 0)
@@ -101,7 +101,7 @@ const categoryRowsFor = (rows: AssetRecord[]): ChartRow[] => {
   const result = groupAssets(rows, (item) => String(item.category || item.type || '其他'))
   return result.length ? result : [{ key: 'empty', label: '暂无分类', title: '暂无分类', count: 0, amount: 0 }]
 }
-const activeAssetRows = computed(() => categoryRowsFor(assets.value.filter((item) => item.status === '在用')))
+const activeAssetRows = computed(() => categoryRowsFor(assets.value.filter((item) => item.status === '领用')))
 const categoryRows = computed(() => categoryRowsFor(assets.value))
 
 const chartScale = (maximum: number): { max: number; ticks: number[] } => {
@@ -162,7 +162,7 @@ const metricLabel = (value: number, mode: CategoryMetricMode = 'count'): string 
   <template v-else>
   <section v-loading="state.loading" class="grid stats-grid">
     <article class="stat-card" data-watermark="ZC"><div class="stat-top"><span>资产总数</span><span class="tag blue">当前范围</span></div><div class="stat-value">{{ assets.length }}</div><div class="stat-note">账号范围内全部资产</div></article>
-    <article class="stat-card" data-watermark="ZY"><div class="stat-top"><span>在用资产</span><span class="tag green">在用</span></div><div class="stat-value">{{ activeCount }}</div><div class="stat-note">已分配给员工或部门</div></article>
+    <article class="stat-card" data-watermark="ZY"><div class="stat-top"><span>领用资产</span><span class="tag green">领用</span></div><div class="stat-value">{{ activeCount }}</div><div class="stat-note">已分配给员工或部门</div></article>
     <article class="stat-card" data-watermark="OA"><div class="stat-top"><span>待处理单据</span><span v-if="pendingCount > 0" class="tag amber">审批中</span></div><div class="stat-value">{{ pendingCount }}</div><div class="stat-note">资产动作等待审批或执行</div></article>
     <article class="stat-card" data-watermark="¥"><div class="stat-top"><span>资产原值</span><span class="tag blue">当前范围</span></div><div class="stat-value">¥{{ totalValue.toLocaleString('zh-CN') }}</div><div class="stat-note">后续可接折旧与成本中心</div></article>
   </section>
@@ -191,8 +191,8 @@ const metricLabel = (value: number, mode: CategoryMetricMode = 'count'): string 
         </article>
 
         <article class="dashboard-chart-card active-asset-stat-card">
-          <div class="dashboard-card-head"><h3>在用资产统计</h3></div>
-          <div class="asset-distribution-chart active-asset-stat-chart"><div class="asset-distribution-body" :style="{ '--tick-intervals': Math.max(activeScale.ticks.length - 1, 1) }"><div class="asset-distribution-axis" aria-hidden="true"><span v-for="tick in activeScale.ticks" :key="tick">{{ tick.toLocaleString('zh-CN') }}</span></div><div class="asset-distribution-plot" :style="{ '--distribution-columns': columns(activeAssetRows), '--tick-intervals': Math.max(activeScale.ticks.length - 1, 1) }"><div class="asset-distribution-plot-inner"><div class="asset-distribution-grid" aria-hidden="true"><span v-for="index in Math.max(activeScale.ticks.length - 1, 1)" :key="index"></span></div><div class="asset-distribution-bars"><div v-for="item in activeAssetRows" :key="item.key" class="asset-distribution-bar" :style="{ '--bar-height': barHeight(item.count, activeScale.max) }" :title="`${item.title}，在用资产统计：${item.count}`"><strong v-if="item.count">{{ item.count.toLocaleString('zh-CN') }}</strong><span></span></div></div><div class="asset-distribution-labels"><span v-for="item in activeAssetRows" :key="item.key" :title="item.title">{{ item.label }}</span></div></div></div></div></div>
+          <div class="dashboard-card-head"><h3>领用资产统计</h3></div>
+          <div class="asset-distribution-chart active-asset-stat-chart"><div class="asset-distribution-body" :style="{ '--tick-intervals': Math.max(activeScale.ticks.length - 1, 1) }"><div class="asset-distribution-axis" aria-hidden="true"><span v-for="tick in activeScale.ticks" :key="tick">{{ tick.toLocaleString('zh-CN') }}</span></div><div class="asset-distribution-plot" :style="{ '--distribution-columns': columns(activeAssetRows), '--tick-intervals': Math.max(activeScale.ticks.length - 1, 1) }"><div class="asset-distribution-plot-inner"><div class="asset-distribution-grid" aria-hidden="true"><span v-for="index in Math.max(activeScale.ticks.length - 1, 1)" :key="index"></span></div><div class="asset-distribution-bars"><div v-for="item in activeAssetRows" :key="item.key" class="asset-distribution-bar" :style="{ '--bar-height': barHeight(item.count, activeScale.max) }" :title="`${item.title}，领用资产统计：${item.count}`"><strong v-if="item.count">{{ item.count.toLocaleString('zh-CN') }}</strong><span></span></div></div><div class="asset-distribution-labels"><span v-for="item in activeAssetRows" :key="item.key" :title="item.title">{{ item.label }}</span></div></div></div></div></div>
         </article>
 
         <article class="dashboard-chart-card asset-category-stat-card">

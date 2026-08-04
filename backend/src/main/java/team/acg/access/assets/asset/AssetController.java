@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpHeaders;
 
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,16 @@ public class AssetController {
         List<JsonNode> drafts = request == null || request.items() == null
             ? null : request.items().stream().map(partyResolver::normalizeDraft).toList();
         List<JsonNode> items = service.createMany(drafts, actor(servletRequest));
+        return Map.of("items", items, "count", items.size());
+    }
+
+    @PostMapping("/replace")
+    @RequirePermission(permissions = "asset:item:assetImport")
+    public Map<String, Object> replaceAssets(@RequestBody AssetImportRequest request, HttpServletRequest servletRequest) {
+        List<JsonNode> drafts = request == null ? null : request.items();
+        List<JsonNode> normalized = partyResolver.normalizeReplacementDrafts(
+            drafts, servletRequest.getHeader(HttpHeaders.AUTHORIZATION));
+        List<JsonNode> items = service.replaceCatalog(normalized, actor(servletRequest));
         return Map.of("items", items, "count", items.size());
     }
 

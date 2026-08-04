@@ -119,18 +119,75 @@ class EcpDirectoryUserServiceTest {
         assertThatThrownBy(() -> service.requireBySubject("forged")).isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void resolvesExactNamesFromSessionAuthorizedCandidates() {
+        EcpClient client = mock(EcpClient.class);
+        EcpDirectoryUserService service = new EcpDirectoryUserService(client);
+
+        var parties = service.requireByNames(List.of("李雷", "韩梅梅"),
+            List.of(profile("user-1", "李雷"), profile("user-2", "韩梅梅")));
+
+        assertThat(parties.get("李雷").subject()).isEqualTo("user-1");
+        assertThat(parties.get("韩梅梅").subject()).isEqualTo("user-2");
+        verify(client, never()).directory();
+    }
+
+    @Test
+    void rejectsAmbiguousNamesFromSessionAuthorizedCandidates() {
+        EcpDirectoryUserService service = new EcpDirectoryUserService(mock(EcpClient.class));
+
+        assertThatThrownBy(() -> service.requireByNames(List.of("李雷"),
+            List.of(profile("user-1", "李雷"), profile("user-2", "李雷"))))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("李雷(2个匹配)");
+    }
+
+    @Test
+    void identifiesOnlyNamesThatNeedASelectableDirectorySearch() {
+        EcpDirectoryUserService service = new EcpDirectoryUserService(mock(EcpClient.class));
+
+        var unresolved = service.namesWithoutUniqueMatch(List.of("李雷", "韩梅梅", "王芳"), List.of(
+            profile("user-1", "李雷"), profile("user-2", "王芳"), profile("user-3", "王芳")));
+
+        assertThat(unresolved).containsExactly("韩梅梅", "王芳");
+    }
+
+    @Test
+    void resolvesDuplicateNamesByUniqueEmailIgnoringCase() {
+        EcpClient client = mock(EcpClient.class);
+        EcpDirectoryUserService service = new EcpDirectoryUserService(client);
+
+        var parties = service.requireByEmails(List.of("LIHUI4@accesscorporate.com.cn"), List.of(
+            profile("user-1", "李慧", "lihui@accesscorporate.com.cn"),
+            profile("user-4", "李慧", "lihui4@accesscorporate.com.cn")));
+
+        assertThat(parties.get("lihui4@accesscorporate.com.cn").subject()).isEqualTo("user-4");
+        assertThat(service.emailsWithoutUniqueMatch(List.of("lihui@accesscorporate.com.cn"), List.of(
+            profile("user-1", "李慧", "lihui@accesscorporate.com.cn"),
+            profile("user-4", "李慧", "lihui4@accesscorporate.com.cn")))).isEmpty();
+        verify(client, never()).directory();
+    }
+
     private EcpPage<EcpUserProfile> page(EcpUserProfile... profiles) {
         return new EcpPage<>(List.of(profiles), 1, 100, profiles.length);
     }
 
     private EcpUserProfile profile(String unionId) {
+        return profile(unionId, "李雷");
+    }
+
+    private EcpUserProfile profile(String unionId, String name) {
+        return profile(unionId, name, "lilei@example.com");
+    }
+
+    private EcpUserProfile profile(String unionId, String name, String email) {
         EcpUserProfile.CompanySummary company = new EcpUserProfile.CompanySummary(
             "company-1", "external-company", "示例公司", "account-set-1");
         EcpUserProfile.DepartmentSummary department = new EcpUserProfile.DepartmentSummary(
             "department-1", "external-department", "销售部", "DEPARTMENT", "/总部/销售部", null);
         return new EcpUserProfile(
-            "tenant-1", unionId, "external-user", "account-set-1", "李雷",
-            "lilei@example.com", "13800000000", "ACTIVE", "EMP-001", "销售经理",
+            "tenant-1", unionId, "external-user", "account-set-1", name,
+            email, "13800000000", "ACTIVE", "EMP-001", "销售经理",
             "department-1", "销售部", "/总部/销售部", company, List.of(department));
     }
 }

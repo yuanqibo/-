@@ -25,7 +25,7 @@ export type ApiMockState = {
 const assets = Array.from({ length: 45 }, (_, index) => ({
   id: `AST-${String(index + 1).padStart(4, '0')}`,
   name: index === 0 ? '测试笔记本' : `测试显示器 ${index + 1}`,
-  status: index % 5 === 0 ? '在用' : index % 7 === 0 ? '借用中' : '闲置',
+  status: index % 5 === 0 ? '领用' : index % 7 === 0 ? '借用中' : '闲置',
   category: index % 2 === 0 ? 'IT设备' : '显示器',
   type: '设备', owner: index % 5 === 0 ? '张三' : '未分配', ownerSubject: index % 5 === 0 ? 'sub-1' : '',
   department: index % 5 === 0 ? '研发部' : '', company: '示例公司', location: '杭州仓库', custodian: '管理员',
@@ -203,7 +203,7 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
           if (selfServiceReceive) {
             asset.owner = String(draft.applicant || '')
             asset.ownerSubject = 'E2E001'
-            asset.status = '在用'
+            asset.status = '领用'
             asset.location = String(draft.details?.receiveLocation || asset.location || '')
             asset.receiveDate = String(draft.details?.receiveDate || '')
           } else if (selfServiceBorrow) {

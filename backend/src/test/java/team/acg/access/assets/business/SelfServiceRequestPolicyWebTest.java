@@ -99,7 +99,7 @@ class SelfServiceRequestPolicyWebTest {
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error").value("At least one asset id is required"));
 
-        insertAsset("A-2", "笔记本电脑", "在用", "user-2", "韩梅梅");
+        insertAsset("A-2", "笔记本电脑", "领用", "user-2", "韩梅梅");
         mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
                 .content(request("资产借用", "临时使用", "A-2")))
             .andExpect(status().isForbidden())
@@ -108,7 +108,7 @@ class SelfServiceRequestPolicyWebTest {
 
     @Test
     void rejectsOwnedAssetsThatAreNotAvailableForReceiveOrBorrow() throws Exception {
-        insertAsset("A-OWNED", "笔记本电脑", "在用", "user-1", "李雷");
+        insertAsset("A-OWNED", "笔记本电脑", "领用", "user-1", "李雷");
 
         mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
                 .content(request("资产领用", "重复领用", "A-OWNED")))
@@ -237,7 +237,7 @@ class SelfServiceRequestPolicyWebTest {
             .andExpect(jsonPath("$.items[0].status").value("已同意"));
 
         ObjectNode received = asset("A-RECEIVE-PENDING");
-        org.assertj.core.api.Assertions.assertThat(received.path("status").asText()).isEqualTo("在用");
+        org.assertj.core.api.Assertions.assertThat(received.path("status").asText()).isEqualTo("领用");
         org.assertj.core.api.Assertions.assertThat(received.path("receiveDate").asText()).isEqualTo("2026-07-22");
         org.assertj.core.api.Assertions.assertThat(received.path("custodian").asText()).isEqualTo("管理员");
         org.assertj.core.api.Assertions.assertThat(received.path("owner").asText()).isEqualTo("李雷");
@@ -258,7 +258,7 @@ class SelfServiceRequestPolicyWebTest {
             .andExpect(jsonPath("$.item.approvalStatus").value("APPROVED"));
 
         ObjectNode received = asset("A-RECEIVE-NOW");
-        org.assertj.core.api.Assertions.assertThat(received.path("status").asText()).isEqualTo("在用");
+        org.assertj.core.api.Assertions.assertThat(received.path("status").asText()).isEqualTo("领用");
         org.assertj.core.api.Assertions.assertThat(received.path("owner").asText()).isEqualTo("李雷");
         org.assertj.core.api.Assertions.assertThat(received.path("ownerSubject").asText()).isEqualTo("user-1");
         mvc.perform(get("/api/assets"))
@@ -268,7 +268,7 @@ class SelfServiceRequestPolicyWebTest {
 
     @Test
     void requiresOwnershipAndTheCorrectStateForReturnAndHandoverRequests() throws Exception {
-        insertAsset("A-OTHER", "笔记本电脑", "在用", "user-2", "韩梅梅");
+        insertAsset("A-OTHER", "笔记本电脑", "领用", "user-2", "韩梅梅");
         mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
                 .content(request("资产退还", "离职退还", "A-OTHER")))
             .andExpect(status().isForbidden());
@@ -287,7 +287,7 @@ class SelfServiceRequestPolicyWebTest {
 
     @Test
     void keepsSelfServiceHandoverPendingWhenManagerApprovalIsRequired() throws Exception {
-        insertAsset("A-HANDOVER-PENDING", "笔记本电脑", "在用", "user-1", "李雷");
+        insertAsset("A-HANDOVER-PENDING", "笔记本电脑", "领用", "user-1", "李雷");
         saveSettings(true, false, List.of("笔记本电脑"), true);
 
         String response = mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
@@ -314,7 +314,7 @@ class SelfServiceRequestPolicyWebTest {
 
     @Test
     void immediatelyApprovesAndExecutesSelfServiceHandoverWhenApprovalIsDisabled() throws Exception {
-        insertAsset("A-HANDOVER-NOW", "笔记本电脑", "在用", "user-1", "李雷");
+        insertAsset("A-HANDOVER-NOW", "笔记本电脑", "领用", "user-1", "李雷");
         saveSettings(true, false, List.of("笔记本电脑"), false);
 
         mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
@@ -337,7 +337,7 @@ class SelfServiceRequestPolicyWebTest {
 
     @Test
     void keepsSelfServiceReturnPendingUntilAnAdministratorApprovesIt() throws Exception {
-        insertAsset("A-RETURN", "笔记本电脑", "在用", "user-1", "李雷");
+        insertAsset("A-RETURN", "笔记本电脑", "领用", "user-1", "李雷");
 
         String response = mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
                 .content(returnRequest("A-RETURN")))

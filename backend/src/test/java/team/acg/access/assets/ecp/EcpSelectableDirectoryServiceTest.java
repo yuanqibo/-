@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -146,6 +147,62 @@ class EcpSelectableDirectoryServiceTest {
             assertThat(page.items().get(0).departments()).extracting(EcpUserProfile.DepartmentSummary::name)
                 .containsExactly("行政管理");
             assertThat(accountQuery.get()).contains("recursive=true").doesNotContain("q=");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void searchesSelectableAccountsAndKeepsOnlyExactNames() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        AtomicReference<String> accountQuery = new AtomicReference<>();
+        server.createContext("/applications/WLY5YG/selectable-accounts", exchange -> {
+            accountQuery.set(exchange.getRequestURI().getRawQuery());
+            respond(exchange, """
+                {"nodes":[
+                  {"nodeType":"ACCOUNT","accountUnionId":"user-1","name":"韩梅梅"},
+                  {"nodeType":"ACCOUNT","accountUnionId":"user-2","name":"韩梅"}
+                ],"total":2}
+                """);
+        });
+        server.start();
+        try {
+            EcpSelectableDirectoryService service = new EcpSelectableDirectoryService(
+                mapper, "http://127.0.0.1:" + server.getAddress().getPort(), "WLY5YG");
+
+            List<EcpUserProfile> matches = service.exactNameMatches(
+                List.of("韩梅梅"), "Bearer session-token");
+
+            assertThat(matches).extracting(EcpUserProfile::unionId).containsExactly("user-1");
+            assertThat(accountQuery.get()).contains("q=%E9%9F%A9%E6%A2%85%E6%A2%85");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void searchesSelectableAccountsAndKeepsOnlyExactEmails() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        AtomicReference<String> accountQuery = new AtomicReference<>();
+        server.createContext("/applications/WLY5YG/selectable-accounts", exchange -> {
+            accountQuery.set(exchange.getRequestURI().getRawQuery());
+            respond(exchange, """
+                {"nodes":[
+                  {"nodeType":"ACCOUNT","accountUnionId":"user-1","name":"李慧","email":"lihui@accesscorporate.com.cn"},
+                  {"nodeType":"ACCOUNT","accountUnionId":"user-4","name":"李慧","email":"lihui4@accesscorporate.com.cn"}
+                ],"total":2}
+                """);
+        });
+        server.start();
+        try {
+            EcpSelectableDirectoryService service = new EcpSelectableDirectoryService(
+                mapper, "http://127.0.0.1:" + server.getAddress().getPort(), "WLY5YG");
+
+            List<EcpUserProfile> matches = service.exactEmailMatches(
+                List.of("LIHUI4@accesscorporate.com.cn"), "Bearer session-token");
+
+            assertThat(matches).extracting(EcpUserProfile::unionId).containsExactly("user-4");
+            assertThat(accountQuery.get()).contains("q=lihui4@accesscorporate.com.cn");
         } finally {
             server.stop(0);
         }

@@ -156,7 +156,7 @@ class BusinessDataControllerTest {
 
         mvc.perform(post("/api/business-data/contracts").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"supplier\":\"供应商A\",\"name\":\"采购合同\",\"endDate\":\"2027-01-01\",\"amount\":12000}"))
-            .andExpect(status().isCreated()).andExpect(jsonPath("$.item.status").value("在用"));
+            .andExpect(status().isCreated()).andExpect(jsonPath("$.item.status").value("领用"));
     }
 
     @Test

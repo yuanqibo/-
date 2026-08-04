@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type TableI
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { searchDirectoryPeople } from '../api/assets.api'
-import { buildManagedCatalogTree, flattenManagedCatalog, type ManagedCatalogOption, type ManagedCatalogTreeOption } from '../composables/managedCatalog'
+import { buildManagedCatalogTree, flattenManagedCatalog, managedCatalogNames, type ManagedCatalogOption, type ManagedCatalogTreeOption } from '../composables/managedCatalog'
 import { parseAssetWorkbook, type AssetImportMode } from '../composables/parseAssetWorkbook'
 import { useAssets } from '../composables/useAssets'
 import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, AssetRecord, DirectoryPerson } from '../types/assets'
@@ -61,7 +61,7 @@ type ManagedOption = ManagedCatalogOption
 
 const props = withDefaults(defineProps<{ mode?: Mode }>(), { mode: 'list' })
 const router = useRouter()
-const { state, assets, operations, business, store, load, create, copy, importMany, command } = useAssets()
+const { state, assets, operations, business, store, load, create, copy, importMany, replaceAll, command } = useAssets()
 const { user } = usePortalSession()
 const { isEmployeeTerminal } = useTerminalMode()
 const query = ref('')
@@ -130,9 +130,9 @@ const canRunAction = (action: AssetCommand): boolean => Boolean(actionPermission
 const actionStatuses: Partial<Record<AssetCommand, string[]>> = {
   receive: ['空闲'],
   borrow: ['空闲'],
-  return: ['在用'],
+  return: ['领用'],
   'borrow-return': ['借用中'],
-  handover: ['在用', '借用中']
+  handover: ['领用', '借用中']
 }
 const assetsAllowAction = (items: AssetRecord[], action: AssetCommand): boolean => {
   const allowed = actionStatuses[action]
@@ -141,9 +141,9 @@ const assetsAllowAction = (items: AssetRecord[], action: AssetCommand): boolean 
 const actionStatusWarning = (action: AssetCommand): string => ({
   receive: '领用只能选择空闲资产',
   borrow: '借用只能选择空闲资产',
-  return: '退库只能选择在用资产',
+  return: '退库只能选择领用资产',
   'borrow-return': '归还只能选择借用中的资产',
-  handover: '交接只能选择在用或借用中的资产'
+  handover: '交接只能选择领用或借用中的资产'
 } as Partial<Record<AssetCommand, string>>)[action] || '所选资产当前状态不能执行此操作'
 const canCreateRequest = computed(() => permissions.value.has('asset:request:create'))
 const openEmployeeRequest = (): void => { void router.push('/requests') }
@@ -296,7 +296,7 @@ const filteredAssets = computed(() => {
   const keyword = query.value.trim().toLowerCase()
   return assets.value.filter((item) => {
     const modeMatch = isReceiveFlowMode.value
-      ? ['闲置', '空闲', '在用', '领用中'].includes(item.status)
+      ? ['闲置', '空闲', '领用', '领用中'].includes(item.status)
       : props.mode === 'borrow-return'
         ? ['闲置', '空闲', '借用中'].includes(item.status)
         : true
@@ -482,8 +482,8 @@ const operationId = (item: AssetRecord, prefix: string): string => String(
 const receiveAction = computed<AssetCommand>(() => receiveReturnTab.value === 'return' ? 'return' : receiveReturnTab.value === 'handover' ? 'handover' : 'receive')
 const pickerCandidates = computed(() => assets.value.filter((item) => {
   if (pickerAction.value === 'receive' || pickerAction.value === 'borrow') return item.status === '空闲'
-  if (pickerAction.value === 'return') return ['在用', '领用中'].includes(item.status)
-  if (pickerAction.value === 'handover') return ['在用', '借用中', '交接待签字'].includes(item.status)
+  if (pickerAction.value === 'return') return ['领用', '领用中'].includes(item.status)
+  if (pickerAction.value === 'handover') return ['领用', '借用中', '交接待签字'].includes(item.status)
   if (pickerAction.value === 'borrow-return') return item.status === '借用中'
   return false
 }))
@@ -626,7 +626,7 @@ const submitCreate = async (): Promise<void> => {
     ...createDraft,
     type: createDraft.category,
     owner: ownerSelected ? String(createDraft.owner || '') : '未分配',
-    status: createDraft.condition === '维修中' ? '维修中' : ownerSelected ? '在用' : '空闲',
+    status: createDraft.condition === '维修中' ? '维修中' : ownerSelected ? '领用' : '空闲',
     receiveDate: ownerSelected ? createDraft.receiveDate : ''
   }
   if (!String(payload.id || '').trim()) delete payload.id
@@ -773,11 +773,11 @@ const removeAssets = async (items: AssetRecord[]): Promise<void> => {
 
 const validImportRows = computed(() => importRows.value.filter((row) => row.draft).map((row) => row.draft as AssetDraft))
 const invalidImportCount = computed(() => importRows.value.filter((row) => row.errors.length).length)
-const importTitle = computed(() => ({ asset: '资产导入', update: '更新导入', receive: '批量领用导入' })[importMode.value])
-const importTemplateName = computed(() => ({ asset: '资产导入模板.xlsx', update: '资产更新模板.xls', receive: '批量领用模板.xls' })[importMode.value])
+const importTitle = computed(() => ({ asset: '资产导入', update: '更新导入', receive: '批量领用导入', replace: '全量替换资产' })[importMode.value])
+const importTemplateName = computed(() => ({ asset: '资产导入模板.xlsx', update: '资产更新模板.xls', receive: '批量领用模板.xls', replace: '完整资产清单.xlsx' })[importMode.value])
 const escapeSpreadsheetXml = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const downloadImportTemplate = async (): Promise<void> => {
-  if (importMode.value === 'asset') return
+  if (importMode.value === 'asset' || importMode.value === 'replace') return
   const columns = importMode.value === 'update'
     ? ['资产编码*', '资产名称', '资产分类', '品牌', '型号', '金额', '购置方式', '租金', '管理员', '资产状况', '订单号', '计量单位', '所属/承租公司', '购置/起租日期', '领用日期', '所在位置', '使用公司', '使用部门', '使用人', 'ECP人员Subject', '备注']
     : ['资产编码*', '领用人', 'ECP人员Subject*', '领用日期*', '领用后位置*', '领用备注']
@@ -799,7 +799,9 @@ const openImport = (mode: AssetImportMode): void => {
   importOpen.value = true
 }
 const validateImportRows = async (rows: AssetImportRow[]): Promise<AssetImportRow[]> => {
-  const knownCategories = new Set(managedCategories.value.map((item) => item.value))
+  const knownCategories = new Set(importMode.value === 'replace'
+    ? managedCatalogNames(store.value.assetCategoryTree || [])
+    : managedCategories.value.map((item) => item.value))
   const knownLocations = new Set(managedLocations.value.map((item) => item.value))
   const knownAssets = new Map(assets.value.map((item) => [item.id, item]))
   const seen = new Set<string>()
@@ -812,10 +814,13 @@ const validateImportRows = async (rows: AssetImportRow[]): Promise<AssetImportRo
     if (id && seen.has(id)) errors.push(`资产编码“${id}”重复`)
     if (id) seen.add(id)
     if (importMode.value === 'asset' && id && knownAssets.has(id)) errors.push(`资产编码“${id}”已存在`)
-    if (importMode.value !== 'asset' && !knownAssets.has(id)) errors.push(`资产编码“${id}”不存在或不在当前数据范围`)
+    if (['update', 'receive'].includes(importMode.value) && !knownAssets.has(id)) errors.push(`资产编码“${id}”不存在或不在当前数据范围`)
     if (draft.category && knownCategories.size && !knownCategories.has(draft.category)) errors.push(`资产分类“${draft.category}”不存在`)
     if (draft.location && knownLocations.size && !knownLocations.has(draft.location)) errors.push(`所在位置“${draft.location}”不存在`)
     if (importMode.value === 'receive' && id && knownAssets.has(id) && knownAssets.get(id)?.status !== '空闲') errors.push(`资产“${id}”不是空闲状态，不能领用`)
+    if (importMode.value === 'replace' && draft.status && !['领用', '空闲', '领用审批中', '交接审批中', '交接待签字', '借用', '退库审批中'].includes(String(draft.status))) {
+      errors.push(`资产状态“${draft.status}”不受支持`)
+    }
     if (importMode.value === 'asset' && draft.owner && draft.owner !== '未分配' && !draft.ownerSubject) {
       const matches = (await searchDirectoryPeople(String(draft.owner))).filter((person) => person.name === draft.owner)
       if (matches.length !== 1) errors.push(`使用人“${draft.owner}”无法唯一匹配 ECP 账号目录`)
@@ -847,6 +852,14 @@ const submitImport = async (): Promise<void> => {
   if (!validImportRows.value.length) { ElMessage.warning('没有可导入的数据'); return }
   submitting.value = true
   try {
+    if (importMode.value === 'replace') {
+      await ElMessageBox.confirm(`将用文件中的 ${validImportRows.value.length} 条资产替换当前 ${assets.value.length} 条资产，仅保留文件未提供的系统字段。是否继续？`, '全量替换资产', { type: 'warning', confirmButtonText: '确认替换' })
+      const count = await replaceAll(validImportRows.value)
+      importOpen.value = false
+      selected.value = []
+      ElMessage.success(`资产全量替换完成，共 ${count} 条`)
+      return
+    }
     if (importMode.value === 'asset') {
       const count = await importMany(validImportRows.value)
       importOpen.value = false
@@ -938,7 +951,7 @@ const printNow = (): void => {
 const printOrderNow = (): void => window.print()
 
 const statusType = (value: string): 'success' | 'warning' | 'info' | 'danger' => {
-  if (value === '在用') return 'success'
+  if (value === '领用') return 'success'
   if (value === '借用中') return 'warning'
   if (value === '维修中') return 'danger'
   return 'info'
@@ -1000,6 +1013,7 @@ onMounted(() => void load())
               <el-dropdown-item v-if="can('asset:item:assetImport')" @click="openImport('asset')">资产导入</el-dropdown-item>
               <el-dropdown-item v-if="can('asset:item:updateImport')" @click="openImport('update')">更新导入</el-dropdown-item>
               <el-dropdown-item v-if="can('asset:item:receiveImport')" @click="openImport('receive')">批量领用导入</el-dropdown-item>
+              <el-dropdown-item v-if="can('asset:item:assetImport')" divided @click="openImport('replace')">全量替换资产</el-dropdown-item>
               <el-dropdown-item v-if="can('asset:item:export')" @click="exportAssets">导出资产</el-dropdown-item>
             </el-dropdown-menu></template>
           </el-dropdown>
@@ -1221,10 +1235,10 @@ onMounted(() => void load())
         </div>
         <div class="asset-detail-footer-actions">
           <button v-if="detail.status === '空闲' && can('asset:item:receive')" class="table-action primary" type="button" @click="openAction(detail, 'receive')">领用</button>
-          <button v-if="detail.status === '在用' && can('asset:item:return')" class="table-action primary" type="button" @click="openAction(detail, 'return')">退库</button>
+          <button v-if="detail.status === '领用' && can('asset:item:return')" class="table-action primary" type="button" @click="openAction(detail, 'return')">退库</button>
           <button v-if="detail.status === '空闲' && can('asset:item:borrow')" class="table-action primary" type="button" @click="openAction(detail, 'borrow')">借用</button>
           <button v-if="detail.status === '借用中' && can('asset:item:borrowReturn')" class="table-action primary" type="button" @click="openAction(detail, 'borrow-return')">归还</button>
-          <button v-if="['在用', '借用中'].includes(detail.status) && can('asset:item:handover')" class="table-action" type="button" @click="openAction(detail, 'handover')">交接</button>
+          <button v-if="['领用', '借用中'].includes(detail.status) && can('asset:item:handover')" class="table-action" type="button" @click="openAction(detail, 'handover')">交接</button>
         </div>
       </div>
     </el-drawer>
@@ -1365,11 +1379,11 @@ onMounted(() => void load())
       <div class="asset-import-form">
         <label class="asset-upload-drop" :class="{ 'drag-over': importDragActive }" tabindex="0" @keydown.enter.prevent="importFileInput?.click()" @keydown.space.prevent="importFileInput?.click()" @dragenter.prevent="importDragActive = true" @dragover.prevent="importDragActive = true" @dragleave.prevent="importDragActive = false" @drop.prevent="dropImportFile"><input ref="importFileInput" type="file" accept=".xls,.xlsx" hidden @change="readImportFile"><span class="upload-cloud" aria-hidden="true">☁</span><strong>{{ importFileName ? '已选择表格' : '上传表格' }}</strong><span data-asset-upload-hint>{{ importFileName ? '点击或拖拽可重新选择文件' : '也可直接拖拽到此处上传(支持格式: xls、xlsx)' }}</span><span v-if="importFileName" class="asset-upload-file">{{ importFileName }} · {{ importFileSize }}</span></label>
         <a v-if="importMode === 'asset'" class="asset-template-download" href="/assets/asset-import-template.xlsx" :download="importTemplateName">⇩ {{ importTemplateName }}</a>
-        <button v-else type="button" class="asset-template-download" @click="downloadImportTemplate">⇩ {{ importTemplateName }}</button>
+        <button v-else-if="importMode !== 'replace'" type="button" class="asset-template-download" @click="downloadImportTemplate">⇩ {{ importTemplateName }}</button>
         <a v-if="importTemplateUrl" ref="importTemplateLink" :href="importTemplateUrl" :download="importTemplateName" hidden>下载</a>
         <div v-if="parsing" class="asset-import-status">正在校验导入文件……</div>
         <div v-else-if="importRows.length" class="asset-import-status" :class="invalidImportCount ? 'error' : 'success'">可导入 {{ validImportRows.length }} 条，错误 {{ invalidImportCount }} 条。<span v-if="invalidImportCount">请修正错误后重新上传。</span></div>
-        <div class="asset-import-note"><p>{{ importMode === 'asset' ? '导入前会校验资产名称、分类、位置和金额，错误行不会提交。' : importMode === 'update' ? '按资产编码更新已填写字段，空白字段保持原值。' : '按资产编码、ECP 人员和领用日期批量领用资产。' }}</p><ol><li>最大数据行数不超过5000行；</li><li>请根据错误文件的错误说明，修改原文件错误后导入；</li><li>请勿在模板中添加批注导入。</li></ol></div>
+        <div class="asset-import-note"><p>{{ importMode === 'asset' ? '导入前会校验资产名称、分类、位置和金额，错误行不会提交。' : importMode === 'update' ? '按资产编码更新已填写字段，空白字段保持原值。' : importMode === 'replace' ? '以文件中的资产编码集合全量替换当前资产；文件未提供的位置、金额等系统字段按编码保留。' : '按资产编码、ECP 人员和领用日期批量领用资产。' }}</p><ol><li>最大数据行数不超过5000行；</li><li>请根据错误文件的错误说明，修改原文件错误后导入；</li><li>请勿在模板中添加批注导入。</li></ol></div>
         <el-table v-if="importRows.length" :data="importRows" max-height="220"><el-table-column prop="rowNumber" label="行号" width="70" /><el-table-column label="资产编码" min-width="130"><template #default="scope">{{ scope.row.draft?.id || '-' }}</template></el-table-column><el-table-column label="资产名称" min-width="150"><template #default="scope">{{ scope.row.draft?.name || '-' }}</template></el-table-column><el-table-column label="校验结果" min-width="220"><template #default="scope"><el-tag v-if="!scope.row.errors.length" type="success">可导入</el-tag><span v-else class="standard-import-error">{{ scope.row.errors.join('；') }}</span></template></el-table-column></el-table>
       </div>
       <template #footer><el-button @click="importOpen = false">取消</el-button><el-button type="primary" :disabled="!validImportRows.length" :loading="submitting" @click="submitImport">确定</el-button></template>

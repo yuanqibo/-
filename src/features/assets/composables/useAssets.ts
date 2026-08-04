@@ -8,6 +8,7 @@ import {
   fetchBusinessData,
   fetchPortalStore,
   importAssets as importAssetsRequest,
+  replaceAssets as replaceAssetsRequest,
   runAssetCommand as runAssetCommandRequest,
   saveAssetCodeSettings,
   saveCatalog,
@@ -88,6 +89,12 @@ const importMany = async (drafts: AssetDraft[]): Promise<number> => {
   return items.length
 }
 
+const replaceAll = async (drafts: AssetDraft[]): Promise<number> => {
+  state.assets = await replaceAssetsRequest(drafts)
+  await reloadOperations()
+  return state.assets.length
+}
+
 const copy = async (sourceAssetId: string, draft: AssetDraft): Promise<AssetRecord> => {
   const item = await copyAssetRequest(sourceAssetId, draft)
   state.assets = [item, ...state.assets]
@@ -141,6 +148,7 @@ export const useAssets = () => ({
   create,
   copy,
   importMany,
+  replaceAll,
   command,
   saveCatalogValue,
   saveCodeRules,

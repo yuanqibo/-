@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildManagedCatalogTree, flattenManagedCatalog } from '../../../src/features/assets/composables/managedCatalog'
+import { buildManagedCatalogTree, flattenManagedCatalog, managedCatalogNames } from '../../../src/features/assets/composables/managedCatalog'
 
 describe('flattenManagedCatalog', () => {
   it('keeps categories selectable when only their asset code is disabled', () => {
@@ -41,5 +41,6 @@ describe('flattenManagedCatalog', () => {
       }]
     }])
     expect(buildManagedCatalogTree(nodes, [], true)[0].children?.[0].value).toBe('封存仓库')
+    expect(managedCatalogNames(nodes)).toEqual(['杭州公司', '封存仓库'])
   })
 })

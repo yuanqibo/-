@@ -71,13 +71,13 @@ public class ApprovedAssetRequestExecutor {
             case "borrow-return", "return" -> {
                 assetService.requireOwnedForApprovedRequest(assetIds,
                     requiredField(item, "applicantDirectorySubject"),
-                    "borrow-return".equals(action) ? Set.of("借用中") : Set.of("在用"));
+                    "borrow-return".equals(action) ? Set.of("借用中") : Set.of("领用"));
                 fields.put("location", requiredField(item, "returnLocation"));
                 fields.put("date", requestDate(item, "returnDate"));
             }
             case "handover" -> {
                 assetService.requireOwnedForApprovedRequest(assetIds,
-                    requiredField(item, "applicantDirectorySubject"), Set.of("在用", "借用中"));
+                    requiredField(item, "applicantDirectorySubject"), Set.of("领用", "借用中"));
                 String handoverType = item.path("handoverType").asText("员工交接");
                 if (!"公共交接".equals(handoverType)) {
                     fields.put("receiverSubject", requiredField(item, "receiverSubject"));

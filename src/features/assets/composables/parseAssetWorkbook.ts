@@ -1,6 +1,6 @@
 import type { AssetDraft, AssetImportRow } from '../types/assets'
 
-export type AssetImportMode = 'asset' | 'update' | 'receive'
+export type AssetImportMode = 'asset' | 'update' | 'receive' | 'replace'
 
 const aliases: Record<keyof AssetDraft | string, string[]> = {
   id: ['资产编码', '资产编号', '编号', 'id'],
@@ -11,6 +11,7 @@ const aliases: Record<keyof AssetDraft | string, string[]> = {
   ownerCompany: ['所属/承租公司', '所属公司', '承租公司'],
   department: ['使用部门', '部门'],
   owner: ['使用人', '人员姓名', '领用人', '接收人'],
+  email: ['电子邮箱', '邮箱', 'email'],
   ownerSubject: ['ECP人员Subject', '人员Subject', '使用人Subject', '领用人Subject', 'ownerSubject', 'receiverSubject', 'unionId'],
   receiveDate: ['领用日期'],
   custodian: ['管理员', '资产管理员', '管理员账号'],
@@ -27,7 +28,8 @@ const aliases: Record<keyof AssetDraft | string, string[]> = {
   orderNo: ['订单号'],
   unit: ['计量单位', '单位'],
   rent: ['租金'],
-  note: ['备注']
+  note: ['备注'],
+  status: ['资产状态', '状态', 'status']
 }
 
 const normalizedHeader = (value: string): string => value.trim().toLowerCase().replace(/[\s*_\-/（）()：:]/g, '')
@@ -37,12 +39,15 @@ const columnIndex = (reference: string): number => {
   return letters.split('').reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0) - 1
 }
 
+const xmlElements = (element: Document | Element, tag: string): Element[] =>
+  Array.from(element.getElementsByTagNameNS('*', tag))
+
 const textNodes = (element: Element, tag: string): string =>
-  Array.from(element.getElementsByTagName(tag)).map((node) => node.textContent || '').join('')
+  xmlElements(element, tag).map((node) => node.textContent || '').join('')
 
 const cellValue = (cell: Element, sharedStrings: string[]): string => {
   if (cell.getAttribute('t') === 'inlineStr') return textNodes(cell, 't')
-  const raw = cell.getElementsByTagName('v')[0]?.textContent || ''
+  const raw = xmlElements(cell, 'v')[0]?.textContent || ''
   return cell.getAttribute('t') === 's' ? sharedStrings[Number(raw)] || '' : raw
 }
 
@@ -50,9 +55,9 @@ type WorkbookRow = { rowNumber: number; values: string[] }
 
 const parseRows = (xml: string, sharedStrings: string[]): WorkbookRow[] => {
   const doc = new DOMParser().parseFromString(xml, 'application/xml')
-  return Array.from(doc.getElementsByTagName('row')).map((row, rowIndex) => {
+  return xmlElements(doc, 'row').map((row, rowIndex) => {
     const values: string[] = []
-    Array.from(row.getElementsByTagName('c')).forEach((cell) => {
+    xmlElements(row, 'c').forEach((cell) => {
       values[columnIndex(cell.getAttribute('r') || 'A1')] = cellValue(cell, sharedStrings).trim()
     })
     return { rowNumber: Number(row.getAttribute('r')) || rowIndex + 1, values }
@@ -64,13 +69,13 @@ const spreadsheetAttribute = (node: Element, name: string): string | null =>
 
 const parseSpreadsheetXmlRows = (xml: string): WorkbookRow[] => {
   const doc = new DOMParser().parseFromString(xml, 'application/xml')
-  return Array.from(doc.getElementsByTagName('Row')).map((row, rowIndex) => {
+  return xmlElements(doc, 'Row').map((row, rowIndex) => {
     const values: string[] = []
     let cursor = 0
-    Array.from(row.getElementsByTagName('Cell')).forEach((cell) => {
+    xmlElements(row, 'Cell').forEach((cell) => {
       const explicitIndex = Number(spreadsheetAttribute(cell, 'Index'))
       if (explicitIndex) cursor = explicitIndex - 1
-      values[cursor] = cell.getElementsByTagName('Data')[0]?.textContent?.trim() || ''
+      values[cursor] = xmlElements(cell, 'Data')[0]?.textContent?.trim() || ''
       cursor += 1
     })
     return { rowNumber: Number(spreadsheetAttribute(row, 'Index')) || rowIndex + 1, values }
@@ -98,7 +103,7 @@ const readWorkbookRows = async (file: File): Promise<WorkbookRow[]> => {
   const sharedEntry = zip.file('xl/sharedStrings.xml')
   const sharedXml = sharedEntry ? await sharedEntry.async('string') : ''
   const sharedDoc = new DOMParser().parseFromString(sharedXml || '<sst/>', 'application/xml')
-  const sharedStrings = Array.from(sharedDoc.getElementsByTagName('si')).map((item) => textNodes(item, 't'))
+  const sharedStrings = xmlElements(sharedDoc, 'si').map((item) => textNodes(item, 't'))
   const sheetEntry = zip.file('xl/worksheets/sheet1.xml') || Object.values(zip.files).find((entry) => /^xl\/worksheets\/sheet\d+\.xml$/.test(entry.name))
   if (!sheetEntry) throw new Error('工作簿缺少可读取的工作表')
   return parseRows(await sheetEntry.async('string'), sharedStrings)
@@ -135,8 +140,10 @@ const rowDraft = (headers: string[], values: string[], rowNumber: number, mode: 
   if (mode === 'asset' && !raw.ownerCompany) errors.push('所属/承租公司不能为空')
   if (mode === 'asset' && !raw.purchaseDate) errors.push('购置/起租日期不能为空')
   if (mode === 'asset' && !raw.company) errors.push('使用公司不能为空')
-  if (mode !== 'update' && !raw.location) errors.push('所在位置不能为空')
+  if ((mode === 'asset' || mode === 'receive') && !raw.location) errors.push('所在位置不能为空')
   if (mode !== 'asset' && !raw.id) errors.push('资产编码不能为空')
+  if (mode === 'replace' && !raw.category) errors.push('资产分类不能为空')
+  if (mode === 'replace' && !raw.status) errors.push('资产状态不能为空')
   if (mode === 'update' && Object.entries(raw).every(([field, value]) => field === 'id' || !value)) errors.push('没有可更新的字段')
   if (mode === 'receive' && !raw.owner && !raw.ownerSubject) errors.push('领用人不能为空')
   if (mode === 'receive' && !raw.receiveDate) errors.push('领用日期不能为空')
@@ -154,7 +161,7 @@ const rowDraft = (headers: string[], values: string[], rowNumber: number, mode: 
     warrantyDate: normalizeDate(raw.warrantyDate || '') || '未设置',
     condition: raw.condition === '故障' ? '维修中' : raw.condition || '正常',
     owner: raw.owner || (raw.ownerSubject ? '待服务端解析' : '未分配'),
-    status: raw.condition === '故障' || raw.condition === '维修中' ? '维修中' : raw.owner || raw.ownerSubject || raw.receiveDate ? '在用' : '空闲',
+    status: raw.condition === '故障' || raw.condition === '维修中' ? '维修中' : raw.owner || raw.ownerSubject || raw.receiveDate ? '领用' : '空闲',
     type: raw.category
   } : {
     ...raw,

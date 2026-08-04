@@ -30,9 +30,9 @@ describe('useAssets', () => {
     await assets.create({ name: '显示器', category: 'IT设备', location: '仓库' })
     expect(assets.assets.value.map((item) => item.id)).toEqual(['AST-2', 'AST-1'])
 
-    api.runAssetCommand.mockResolvedValue([{ ...asset('AST-1', '笔记本', '在用'), owner: '张三' }])
+    api.runAssetCommand.mockResolvedValue([{ ...asset('AST-1', '笔记本', '领用'), owner: '张三' }])
     await assets.command('receive', ['AST-1'], { receiver: '张三' })
-    expect(assets.assets.value.find((item) => item.id === 'AST-1')).toMatchObject({ status: '在用', owner: '张三' })
+    expect(assets.assets.value.find((item) => item.id === 'AST-1')).toMatchObject({ status: '领用', owner: '张三' })
 
     api.runAssetCommand.mockResolvedValue([])
     await assets.command('delete', ['AST-2'], {})

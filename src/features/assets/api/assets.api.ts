@@ -61,6 +61,12 @@ export const importAssets = async (items: AssetDraft[]): Promise<AssetRecord[]> 
   return imported
 }
 
+export const replaceAssets = async (items: AssetDraft[]): Promise<AssetRecord[]> => {
+  const replaced = (await apiRequest<{ items: AssetRecord[] }>('/api/assets/replace', { method: 'POST', body: { items } })).items || []
+  invalidateReads('assets', 'operations', 'business')
+  return replaced
+}
+
 export const runAssetCommand = async (action: AssetCommand, assetIds: string[], fields: Record<string, unknown>): Promise<AssetRecord[]> => {
   const updated = (await apiRequest<AssetListResponse>(`/api/assets/commands/${encodeURIComponent(action)}`, {
     method: 'POST',

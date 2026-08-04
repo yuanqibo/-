@@ -3,7 +3,7 @@ import { initAuthzSdk } from '@acg/ecp-auth'
 import { createBundleFromGlob, validateAuthzBundle } from '@acg/ecp-auth-vue'
 import type { App as VueApp } from 'vue'
 import type { Router } from 'vue-router'
-import type { DoctorReport, EcpAuthConfigSourceMode } from '@acg/ecp-sdk'
+import type { EcpAuthConfigSourceMode } from '@acg/ecp-sdk'
 import { formatPermissionDisplayName } from './authz/permission-display'
 import {
   primeEmployeeSelfServiceSession,
@@ -88,7 +88,6 @@ export const ecp = createEcpSdk({
 })
 
 let ecpReadyPromise: Promise<void> = Promise.resolve()
-let localDoctorReport: DoctorReport | null = null
 
 export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
   if (!localAuthzValidationReport.ok) {
@@ -105,7 +104,7 @@ export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
     .then(async () => {
       const session = await ecp.auth?.session.load()
       if (session) primeEmployeeSelfServiceSession(session)
-      localDoctorReport = await ecp.auth?.doctor.run({ bundleAppCodeMismatchLevel: 'fail' }) ?? null
+      const localDoctorReport = await ecp.auth?.doctor.run({ bundleAppCodeMismatchLevel: 'fail' }) ?? null
       if (!localDoctorReport?.ok) {
         const failures = localDoctorReport?.checks
           .filter((check) => check.status === 'FAIL')
@@ -123,4 +122,3 @@ export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
 }
 
 export const waitForEcpReady = (): Promise<void> => ecpReadyPromise
-export const getLocalDoctorReport = (): DoctorReport | null => localDoctorReport

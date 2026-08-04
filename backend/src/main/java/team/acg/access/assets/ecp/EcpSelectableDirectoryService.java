@@ -22,6 +22,7 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.HexFormat;
@@ -85,6 +86,40 @@ public class EcpSelectableDirectoryService {
             return new CachedSnapshot(loadSnapshot(bearer), System.currentTimeMillis() + CACHE_TTL_MILLIS);
         });
         return cached.snapshot();
+    }
+
+    public List<EcpUserProfile> exactNameMatches(Collection<String> names, String authorization) {
+        Map<String, EcpUserProfile> matches = new LinkedHashMap<>();
+        if (names == null) return List.of();
+        for (String candidate : names) {
+            String name = text(candidate);
+            if (name.isEmpty()) continue;
+            for (int pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber++) {
+                EcpPage<EcpUserProfile> result = page(name, pageNumber, PAGE_SIZE, authorization);
+                result.items().stream()
+                    .filter(profile -> name.equals(text(profile.name())))
+                    .forEach(profile -> matches.putIfAbsent(text(profile.unionId()), profile));
+                if (!result.hasNext()) break;
+            }
+        }
+        return List.copyOf(matches.values());
+    }
+
+    public List<EcpUserProfile> exactEmailMatches(Collection<String> emails, String authorization) {
+        Map<String, EcpUserProfile> matches = new LinkedHashMap<>();
+        if (emails == null) return List.of();
+        for (String candidate : emails) {
+            String email = text(candidate).toLowerCase(java.util.Locale.ROOT);
+            if (email.isEmpty()) continue;
+            for (int pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber++) {
+                EcpPage<EcpUserProfile> result = page(email, pageNumber, PAGE_SIZE, authorization);
+                result.items().stream()
+                    .filter(profile -> email.equals(text(profile.email()).toLowerCase(java.util.Locale.ROOT)))
+                    .forEach(profile -> matches.putIfAbsent(text(profile.unionId()), profile));
+                if (!result.hasNext()) break;
+            }
+        }
+        return List.copyOf(matches.values());
     }
 
     private DirectorySnapshot loadSnapshot(String bearer) {

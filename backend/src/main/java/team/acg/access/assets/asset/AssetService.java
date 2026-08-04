@@ -27,7 +27,7 @@ import team.acg.access.assets.store.PortalReferenceCatalog;
 public class AssetService {
     private static final int MAX_ASSETS = 5_000;
     private static final Set<String> ALLOWED_STATUS = Set.of(
-        "空闲", "闲置", "上架", "待验收", "在用", "借用中", "维修中", "审批中",
+        "空闲", "闲置", "上架", "待验收", "领用", "借用中", "维修中", "审批中",
         "领用待签字", "借用待签字", "交接待签字", "处置中", "已处置", "已报废");
     private static final Set<String> UNASSIGNED = Set.of("空闲", "闲置", "上架", "待验收");
     private static final Set<String> ASSIGNABLE = Set.of("空闲");
@@ -139,6 +139,80 @@ public class AssetService {
         repository.replaceAll(assets, existingRecords, now);
         auditChanges(existing, assets, now);
         return now;
+    }
+
+    @Transactional
+    public List<JsonNode> replaceCatalog(List<JsonNode> drafts, Actor actor) {
+        if (drafts == null || drafts.isEmpty() || drafts.size() > MAX_ASSETS) {
+            throw new IllegalArgumentException("Asset replacement requires between 1 and 5000 rows");
+        }
+        repository.lockForWrite();
+        Map<String, AssetRepository.AssetRecord> existingRecords = repository.findAllRecords();
+        Map<String, JsonNode> existing = new LinkedHashMap<>();
+        existingRecords.forEach((id, record) -> existing.put(id, record.document()));
+        Set<String> ids = new LinkedHashSet<>();
+        List<JsonNode> replacement = new ArrayList<>();
+        Set<String> allowedCategories = referenceCatalog.categories();
+        Set<String> allowedLocations = referenceCatalog.locations();
+        String defaultLocation = allowedLocations.contains("杭州公司") ? "杭州公司"
+            : allowedLocations.stream().sorted().findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Asset location catalog is empty"));
+        Set<String> copyFields = Set.of(
+            "brand", "model", "sn", "owner", "ownerSubject", "department", "departmentUnionId",
+            "company", "companyUnionId", "ownerCompany", "location", "custodian", "supplier",
+            "price", "rent", "purchaseDate", "receiveDate", "phone", "email", "purchaseMethod",
+            "orderNo", "unit", "note");
+        String today = java.time.LocalDate.now().toString();
+
+        for (JsonNode draft : drafts) {
+            if (draft == null || !draft.isObject()) {
+                throw new IllegalArgumentException("Every replacement asset must be an object");
+            }
+            String id = requiredText(draft, "id", 191);
+            if (!ids.add(id)) throw new IllegalArgumentException("Duplicate asset id: " + id);
+            JsonNode previous = existing.get(id);
+            ObjectNode asset = previous != null && previous.isObject()
+                ? (ObjectNode) previous.deepCopy() : mapper.createObjectNode();
+            asset.put("id", id);
+            String category = requiredText(draft, "category", 128);
+            String name = draft.path("name").asText("").trim();
+            if (name.isEmpty()) name = previous == null ? category + "资产" : previous.path("name").asText(category + "资产");
+            asset.put("name", name);
+            asset.put("category", category);
+            asset.put("type", category);
+            copyFields.forEach(field -> { if (draft.has(field)) asset.set(field, draft.get(field)); });
+
+            String owner = asset.path("owner").asText("").trim();
+            if (owner.isEmpty() || "未分配".equals(owner)) {
+                asset.put("owner", "未分配");
+                asset.put("ownerSubject", "");
+            }
+            String location = asset.path("location").asText("").trim();
+            asset.put("location", location.isEmpty() ? defaultLocation : location);
+            if (previous == null) {
+                if (!asset.has("price")) asset.put("price", 0);
+                if (!asset.has("rent")) asset.put("rent", 0);
+                if (!asset.has("purchaseMethod")) asset.put("purchaseMethod", "采购");
+                if (!asset.has("purchaseDate")) asset.put("purchaseDate", today);
+                if (!asset.has("receiveDate")) asset.put("receiveDate", asset.path("ownerSubject").asText("").isBlank() ? "" : today);
+                if (!asset.has("custodian")) asset.put("custodian", actor == null ? "系统" : actor.name());
+                ArrayNode lifecycle = mapper.createArrayNode();
+                lifecycle.add(mapper.createArrayNode().add(today).add("资产清单替换").add("通过完整资产清单导入"));
+                asset.set("lifecycle", lifecycle);
+            }
+            asset.put("status", normalizeReplacementStatus(requiredText(draft, "status", 32)));
+            replacement.add(asset);
+        }
+
+        Set<String> validatedIds = new HashSet<>();
+        replacement.forEach(asset -> validate(asset, null, validatedIds, allowedCategories, allowedLocations));
+        Instant now = Instant.now();
+        repository.replaceAll(replacement, existingRecords, now);
+        auditChanges(existing, replacement, now);
+        Actor trustedActor = actor == null ? Actor.SYSTEM : actor;
+        replacement.stream().filter(asset -> !existing.containsKey(asset.path("id").asText()))
+            .forEach(asset -> recordInitialOperations(asset, trustedActor));
+        return replacement;
     }
 
     @Transactional
@@ -265,7 +339,7 @@ public class AssetService {
         boolean assigned = !owner.isBlank() && !"未分配".equals(owner);
         if (assigned) requiredText(asset, "ownerSubject", 191);
         asset.put("owner", assigned ? owner : "未分配");
-        asset.put("status", "维修中".equals(condition) ? "维修中" : assigned ? "在用" : "空闲");
+        asset.put("status", "维修中".equals(condition) ? "维修中" : assigned ? "领用" : "空闲");
         ArrayNode lifecycle = mapper.createArrayNode();
         lifecycle.add(mapper.createArrayNode().add(date(asset.path("purchaseDate").asText())).add("资产入库").add("通过新增资产表单录入"));
         if (assigned) lifecycle.add(mapper.createArrayNode().add(date(asset.path("receiveDate").asText())).add("资产领用").add(owner + " 领用 " + asset.path("name").asText()));
@@ -288,14 +362,14 @@ public class AssetService {
                 asset.put("location", location);
                 copyText(fields, asset, "custodian");
                 asset.put("owner", receiver); asset.put("ownerSubject", receiverSubject);
-                asset.put("status", requiresSignature ? "领用待签字" : "在用");
+                asset.put("status", requiresSignature ? "领用待签字" : "领用");
                 asset.put("receiveDate", date(requiredField(fields, "date")));
                 lifecycle(asset, fields, requiresSignature ? "发起资产领用" : "资产领用",
                     requiresSignature ? name + " 待 " + receiver + " 签字确认" : receiver + " 领用 " + name);
                 if (!requiresSignature) clearReceiptSnapshot(asset);
             }
             case "return" -> {
-                requireStatus(asset, Set.of("在用"));
+                requireStatus(asset, Set.of("领用"));
                 String location = requiredField(fields, "location");
                 copyText(fields, asset, "department", "departmentUnionId", "company", "companyUnionId", "note");
                 asset.put("location", location);
@@ -333,7 +407,7 @@ public class AssetService {
                 lifecycle(asset, fields, "借用归还", requiredField(fields, "operator") + " 办理 " + name + " 归还");
             }
             case "handover" -> {
-                requireStatus(asset, Set.of("在用", "借用中"));
+                requireStatus(asset, Set.of("领用", "借用中"));
                 String receiver = requiredField(fields, "receiver");
                 String receiverSubject = requiredField(fields, "receiverSubject");
                 String location = requiredField(fields, "location");
@@ -345,7 +419,7 @@ public class AssetService {
                 if (AssetPartyResolver.PUBLIC_AREA_SUBJECT.equals(receiverSubject)
                     || !workflowPolicy.requiresEmployeeSignature(
                         "HANDOVER", fields.path("selfServiceRequest").asBoolean(false))) {
-                    asset.put("status", "在用");
+                    asset.put("status", "领用");
                     lifecycle(asset, fields,
                         AssetPartyResolver.PUBLIC_AREA_SUBJECT.equals(receiverSubject) ? "公共区域交接" : "资产交接",
                         name + " 已交接至 " + receiver);
@@ -363,7 +437,7 @@ public class AssetService {
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                         "Only the designated handover receiver can sign this asset");
                 }
-                asset.put("status", "在用");
+                asset.put("status", "领用");
                 lifecycle(asset, fields, "交接签字", asset.path("owner").asText("接收人") + " 已确认交接");
                 clearReceiptSnapshot(asset);
             }
@@ -383,7 +457,7 @@ public class AssetService {
                 lifecycle(asset, fields, "借用延期", requiredField(fields, "operator") + " 延期 " + name + " 至 " + expected);
             }
             case "repair-start" -> {
-                requireStatus(asset, Set.of("空闲", "闲置", "上架", "待验收", "在用", "借用中"));
+                requireStatus(asset, Set.of("空闲", "闲置", "上架", "待验收", "领用", "借用中"));
                 asset.put("repairPreviousStatus", asset.path("status").asText());
                 asset.put("status", "维修中");
                 asset.put("repairStartedAt", date(fields.path("date").asText()));
@@ -668,7 +742,7 @@ public class AssetService {
         if (!signatureImage.matches("^data:image/(png|jpeg);base64,[A-Za-z0-9+/=]+$") || signatureImage.length() > 700_000) {
             throw new IllegalArgumentException("A valid PNG or JPEG signature image is required");
         }
-        asset.put("status", "BORROW".equals(type) ? "借用中" : "在用");
+        asset.put("status", "BORROW".equals(type) ? "借用中" : "领用");
         lifecycle(asset, fields, "员工签收", asset.path("owner").asText("接收人") + " 已签字确认");
         clearReceiptSnapshot(asset);
     }
@@ -843,6 +917,15 @@ public class AssetService {
         return java.time.LocalDate.parse(value).toString();
     }
 
+    private String normalizeReplacementStatus(String value) {
+        return switch (value) {
+            case "在用", "领用中" -> "领用";
+            case "借用" -> "借用中";
+            case "领用审批中", "交接审批中", "退库审批中" -> "审批中";
+            default -> value;
+        };
+    }
+
     private void lifecycle(ObjectNode asset, JsonNode fields, String action, String description) {
         ArrayNode history = asset.path("lifecycle").isArray() ? (ArrayNode) asset.path("lifecycle") : mapper.createArrayNode();
         history.add(mapper.createArrayNode().add(date(fields.path("date").asText())).add(action).add(description));
@@ -886,13 +969,13 @@ public class AssetService {
         if (before.equals(after)) return;
         boolean allowed = switch (before) {
             case "空闲", "闲置", "上架", "待验收" -> Set.of(
-                "在用", "借用中", "领用待签字", "借用待签字", "维修中", "审批中", "处置中", "已报废").contains(after);
-            case "在用" -> Set.of("空闲", "闲置", "维修中", "审批中", "交接待签字", "已报废").contains(after);
+                "领用", "借用中", "领用待签字", "借用待签字", "维修中", "审批中", "处置中", "已报废").contains(after);
+            case "领用" -> Set.of("空闲", "闲置", "维修中", "审批中", "交接待签字", "已报废").contains(after);
             case "借用中" -> Set.of("空闲", "闲置", "维修中", "审批中", "交接待签字").contains(after);
-            case "维修中" -> Set.of("空闲", "闲置", "在用", "借用中", "已报废").contains(after);
-            case "审批中" -> Set.of("空闲", "闲置", "在用", "借用中", "已报废").contains(after);
-            case "交接待签字" -> Set.of("在用", "借用中").contains(after);
-            case "领用待签字" -> Set.of("空闲", "闲置", "上架", "待验收", "在用").contains(after);
+            case "维修中" -> Set.of("空闲", "闲置", "领用", "借用中", "已报废").contains(after);
+            case "审批中" -> Set.of("空闲", "闲置", "领用", "借用中", "已报废").contains(after);
+            case "交接待签字" -> Set.of("领用", "借用中").contains(after);
+            case "领用待签字" -> Set.of("空闲", "闲置", "上架", "待验收", "领用").contains(after);
             case "借用待签字" -> Set.of("空闲", "闲置", "上架", "待验收", "借用中").contains(after);
             case "处置中" -> Set.of("空闲", "已处置").contains(after);
             case "已处置" -> "空闲".equals(after);

@@ -107,4 +107,3 @@ export const configureEcp = async (_app: VueApp, router: Router): Promise<void> 
   })
 }
 export const waitForEcpReady = async (): Promise<void> => undefined
-export const getLocalDoctorReport = () => ({ ok: true, checks: [] })
