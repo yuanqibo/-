@@ -23,6 +23,11 @@ const authzBundle = createBundleFromGlob({
 
 export const localAuthzValidationReport = validateAuthzBundle(authzBundle)
 
+export const loadPortalPermissionSnapshot = async (appCode: string) => {
+  const snapshot = await initAuthzSdk(appCode).loadPermissionSnapshot(true)
+  return snapshot ? withEmployeeSelfServiceSnapshot(snapshot) : null
+}
+
 authzBundle.catalog?.resources?.forEach((resource) => {
   resource.permissions?.forEach((catalogPermission) => {
     const permission = catalogPermission as typeof catalogPermission & { name?: string }
@@ -56,10 +61,7 @@ export const ecp = createEcpSdk({
       },
       permission: {
         noPermissionPath: '/no-permission',
-        loadPermissionSnapshot: async ({ appCode }) => {
-          const snapshot = await initAuthzSdk(appCode).loadPermissionSnapshot()
-          return snapshot ? withEmployeeSelfServiceSnapshot(snapshot) : null
-        }
+        loadPermissionSnapshot: ({ appCode }) => loadPortalPermissionSnapshot(appCode)
       },
       menu: {
         parentRouteName: 'app-shell',
