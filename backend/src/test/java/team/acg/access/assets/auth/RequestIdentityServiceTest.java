@@ -27,7 +27,7 @@ class RequestIdentityServiceTest {
         EcpIdentityService ecp = mock(EcpIdentityService.class);
         when(provider.getIfAvailable()).thenReturn(ecp);
         when(ecp.resolve("valid-token")).thenReturn(Map.of(
-            "name", "李雷", "account", "lilei", "department", "销售部", "roleCode", "employee",
+            "name", "李雷", "account", "lilei", "department", "销售部", "company", "示例公司", "roleCode", "employee",
             "tenantId", "tenant-1",
             "subject", "account-1", "directorySubject", "user-1",
             "permissionCodes", List.of("asset:item:view", "asset:item:receive")));
@@ -40,6 +40,7 @@ class RequestIdentityServiceTest {
 
         assertThat(service.current(request).orElseThrow().name()).isEqualTo("李雷");
         assertThat(service.current(request).orElseThrow().tenantId()).isEqualTo("tenant-1");
+        assertThat(service.current(request).orElseThrow().company()).isEqualTo("示例公司");
         verify(ecp, times(1)).resolve("valid-token");
         assertThat(service.trustedName(request, "伪造姓名")).isEqualTo("李雷");
         assertThatThrownBy(() -> service.requirePermission(request, "asset:item:delete"))

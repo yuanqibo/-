@@ -38,7 +38,7 @@ class BusinessDataSubjectScopeTest {
         insertRequest("REQ-LEGACY-NAME", "李雷", "");
         insertRequest("REQ-OTHER", "韩梅梅", "user-2");
         var identity = new RequestIdentityService.Identity(
-            "李雷", "lilei", "user-1", "directory-user-1", "tenant-1", "销售部", Set.of("dept-sales"),
+            "李雷", "lilei", "user-1", "directory-user-1", "tenant-1", "销售部", "示例公司", Set.of("dept-sales"),
             "employee", Set.of("asset:request:view"));
         when(identityService.current(any())).thenReturn(Optional.of(identity));
     }

@@ -6,12 +6,13 @@ import { useRoute } from 'vue-router'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { useAssets } from '../../assets/composables/useAssets'
+import type { AssetRecord } from '../../assets/types/assets'
 import { useApprovals } from '../composables/useApprovals'
 import type { ApprovalDecision, ApprovalRecord } from '../types/approval'
 import AssetRequestDialog from './AssetRequestDialog.vue'
 
 const { state, rows, load, decide } = useApprovals()
-const { store, load: loadAssets } = useAssets()
+const { assets, store, load: loadAssets } = useAssets()
 const { user } = usePortalSession()
 const { isEmployeeTerminal } = useTerminalMode()
 const route = useRoute()
@@ -72,29 +73,56 @@ const filtered = computed(() => rows.value.filter((item) => {
 }))
 const statusType = (status: string): 'success' | 'warning' | 'danger' | 'info' => approvedStatuses.has(status) ? 'success' : pendingStatuses.has(status) ? 'warning' : rejectedStatuses.has(status) ? 'danger' : 'info'
 const isDecisionSyncing = (item: ApprovalRecord): boolean => Boolean(item.decisionSubmitted) && pendingStatuses.has(item.status)
-const approvalDetailFields = (item: ApprovalRecord): Array<[string, unknown]> => [
-  ['申请类型', displayRequestType(item)],
-  ...(item.approvalNo ? [['审批编号', item.approvalNo] as [string, unknown]] : []),
-  ['申请人', item.applicant],
-  ['申请物品', item.asset],
-  ['审批系统', item.system],
-  ['当前节点', item.currentNode],
-  ['资产数量', item.assetCount || '-'],
-  ['申请原因', item.reason || '-'],
-  ['申请日期', item.date],
-  ...(item.receiveType ? [['领用类型', item.receiveType] as [string, unknown]] : []),
-  ...(item.receiveLocation ? [['领用后位置', item.receiveLocation] as [string, unknown]] : []),
-  ...(item.receiveDate ? [['领用日期', item.receiveDate] as [string, unknown]] : []),
-  ...(item.returnLocation ? [[item.type === '资产归还' ? '归还后位置' : '退库后位置', item.returnLocation] as [string, unknown]] : []),
-  ...(item.returnDate ? [[item.type === '资产归还' ? '归还日期' : '退库日期', item.returnDate] as [string, unknown]] : []),
-  ...(item.receiverName ? [['接收人', item.receiverName] as [string, unknown]] : []),
-  ...(item.receiverCompany ? [['接收公司', item.receiverCompany] as [string, unknown]] : []),
-  ...(item.receiverDepartment ? [['接收部门', item.receiverDepartment] as [string, unknown]] : []),
-  ...(item.handoverLocation ? [['接收位置', item.handoverLocation] as [string, unknown]] : []),
-  ...(item.handoverDate ? [['交接日期', item.handoverDate] as [string, unknown]] : []),
-  ...(item.borrowLocation ? [['借用后位置', item.borrowLocation] as [string, unknown]] : []),
-  ...(item.borrowDate ? [['借用日期', item.borrowDate] as [string, unknown]] : []),
-  ...(item.expectedReturnDate ? [['预计归还日期', item.expectedReturnDate] as [string, unknown]] : [])
+type ApprovalAssetRow = Partial<AssetRecord> & { id: string; name: string }
+const requestFieldConfig: Record<string, { dateLabel: string; dateKey: string; locationLabel: string; locationKey: string }> = {
+  资产领用: { dateLabel: '领用日期', dateKey: 'receiveDate', locationLabel: '领用后位置', locationKey: 'receiveLocation' },
+  资产借用: { dateLabel: '借用日期', dateKey: 'borrowDate', locationLabel: '借用后位置', locationKey: 'borrowLocation' },
+  资产归还: { dateLabel: '归还日期', dateKey: 'returnDate', locationLabel: '归还后位置', locationKey: 'returnLocation' },
+  资产退还: { dateLabel: '退库日期', dateKey: 'returnDate', locationLabel: '退库后位置', locationKey: 'returnLocation' },
+  资产交接: { dateLabel: '交接日期', dateKey: 'handoverDate', locationLabel: '接收位置', locationKey: 'handoverLocation' }
+}
+const textValue = (value: unknown): string => String(value ?? '').trim() || '-'
+const requestAssetIds = (item: ApprovalRecord): string[] => {
+  const explicit = Array.isArray(item.assetIds) ? item.assetIds.map(String).filter(Boolean) : []
+  if (explicit.length) return explicit
+  const description = String(item.asset || '')
+  return assets.value.filter((asset) => description.includes(asset.id) || description === asset.name).map((asset) => asset.id)
+}
+const approvalAssets = (item: ApprovalRecord): ApprovalAssetRow[] => {
+  const byId = new Map(assets.value.map((asset) => [asset.id, asset]))
+  const descriptions = String(item.asset || '').split('、').map((value) => value.trim())
+  return requestAssetIds(item).map((id) => byId.get(id) || {
+    id,
+    name: descriptions.find((value) => value.startsWith(id))?.slice(id.length).trim() || '-'
+  })
+}
+const detailAssets = computed(() => detail.value ? approvalAssets(detail.value) : [])
+const approvalCompany = (item: ApprovalRecord): string => {
+  const firstAsset = approvalAssets(item)[0]
+  return textValue(item.company || item.applicantCompany || firstAsset?.ownerCompany || firstAsset?.company)
+}
+const approvalSummaryFields = (item: ApprovalRecord): Array<[string, unknown]> => {
+  const config = requestFieldConfig[item.type]
+  return [
+    ['申请单号', item.id],
+    ['申请状态', displayStatus(item.status)],
+    ['申请类型', displayRequestType(item)],
+    ['申请人', item.applicant],
+    ['所属公司', approvalCompany(item)],
+    ['所在部门', item.department || '-'],
+    [config?.dateLabel || '申请时间', config ? item[config.dateKey] || item.date : item.date],
+    [config?.locationLabel || '申请位置', config ? item[config.locationKey] : '-'],
+    ['经办人', item.operator || item.decisionOperator || '-'],
+    ['说明', item.reason || '-']
+  ]
+}
+const approvalProcessFields = (item: ApprovalRecord): Array<[string, unknown]> => [
+  ['审批编号', item.approvalNo || '-'],
+  ['审批系统', item.system || '-'],
+  ['当前节点', item.currentNode || '-'],
+  ['处理人', item.decisionOperator || '-'],
+  ['处理时间', item.approvalDate || item.decisionAt || item.approvalSyncedAt || '-'],
+  ['处理意见', item.decisionReason || '-']
 ]
 const openDecision = (item: ApprovalRecord, decision: ApprovalDecision): void => { detail.value = item; decisionForm.decision = decision; decisionForm.reason = ''; decisionOpen.value = true }
 const submitDecision = async (): Promise<void> => {
@@ -130,7 +158,7 @@ const focusManagerRequestFromRoute = (): void => {
 }
 onMounted(() => {
   void load()
-  if (isEmployeeTerminal.value) void loadAssets(true)
+  void loadAssets(true)
   openRequestFromRoute()
   focusManagerRequestFromRoute()
 })
@@ -138,7 +166,7 @@ onActivated(() => {
   void load()
   openRequestFromRoute()
   focusManagerRequestFromRoute()
-  if (isEmployeeTerminal.value) void loadAssets(true)
+  void loadAssets(true)
 })
 watch(() => route.fullPath, () => {
   openRequestFromRoute()
@@ -177,11 +205,11 @@ watch(canReview, () => { tab.value = '全部' })
           </label>
         </div>
         <div v-loading="state.loading" class="table-wrap approval-table-wrap">
-          <table>
-            <thead><tr><th>单据编号</th><th>类型</th><th>申请人</th><th>关联物品</th><th>原因</th><th>状态</th><th>当前节点</th><th>操作</th></tr></thead>
+          <table v-resizable-columns="'approvals:manager'" class="approval-manager-table">
+            <thead><tr><th data-column-key="requestId">申请单号</th><th data-column-key="type">申请类型</th><th data-column-key="applicant">申请人</th><th data-column-key="company">所属公司</th><th data-column-key="department">所在部门</th><th data-column-key="date">申请时间</th><th data-column-key="reason">说明</th><th data-column-key="status">状态</th><th data-column-key="currentNode">当前节点</th><th data-column-key="actions">操作</th></tr></thead>
             <tbody>
-              <tr v-for="item in filtered" :key="item.id"><td>{{ item.id }}</td><td>{{ item.type }}</td><td>{{ item.applicant }}</td><td>{{ item.asset }}</td><td>{{ item.reason || '-' }}</td><td><span class="tag" :class="statusType(item.status) === 'success' ? 'green' : statusType(item.status) === 'danger' ? 'red' : 'amber'">{{ item.status }}</span></td><td>{{ item.currentNode || '-' }}</td><td><span v-if="isDecisionSyncing(item)" class="tag">同步中</span><template v-else-if="pendingStatuses.has(item.status)"><button class="btn primary" type="button" @click="openDecision(item, 'approve')">批准</button> <button class="btn" type="button" @click="openDecision(item, 'reject')">拒绝</button></template><button v-else class="btn" type="button" @click="detail = item">查看</button></td></tr>
-              <tr v-if="!filtered.length" class="empty-row"><td colspan="8">暂无审批单据。</td></tr>
+              <tr v-for="item in filtered" :key="item.id"><td class="approval-request-number-cell"><button class="approval-request-number-link" type="button" :title="item.id" @click="detail = item">{{ item.id }}</button></td><td>{{ displayRequestType(item) }}</td><td>{{ item.applicant }}</td><td :title="approvalCompany(item)">{{ approvalCompany(item) }}</td><td>{{ item.department || '-' }}</td><td>{{ item.date || '-' }}</td><td :title="item.reason || '-'">{{ item.reason || '-' }}</td><td><span class="tag" :class="statusType(item.status) === 'success' ? 'green' : statusType(item.status) === 'danger' ? 'red' : 'amber'">{{ item.status }}</span></td><td>{{ item.currentNode || '-' }}</td><td class="approval-actions-cell"><div class="approval-row-actions"><span v-if="isDecisionSyncing(item)" class="tag">同步中</span><template v-else-if="pendingStatuses.has(item.status)"><button class="link" type="button" @click="openDecision(item, 'approve')">同意</button><span class="action-separator">|</span><button class="link" type="button" @click="openDecision(item, 'reject')">驳回</button></template><span v-else>-</span></div></td></tr>
+              <tr v-if="!filtered.length" class="empty-row"><td colspan="10">暂无审批单据。</td></tr>
             </tbody>
           </table>
         </div>
@@ -192,7 +220,23 @@ watch(canReview, () => { tab.value = '全部' })
     </template>
     <el-alert v-if="state.errorMessage" type="error" :title="state.errorMessage" show-icon :closable="false" />
 
-    <el-drawer :model-value="Boolean(detail) && !decisionOpen" size="min(560px, 94vw)" append-to-body @close="detail = null"><template #header><div><span class="eyebrow">审批轨迹</span><h2>{{ detail?.id }}</h2></div></template><template v-if="detail"><div class="detail-grid"><div v-for="field in approvalDetailFields(detail)" :key="String(field[0])" class="detail-item"><span class="detail-label">{{ field[0] }}</span><strong class="detail-value">{{ field[1] }}</strong></div><div class="detail-item"><span class="detail-label">状态</span><strong class="detail-value"><span class="tag" :class="statusType(detail.status) === 'success' ? 'green' : statusType(detail.status) === 'danger' ? 'red' : 'amber'">{{ displayStatus(detail.status) }}</span></strong></div></div><h3>审批状态</h3><div class="approval-flow"><div class="approval-step"><span class="step-dot done"></span><div><strong>资产系统创建单据</strong><div class="timeline-desc">生成业务单据并记录申请内容。</div></div></div><div class="approval-step"><span class="step-dot current"></span><div><strong>{{ detail.currentNode || displayStatus(detail.status) }}</strong><div class="timeline-desc">Java 后端校验权限、资产归属和状态后执行。</div></div></div><div class="approval-step"><span class="step-dot"></span><div><strong>资产动作归档</strong><div class="timeline-desc">审批通过后写入资产台账和操作记录。</div></div></div></div></template></el-drawer>
+    <el-drawer :model-value="Boolean(detail) && !decisionOpen" class="approval-detail-drawer" :title="detail ? displayRequestType(detail) : '审批详情'" direction="rtl" size="min(1120px, 96vw)" append-to-body destroy-on-close @close="detail = null">
+      <template v-if="detail">
+        <section class="approval-detail-section">
+          <h3>申请信息</h3>
+          <div class="approval-detail-fields"><div v-for="field in approvalSummaryFields(detail)" :key="String(field[0])" class="approval-detail-field" :class="{ wide: field[0] === '说明' }"><span>{{ field[0] }}</span><strong>{{ textValue(field[1]) }}</strong></div></div>
+        </section>
+        <section class="approval-detail-section">
+          <div class="approval-detail-section-head"><h3>申请明细</h3><span>共 {{ detailAssets.length || detail.assetCount || 0 }} 项</span></div>
+          <div class="approval-detail-assets-wrap"><table v-resizable-columns="`approvals:detail:${detail.type}`" class="approval-detail-assets-table"><thead><tr><th>图片</th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌</th><th>型号</th><th>设备序列号</th><th>所属/承租公司</th><th>所在位置</th><th>资产状态</th></tr></thead><tbody><tr v-for="asset in detailAssets" :key="asset.id"><td><img v-if="asset.image" :src="String(asset.image)" :alt="asset.name"><span v-else>-</span></td><td>{{ asset.id }}</td><td>{{ asset.category || '-' }}</td><td>{{ asset.name || '-' }}</td><td>{{ asset.brand || '-' }}</td><td>{{ asset.model || '-' }}</td><td>{{ asset.sn || '-' }}</td><td>{{ asset.ownerCompany || asset.company || '-' }}</td><td>{{ asset.location || '-' }}</td><td>{{ asset.status || '-' }}</td></tr><tr v-if="!detailAssets.length" class="empty-row"><td colspan="10">该申请未关联可读取的资产明细。</td></tr></tbody></table></div>
+        </section>
+        <section class="approval-detail-section">
+          <h3>审批信息</h3>
+          <div class="approval-detail-fields approval-process-fields"><div v-for="field in approvalProcessFields(detail)" :key="String(field[0])" class="approval-detail-field"><span>{{ field[0] }}</span><strong>{{ textValue(field[1]) }}</strong></div></div>
+        </section>
+      </template>
+      <template #footer><div class="approval-detail-footer"><el-button @click="detail = null">关闭</el-button><template v-if="detail && pendingStatuses.has(detail.status) && !isDecisionSyncing(detail)"><el-button type="primary" @click="openDecision(detail, 'approve')">同意</el-button><el-button type="danger" plain @click="openDecision(detail, 'reject')">驳回</el-button></template></div></template>
+    </el-drawer>
     <el-dialog v-model="decisionOpen" :title="decisionForm.decision === 'approve' ? '通过审批' : '拒绝审批'" width="min(520px, 94vw)" append-to-body><el-form label-position="top"><el-form-item label="处理意见"><el-input v-model="decisionForm.reason" type="textarea" :rows="4" maxlength="500" show-word-limit /></el-form-item></el-form><template #footer><el-button @click="decisionOpen = false">取消</el-button><el-button :type="decisionForm.decision === 'approve' ? 'primary' : 'danger'" :loading="submitting" @click="submitDecision">确认</el-button></template></el-dialog>
     <AssetRequestDialog v-model="requestOpen" :type="requestType" :preselected-asset-id="requestAssetId" @submitted="onRequestSubmitted" />
   </section>

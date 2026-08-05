@@ -36,7 +36,7 @@ class ApprovalIntegrationServiceTest {
         item.put("type", "资产领用");
         item.put("reason", "入职");
         var identity = new RequestIdentityService.Identity("李雷", "lilei", "member-1", "union-1", "tenant-1",
-            "研发部", Set.of("dept-1"), "employee", Set.of("asset:request:create"));
+            "研发部", "示例公司", Set.of("dept-1"), "employee", Set.of("asset:request:create"));
 
         var started = fixture.service.start(item, identity);
 

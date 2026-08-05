@@ -16,7 +16,7 @@ import AssetDisposalCreateDrawer from '../../disposals/components/AssetDisposalC
 
 type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return' | 'handover'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
-type ListColumnKey = 'status' | 'code' | 'name' | 'category' | 'phone' | 'email' | 'date' | 'location' | 'price' | 'purchase' | 'rent' | 'supplier' | 'owner' | 'usage'
+type ListColumnKey = 'status' | 'code' | 'name' | 'category' | 'brand' | 'model' | 'sn' | 'phone' | 'email' | 'date' | 'location' | 'price' | 'purchase' | 'rent' | 'supplier' | 'owner' | 'usage'
 type TableDensity = 'compact' | 'standard' | 'roomy'
 type ReceiveReturnTab = 'receive' | 'return' | 'employee' | 'handover'
 type BorrowReturnTab = 'borrow' | 'return'
@@ -156,6 +156,8 @@ const columnOptions: Array<{ key: ColumnKey; label: string }> = [
   { key: 'purchaseDate', label: '购置日期' }
 ]
 const defaultColumns: ColumnKey[] = ['id', 'name', 'category', 'status', 'owner', 'department', 'location', 'model', 'sn']
+const unassignedStatuses = new Set(['空闲', '闲置', '上架', '待验收'])
+const hasCurrentUsage = (item: AssetRecord): boolean => !unassignedStatuses.has(item.status)
 const storedColumns = localStorage.getItem(`asset-table-columns:${props.mode}`)
 const parseStoredColumns = (): ColumnKey[] => {
   try {
@@ -170,6 +172,8 @@ watch(visibleColumns, (value) => localStorage.setItem(`asset-table-columns:${pro
 const listColumns: Array<{ key: ListColumnKey; label: string; width: number }> = [
   { key: 'status', label: '资产状态', width: 86 }, { key: 'code', label: '资产编码', width: 112 },
   { key: 'name', label: '资产名称', width: 118 }, { key: 'category', label: '资产分类', width: 92 },
+  { key: 'brand', label: '品牌', width: 82 }, { key: 'model', label: '型号', width: 112 },
+  { key: 'sn', label: '设备序列号', width: 126 },
   { key: 'phone', label: '手机号', width: 92 }, { key: 'email', label: '电子邮箱', width: 118 },
   { key: 'date', label: '领用日期', width: 90 }, { key: 'location', label: '所在位置', width: 92 },
   { key: 'price', label: '金额', width: 64 }, { key: 'purchase', label: '购置方式', width: 82 },
@@ -462,7 +466,10 @@ const listCellValue = (item: AssetRecord, key: ListColumnKey): string | number =
   if (key === 'code') return item.id || '-'
   if (key === 'date') return String(item.receiveDate || '-')
   if (key === 'purchase') return String(item.purchaseMethod || '-')
-  if (key === 'usage') return `${item.status || '-'} / ${item.department || '-'}`
+  if (key === 'usage') {
+    const department = hasCurrentUsage(item) ? item.department : ''
+    return `${item.status || '-'} / ${department || '-'}`
+  }
   if (key === 'rent') return Number(item.rent || 0)
   const value = item[key]
   return value === undefined || value === null || value === '' ? '-' : String(value)
@@ -505,7 +512,7 @@ const advancedTab = ref<AdvancedPanelTab>('search')
 const advancedDrawerTitle = computed(() => advancedTab.value === 'columns' ? '自定义列' : '高级搜索')
 const receiveAdvancedLabels = computed(() => {
   if (receiveReturnTab.value === 'handover') return { status: '交接状态', order: '交接单号', date: '交接日期', person: '接收人', company: '接收公司', department: '接收部门', location: '接收后所在位置', note: '交接备注' }
-  if (receiveReturnTab.value === 'return') return { status: '退库状态', order: '退库单号', date: '退库日期', person: '领用人', company: '退库后使用公司', department: '退库后使用部门', location: '退库后所在位置', note: '退库备注' }
+  if (receiveReturnTab.value === 'return') return { status: '退库状态', order: '退库单号', date: '退库日期', person: '领用人', company: '原使用公司', department: '原使用部门', location: '退库后所在位置', note: '退库备注' }
   if (receiveReturnTab.value === 'employee') return { status: '申领状态', order: '申领单号', date: '申领日期', person: '申领人', company: '申领后使用公司', department: '申领后使用部门', location: '申领后所在位置', note: '申领备注' }
   return { status: '领用状态', order: '领用单号', date: '领用日期', person: '领用人', company: '领用后使用公司', department: '领用后使用部门', location: '领用后所在位置', note: '领用备注' }
 })
@@ -656,9 +663,11 @@ const needsPerson = computed(() => actionForm.action === 'receive' || actionForm
 const initializeActionForm = (items: AssetRecord[], action: AssetCommand): void => {
   const first = items[0]
   const clearsDepartment = action === 'receive' || action === 'borrow' || action === 'handover'
+  const clearsUsage = action === 'return' || action === 'borrow-return'
   Object.assign(actionForm, {
     action, assetIds: items.map((item) => item.id), person: '', personSubject: '',
-    company: first?.company || user.value?.company || '', department: clearsDepartment ? '' : first?.department || '',
+    company: clearsUsage ? '' : first?.company || user.value?.company || '',
+    department: clearsDepartment || clearsUsage ? '' : first?.department || '',
     operator: user.value?.name || '', handoverType: 'personal', location: first?.location || '',
     date: new Date().toISOString().slice(0, 10), expectedReturnDate: action === 'borrow' ? new Date().toISOString().slice(0, 10) : '',
     expectedReturnDates: action === 'borrow' ? Object.fromEntries(items.map((item) => [item.id, new Date().toISOString().slice(0, 10)])) : {}, note: ''
@@ -710,14 +719,15 @@ const submitAction = async (): Promise<void> => {
   try {
     const fields: Record<string, unknown> = {
       location: actionForm.location, date: actionForm.date, note: actionForm.note,
-      company: actionForm.company, department: actionForm.department, operator: actionForm.operator
+      operator: actionForm.operator
     }
-    if (actionForm.action === 'receive') Object.assign(fields, { receiver: actionForm.person, receiverSubject: actionForm.personSubject })
-    if (actionForm.action === 'borrow') Object.assign(fields, { borrower: actionForm.person, borrowerSubject: actionForm.personSubject, expectedReturnDate: actionForm.expectedReturnDate, expectedReturnDates: actionForm.expectedReturnDates })
+    if (actionForm.action === 'receive') Object.assign(fields, { receiver: actionForm.person, receiverSubject: actionForm.personSubject, company: actionForm.company, department: actionForm.department })
+    if (actionForm.action === 'borrow') Object.assign(fields, { borrower: actionForm.person, borrowerSubject: actionForm.personSubject, company: actionForm.company, department: actionForm.department, expectedReturnDate: actionForm.expectedReturnDate, expectedReturnDates: actionForm.expectedReturnDates })
     if (actionForm.action === 'handover') Object.assign(fields, {
       receiver: actionForm.handoverType === 'personal' ? actionForm.person : '公共区域',
       receiverSubject: actionForm.handoverType === 'personal' ? actionForm.personSubject : '',
-      handoverType: actionForm.handoverType === 'personal' ? '员工交接' : '公共交接'
+      handoverType: actionForm.handoverType === 'personal' ? '员工交接' : '公共交接',
+      company: actionForm.company, department: actionForm.department
     })
     await command(actionForm.action, actionForm.assetIds, fields)
     actionOpen.value = false
@@ -1209,9 +1219,9 @@ onMounted(() => void load())
           <div class="asset-detail-title-row"><h3>资产详情</h3><el-tag :type="statusType(detail.status)">{{ detail.status }}</el-tag></div>
           <section class="asset-detail-section"><h3>领用信息</h3><div class="asset-detail-form-grid">
             <label class="asset-detail-form-item"><span>人员姓名：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.owner === '未分配' ? '' : detail.owner) }}</strong></div></label>
-            <label class="asset-detail-form-item"><span>使用公司：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.company || detail.ownerCompany) }}</strong></div></label>
-            <label class="asset-detail-form-item"><span>使用部门：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.department) }}</strong></div></label>
-            <label class="asset-detail-form-item"><span>领用/借用日期：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.receiveDate || detail.borrowDate) }}</strong></div></label>
+            <label class="asset-detail-form-item"><span>使用公司：</span><div class="asset-detail-readonly"><strong>{{ detailText(hasCurrentUsage(detail) ? detail.company : '') }}</strong></div></label>
+            <label class="asset-detail-form-item"><span>使用部门：</span><div class="asset-detail-readonly"><strong>{{ detailText(hasCurrentUsage(detail) ? detail.department : '') }}</strong></div></label>
+            <label class="asset-detail-form-item"><span>领用/借用日期：</span><div class="asset-detail-readonly"><strong>{{ detailText(hasCurrentUsage(detail) ? detail.receiveDate || detail.borrowDate : '') }}</strong></div></label>
           </div></section>
           <section class="asset-detail-section"><h3>基本信息</h3><div class="asset-detail-form-grid">
             <label v-for="field in ([['资产编码', detail.id], ['资产名称', detail.name], ['资产分类', detail.category || detail.type], ['管理员', detail.custodian], ['品牌', detail.brand], ['型号', detail.model], ['所属/承租公司', detail.ownerCompany || detail.company], ['资产状况', detail.condition || detail.status], ['所在位置', detail.location], ['购置/起租日期', detail.purchaseDate], ['订单号', detail.orderNo], ['计量单位', detail.unit], ['购置方式', detail.purchaseMethod]] as Array<[string, unknown]>)" :key="field[0]" class="asset-detail-form-item"><span>{{ field[0] }}：</span><div class="asset-detail-readonly"><strong>{{ detailText(field[1]) }}</strong></div></label>
@@ -1356,8 +1366,6 @@ onMounted(() => void load())
             <el-form-item v-if="needsPerson" class="field" :style="actionForm.action === 'handover' ? { order: 1 } : undefined" :label="actionForm.action === 'handover' ? '接收人：' : actionForm.action === 'borrow' ? '借用人：' : '领用人'" required><el-autocomplete v-model="actionForm.person" clearable :fetch-suggestions="personSearch" :trigger-on-focus="false" placeholder="搜索姓名、工号、邮箱或手机号" @input="clearActionPersonIdentity" @select="selectPerson"><template #default="{ item }"><div class="standard-person-option"><strong>{{ item.name }}</strong><span>{{ item.account }} · {{ item.department }}</span></div></template></el-autocomplete></el-form-item>
             <el-form-item v-if="actionForm.action === 'receive' || actionForm.action === 'borrow' || (actionForm.action === 'handover' && actionForm.handoverType === 'personal')" class="field" :style="actionForm.action === 'handover' ? { order: 2 } : undefined" :label="actionForm.action === 'handover' ? '接收公司：' : '所属公司'" required><el-input v-model="actionForm.company" readonly /></el-form-item>
             <el-form-item v-if="actionForm.action === 'receive' || actionForm.action === 'borrow'" class="field" :label="actionForm.action === 'borrow' ? '所在部门：' : '所在部门'"><el-input v-model="actionForm.department" readonly /></el-form-item>
-            <el-form-item v-if="actionForm.action === 'return'" class="field" :style="{ order: 2 }" label="退库后使用公司" required><el-select v-model="actionForm.company" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-            <el-form-item v-if="actionForm.action === 'return'" class="field" :style="{ order: 3 }" label="退库后使用部门"><el-select v-model="actionForm.department" filterable allow-create placement="bottom-start"><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item v-if="actionForm.action === 'handover'" class="field" :style="{ order: 3 }" label="接收部门："><el-select v-model="actionForm.department" :disabled="actionForm.handoverType === 'personal' && !actionForm.personSubject" filterable allow-create placement="bottom-start" placeholder=""><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item class="field" :style="actionForm.action === 'return' ? { order: 1 } : actionForm.action === 'handover' ? { order: 5 } : undefined" :label="actionForm.action === 'return' ? '退库日期' : actionForm.action === 'borrow-return' ? '归还日期：' : actionForm.action === 'borrow' ? '借用日期：' : actionForm.action === 'handover' ? '交接日期：' : '领用日期'" required><el-date-picker v-model="actionForm.date" value-format="YYYY-MM-DD" /></el-form-item>
             <el-form-item v-if="actionForm.action === 'borrow'" class="field" label="预计归还日期："><el-date-picker v-model="actionForm.expectedReturnDate" value-format="YYYY-MM-DD" /></el-form-item>

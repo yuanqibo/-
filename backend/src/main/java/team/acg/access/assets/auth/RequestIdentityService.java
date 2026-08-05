@@ -107,7 +107,7 @@ public class RequestIdentityService {
         return value == null ? "" : value.toString().trim();
     }
 
-    public record Identity(String name, String account, String subject, String directorySubject, String tenantId, String department,
+    public record Identity(String name, String account, String subject, String directorySubject, String tenantId, String department, String company,
                            Set<String> departmentIds, String roleCode, Set<String> permissions) {
         static Identity from(Map<String, Object> user) {
             String name = text(user.get("name"));
@@ -120,7 +120,7 @@ public class RequestIdentityService {
             Set<String> departmentIds = user.get("departmentUnionIds") instanceof Collection<?> values
                 ? values.stream().map(Object::toString).collect(Collectors.toUnmodifiableSet()) : Set.of();
             return new Identity(name, account, text(user.get("subject")), text(user.get("directorySubject")), text(user.get("tenantId")),
-                text(user.get("department")), departmentIds, text(user.get("roleCode")), permissions);
+                text(user.get("department")), text(user.get("company")), departmentIds, text(user.get("roleCode")), permissions);
         }
 
         public boolean manager() {

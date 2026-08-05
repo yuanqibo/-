@@ -28,7 +28,7 @@ class AssetServiceScopeTest {
             mapper.readTree("{\"id\":\"A-4\",\"owner\":\"李雷\",\"ownerSubject\":\"\",\"department\":\"销售部\"}")));
 
         var identity = new RequestIdentityService.Identity(
-            "李雷", "lilei", "account-1", "user-1", "tenant-1", "销售部", Set.of("dept-sales"), "employee", Set.of("asset:item:view"));
+            "李雷", "lilei", "account-1", "user-1", "tenant-1", "销售部", "示例公司", Set.of("dept-sales"), "employee", Set.of("asset:item:view"));
 
         assertThat(service.listFor(identity)).extracting(item -> item.path("id").asText())
             .containsExactly("A-1");
@@ -40,7 +40,7 @@ class AssetServiceScopeTest {
             mapper.readTree("{\"id\":\"A-1\"}"), mapper.readTree("{\"id\":\"A-2\"}")));
 
         var identity = new RequestIdentityService.Identity(
-            "管理员", "admin", "account-admin", "user-admin", "tenant-1", "信息部", Set.of("dept-it"), "admin",
+            "管理员", "admin", "account-admin", "user-admin", "tenant-1", "信息部", "示例公司", Set.of("dept-it"), "admin",
             Set.of("asset:item:view", "asset:request:review"));
 
         assertThat(service.listFor(identity)).hasSize(2);
@@ -54,7 +54,7 @@ class AssetServiceScopeTest {
             mapper.readTree("{\"id\":\"A-3\",\"owner\":\"韩梅梅\",\"ownerSubject\":\"user-2\",\"status\":\"领用\"}")));
 
         var identity = new RequestIdentityService.Identity(
-            "李雷", "lilei", "account-1", "user-1", "tenant-1", "销售部", Set.of("dept-sales"), "employee",
+            "李雷", "lilei", "account-1", "user-1", "tenant-1", "销售部", "示例公司", Set.of("dept-sales"), "employee",
             Set.of("asset:item:view", "asset:request:create"));
 
         assertThat(service.listFor(identity)).extracting(item -> item.path("id").asText())

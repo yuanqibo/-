@@ -345,6 +345,8 @@ class SelfServiceRequestPolicyWebTest {
             .andExpect(jsonPath("$.item.status").value("待审批"))
             .andExpect(jsonPath("$.item.currentNode").value("管理员审批"))
             .andExpect(jsonPath("$.item.assetCount").value(1))
+            .andExpect(jsonPath("$.item.company").value("示例公司"))
+            .andExpect(jsonPath("$.item.department").value("销售部"))
             .andReturn().getResponse().getContentAsString();
 
         mvc.perform(get("/api/business-data"))
@@ -549,19 +551,19 @@ class SelfServiceRequestPolicyWebTest {
 
     private RequestIdentityService.Identity employee() {
         return new RequestIdentityService.Identity(
-            "李雷", "lilei", "account-1", "user-1", "tenant-1", "销售部", Set.of("dept-sales"), "employee",
+            "李雷", "lilei", "account-1", "user-1", "tenant-1", "销售部", "示例公司", Set.of("dept-sales"), "employee",
             Set.of("asset:item:view", "asset:request:view", "asset:request:create"));
     }
 
     private RequestIdentityService.Identity manager() {
         return new RequestIdentityService.Identity(
-            "管理员", "admin", "account-admin", "user-admin", "tenant-1", "信息部", Set.of("dept-it"), "admin",
+            "管理员", "admin", "account-admin", "user-admin", "tenant-1", "信息部", "示例公司", Set.of("dept-it"), "admin",
             Set.of("asset:item:view", "asset:request:create", "asset:request:review"));
     }
 
     private RequestIdentityService.Identity receiver() {
         return new RequestIdentityService.Identity(
-            "韩梅梅", "hanmeimei", "account-2", "user-2", "tenant-1", "研发部", Set.of("dept-rd"), "employee",
+            "韩梅梅", "hanmeimei", "account-2", "user-2", "tenant-1", "研发部", "示例公司", Set.of("dept-rd"), "employee",
             Set.of("asset:item:view", "asset:request:view", "asset:request:create"));
     }
 }

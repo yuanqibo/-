@@ -45,7 +45,7 @@ class StoreControllerLabelPermissionTest {
     @Test
     void assetViewersReceiveCatalogsWithoutAdministrativeSettings() {
         var viewer = new RequestIdentityService.Identity(
-            "资产查看人", "viewer", "account-1", "directory-1", "tenant-1", "研发部",
+            "资产查看人", "viewer", "account-1", "directory-1", "tenant-1", "研发部", "示例公司",
             Set.of("department-1"), "employee", Set.of("asset:item:view"));
         when(identity.current(request)).thenReturn(Optional.of(viewer));
         when(repository.findAll()).thenReturn(Map.of(

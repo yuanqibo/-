@@ -25,7 +25,7 @@ class AssetControllerIdentityTest {
         AssetPartyResolver parties = mock(AssetPartyResolver.class);
         HttpServletRequest request = mock(HttpServletRequest.class);
         var identity = new RequestIdentityService.Identity(
-            "李雷", "lilei", "account-union-1", "user-union-1", "tenant-1", "销售部",
+            "李雷", "lilei", "account-union-1", "user-union-1", "tenant-1", "销售部", "示例公司",
             Set.of("department-1"), "employee",
             Set.of("asset:item:view", "asset:receive_return:view", "asset:receive_return:sign"));
         when(identities.current(request)).thenReturn(Optional.of(identity));

@@ -151,6 +151,7 @@ public class BusinessDataController {
             item.put("applicantSubject", value.subject());
             item.put("applicantDirectorySubject", value.directorySubject());
             item.put("department", value.department());
+            item.put("company", value.company());
         });
         item.put("asset", command.asset().trim());
         item.put("reason", command.reason() == null ? "" : command.reason().trim());

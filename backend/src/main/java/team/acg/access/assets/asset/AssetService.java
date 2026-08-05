@@ -31,6 +31,10 @@ public class AssetService {
         "领用待签字", "借用待签字", "交接待签字", "处置中", "已处置", "已报废");
     private static final Set<String> UNASSIGNED = Set.of("空闲", "闲置", "上架", "待验收");
     private static final Set<String> ASSIGNABLE = Set.of("空闲");
+    private static final Set<String> CURRENT_USAGE_FIELDS = Set.of(
+        "ownerSubject", "company", "companyUnionId", "department", "departmentUnionId",
+        "employeeCode", "phone", "email", "receiveDate", "borrowDate", "expectedReturnDate",
+        "handoverDate", "handoverType");
     private final AssetRepository repository;
     private final ObjectMapper mapper;
     private final PortalReferenceCatalog referenceCatalog;
@@ -128,6 +132,7 @@ public class AssetService {
         Set<String> allowedCategories = referenceCatalog.categories();
         Set<String> allowedLocations = referenceCatalog.locations();
         Set<String> ids = new HashSet<>();
+        assets.forEach(this::normalizeUnassignedUsage);
         assets.forEach(asset -> validate(asset, existing.get(asset.path("id").asText()), ids,
             allowedCategories, allowedLocations));
         existing.forEach((id, asset) -> {
@@ -201,6 +206,7 @@ public class AssetService {
                 asset.set("lifecycle", lifecycle);
             }
             asset.put("status", normalizeReplacementStatus(requiredText(draft, "status", 32)));
+            normalizeUnassignedUsage(asset);
             replacement.add(asset);
         }
 
@@ -371,7 +377,7 @@ public class AssetService {
             case "return" -> {
                 requireStatus(asset, Set.of("领用"));
                 String location = requiredField(fields, "location");
-                copyText(fields, asset, "department", "departmentUnionId", "company", "companyUnionId", "note");
+                copyText(fields, asset, "note");
                 asset.put("location", location);
                 asset.put("owner", "未分配"); asset.put("ownerSubject", ""); asset.put("status", "空闲");
                 asset.put("receiveDate", ""); asset.put("returnDate", date(requiredField(fields, "date")));
@@ -705,8 +711,10 @@ public class AssetService {
         operation.put("partySubject", operationPartySubject(type, asset, previous));
         operation.put("previousParty", previous == null ? "" : previous.path("owner").asText(""));
         operation.put("previousPartySubject", previous == null ? "" : previous.path("ownerSubject").asText(""));
-        operation.put("company", asset.path("company").asText(""));
-        operation.put("department", asset.path("department").asText(""));
+        JsonNode usageSource = Set.of("RETURN", "BORROW_RETURN").contains(type) && previous != null
+            ? previous : asset;
+        operation.put("company", usageSource.path("company").asText(""));
+        operation.put("department", usageSource.path("department").asText(""));
         operation.put("location", asset.path("location").asText(""));
         operation.put("note", fields.path("note").asText(asset.path("note").asText("")));
         operation.put("expectedReturnDate", asset.path("expectedReturnDate").asText(""));
@@ -853,6 +861,14 @@ public class AssetService {
 
     private void requireStatus(ObjectNode asset, Set<String> allowed) {
         if (!allowed.contains(asset.path("status").asText())) throw new IllegalArgumentException("Asset is not eligible for this operation: " + asset.path("id").asText());
+    }
+
+    private void normalizeUnassignedUsage(JsonNode source) {
+        if (source == null || !source.isObject() || !UNASSIGNED.contains(source.path("status").asText())) return;
+        ObjectNode asset = (ObjectNode) source;
+        asset.put("owner", "未分配");
+        CURRENT_USAGE_FIELDS.forEach(field -> asset.put(field, ""));
+        clearReceiptSnapshot(asset);
     }
 
     private void snapshotReceipt(ObjectNode asset) {

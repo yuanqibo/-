@@ -74,20 +74,30 @@ class AssetControllerTest {
         mvc.perform(post("/api/assets/replace").contentType(MediaType.APPLICATION_JSON).content("""
             {"items":[
               {"id":"PC-KEEP","name":"更新资产","category":"电脑","status":"领用","owner":"未分配","brand":"新品牌"},
-              {"id":"PC-NEW","name":"","category":"电脑","status":"借用","owner":"未分配"}
+              {"id":"PC-NEW","name":"","category":"电脑","status":"借用","owner":"未分配"},
+              {"id":"PC-IDLE","name":"空闲资产","category":"电脑","status":"空闲","owner":"未分配",
+                "ownerSubject":"stale-user","company":"历史使用公司","companyUnionId":"stale-company",
+                "department":"历史使用部门","departmentUnionId":"stale-department","email":"stale@example.com",
+                "receiveDate":"2026-07-01","ownerCompany":"资产所属公司"}
             ]}
             """))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.count").value(2))
+            .andExpect(jsonPath("$.count").value(3))
             .andExpect(jsonPath("$.items[?(@.id == 'PC-KEEP')].status").value("领用"))
             .andExpect(jsonPath("$.items[?(@.id == 'PC-KEEP')].location").value("总部"))
             .andExpect(jsonPath("$.items[?(@.id == 'PC-KEEP')].supplier").value("原供应商"))
             .andExpect(jsonPath("$.items[?(@.id == 'PC-NEW')].status").value("借用中"))
-            .andExpect(jsonPath("$.items[?(@.id == 'PC-NEW')].name").value("电脑资产"));
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-NEW')].name").value("电脑资产"))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-IDLE')].ownerSubject").value(""))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-IDLE')].company").value(""))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-IDLE')].department").value(""))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-IDLE')].email").value(""))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-IDLE')].receiveDate").value(""))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-IDLE')].ownerCompany").value("资产所属公司"));
 
         mvc.perform(get("/api/assets"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.items.length()").value(3))
             .andExpect(jsonPath("$.items[?(@.id == 'PC-REMOVE')]").isEmpty());
     }
 
@@ -110,6 +120,23 @@ class AssetControllerTest {
             {"assetIds":["PC-CMD"],"fields":{"borrower":"韩梅梅","location":"总部","date":"2026-07-10","expectedReturnDate":"2026-07-20"}}
             """))
             .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/api/assets/commands/return").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-CMD"],"fields":{"company":"不应保留的公司","department":"不应保留的部门",
+              "location":"总部","date":"2026-07-11","operator":"管理员"}}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("空闲"))
+            .andExpect(jsonPath("$.items[0].owner").value("未分配"))
+            .andExpect(jsonPath("$.items[0].ownerSubject").value(""))
+            .andExpect(jsonPath("$.items[0].company").value(""))
+            .andExpect(jsonPath("$.items[0].department").value(""))
+            .andExpect(jsonPath("$.items[0].receiveDate").value(""));
+
+        mvc.perform(get("/api/asset-operations").param("type", "RETURN"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].company").value("默认公司"))
+            .andExpect(jsonPath("$.items[0].department").value("研发部"));
     }
 
     @Test
@@ -165,10 +192,15 @@ class AssetControllerTest {
     @Test
     void createsAssetWithoutTrustingClientStatusOrLifecycle() throws Exception {
         mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
-            {"item":{"id":"PC-NEW","name":"新电脑","category":"电脑","location":"总部","owner":"","status":"已报废","lifecycle":[["x","伪造","伪造"]]}}
+            {"item":{"id":"PC-NEW","name":"新电脑","category":"电脑","location":"总部","owner":"",
+              "company":"历史使用公司","department":"历史使用部门","receiveDate":"2026-07-01",
+              "status":"已报废","lifecycle":[["x","伪造","伪造"]]}}
             """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.item.status").value("空闲"))
+            .andExpect(jsonPath("$.item.company").value(""))
+            .andExpect(jsonPath("$.item.department").value(""))
+            .andExpect(jsonPath("$.item.receiveDate").value(""))
             .andExpect(jsonPath("$.item.lifecycle[0][1]").value("资产入库"));
     }
 

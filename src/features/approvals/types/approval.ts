@@ -3,6 +3,9 @@ export type ApprovalRecord = {
   type: string
   applicant: string
   applicantSubject?: string
+  company?: string
+  department?: string
+  operator?: string
   asset: string
   assetIds?: string[]
   assetCount?: number
@@ -16,6 +19,8 @@ export type ApprovalRecord = {
   templateCode?: string
   approvalStatus?: string
   approvalSyncedAt?: string
+  approvalDate?: string
+  decisionAt?: string
   decisionSubmitted?: ApprovalDecision
   decisionSubmittedAt?: string
   decisionReason?: string

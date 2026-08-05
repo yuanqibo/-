@@ -28,14 +28,14 @@ const assets = Array.from({ length: 45 }, (_, index) => ({
   status: index % 5 === 0 ? '领用' : index % 7 === 0 ? '借用中' : '闲置',
   category: index % 2 === 0 ? 'IT设备' : '显示器',
   type: '设备', owner: index % 5 === 0 ? '张三' : '未分配', ownerSubject: index % 5 === 0 ? 'sub-1' : '',
-  department: index % 5 === 0 ? '研发部' : '', company: '示例公司', location: '杭州仓库', custodian: '管理员',
+  department: index % 5 === 0 ? '研发部' : index === 1 ? '历史使用部门' : '', company: '示例公司', location: '杭州仓库', custodian: '管理员',
   model: `M-${index + 1}`, brand: '测试品牌', sn: `SN-${index + 1}`, assetTag: '', supplier: '测试供应商',
   price: 5000 + index, purchaseDate: '2026-07-01', warrantyDate: '2029-07-01', note: '', lifecycle: [['2026-07-01', '资产入库', '管理员']]
 }))
 
 const requests = [
-  { id: 'REQ-001', type: '资产领用', applicant: '张三', asset: '测试笔记本', reason: '项目需要', status: '审批中', system: 'ECP审批', date: '2026-07-18', currentNode: '直属主管' },
-  { id: 'REQ-002', type: '资产借用', applicant: '李四', asset: '测试显示器', reason: '', status: '已完成', system: 'ECP审批', date: '2026-07-17', currentNode: '已归档' }
+  { id: 'REQ-001', type: '资产领用', applicant: '张三', company: '示例公司', department: '研发部', operator: '管理员', asset: '测试笔记本', assetIds: ['AST-0001'], assetCount: 1, reason: '项目需要', status: '审批中', system: 'ECP审批', date: '2026-07-18', receiveDate: '2026-07-18', receiveLocation: '杭州仓库', approvalNo: 'APP-001', currentNode: '直属主管' },
+  { id: 'REQ-002', type: '资产借用', applicant: '李四', company: '示例公司', department: '综合部', operator: '管理员', asset: '测试显示器', assetIds: ['AST-0002'], assetCount: 1, reason: '', status: '已完成', system: 'ECP审批', date: '2026-07-17', borrowDate: '2026-07-17', borrowLocation: '会议室', approvalNo: 'APP-002', currentNode: '已归档' }
 ]
 
 const assetOperations = [
