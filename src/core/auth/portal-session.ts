@@ -63,12 +63,16 @@ const isMenuItemAllowed = (item: Partial<MenuTreeNode>): boolean => {
 }
 
 const loadAccessiblePortalMenu = async (): Promise<PortalMenuItem[]> => {
-  const tree = await ecp.auth?.menu.getAccessibleNavTree().catch((error) => {
-    console.warn('[asset-portal] ECP accessible menu unavailable', error)
+  const isAppAdmin = state.user?.roleCode === 'super_admin'
+  const loadTree = isAppAdmin
+    ? ecp.auth?.menu.getNavTree
+    : ecp.auth?.menu.getAccessibleNavTree
+  const tree = await loadTree?.().catch((error) => {
+    console.warn('[asset-portal] ECP menu unavailable', error)
     return []
   }) ?? []
   const accessibleMenu = flattenMenuTree(tree)
-    .filter(isMenuItemAllowed)
+    .filter((item) => isAppAdmin || isMenuItemAllowed(item))
     .map(toPortalMenuItem)
     .filter((item): item is PortalMenuItem => Boolean(item))
     .sort((left, right) => left.order - right.order)
