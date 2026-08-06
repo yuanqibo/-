@@ -3,6 +3,7 @@ import { parse } from 'yaml'
 
 const projectRoot = new URL('..', import.meta.url)
 const authzDir = new URL('authz/', projectRoot)
+const pomPath = new URL('pom.xml', projectRoot)
 const requiredFiles = ['features.yaml', 'menus.yaml', 'permissions.yaml', 'roles.yaml', 'workspace.yaml']
 const errors = []
 const warnings = []
@@ -19,6 +20,13 @@ const asArray = (value, path) => {
 }
 
 const actualFiles = (await readdir(authzDir)).filter((name) => /\.(ya?ml|json)$/i.test(name)).sort()
+const pom = await readFile(pomPath, 'utf8')
+if (!/<vite\.ecp\.config-source-mode>local<\/vite\.ecp\.config-source-mode>/.test(pom)) {
+  fail(
+    'PRODUCTION_MENU_SOURCE',
+    'pom.xml must build with VITE_ECP_AUTH_CONFIG_SOURCE_MODE=local so production uses authz/menus.yaml as the menu source'
+  )
+}
 for (const fileName of actualFiles) {
   if (!requiredFiles.includes(fileName)) {
     fail('UNSUPPORTED_AUTHZ_FILE', `authz/${fileName} is not part of the five-file source of truth`)

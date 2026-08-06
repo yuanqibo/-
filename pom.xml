@@ -32,7 +32,7 @@
     <ecp-sdk-java.version>1.0.3-release</ecp-sdk-java.version>
     <vite.ecp.app-code>WLY5YG</vite.ecp.app-code>
     <vite.ecp.api-base-url>/api/v1</vite.ecp.api-base-url>
-    <vite.ecp.config-source-mode>remote-first</vite.ecp.config-source-mode>
+    <vite.ecp.config-source-mode>local</vite.ecp.config-source-mode>
   </properties>
 
   <dependencyManagement>
