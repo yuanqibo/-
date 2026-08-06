@@ -1,7 +1,7 @@
 import { readonly, reactive, toRefs } from 'vue'
 import { useRouter, type Router } from 'vue-router'
 import type { AuthzSessionContext, MenuTreeNode } from '@acg/ecp-sdk'
-import { ecp, waitForEcpReady } from '../../ecp'
+import { ecp, waitForEcpReady, withLocalAppAdminGrants } from '../../ecp'
 import type { PortalMenuItem, PortalUser } from './portal-context'
 import { resolvePortalRoleCode } from './portal-role'
 import { revokeEcpSession } from './ecp-session-logout'
@@ -145,7 +145,7 @@ const installPortalContext = (router: Router): void => {
 const applySession = async (session: AuthzSessionContext, router: Router): Promise<void> => {
   const trustedIdentity = await loadTrustedPortalIdentity()
   const trustedSession = applyTrustedPortalIdentity(session, trustedIdentity)
-  const augmentedSession = primeEmployeeSelfServiceSession(trustedSession)
+  const augmentedSession = withLocalAppAdminGrants(primeEmployeeSelfServiceSession(trustedSession))
   state.session = augmentedSession
   state.user = buildPortalUser(augmentedSession)
   state.menuItems = await loadAccessiblePortalMenu()

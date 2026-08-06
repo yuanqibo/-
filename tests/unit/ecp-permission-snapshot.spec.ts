@@ -34,9 +34,35 @@ describe('ECP permission snapshot loading', () => {
 
     expect(sdkMocks.initAuthzSdk).toHaveBeenCalledWith('WLY5YG')
     expect(sdkMocks.loadPermissionSnapshot).toHaveBeenCalledWith(true)
-    expect(result?.permissionCodes).toEqual(expect.arrayContaining(snapshot.permissionCodes))
-    expect(result?.featureCodes).toEqual(expect.arrayContaining(snapshot.featureCodes || []))
+    expect(result?.permissionCodes).toEqual(expect.arrayContaining([
+      ...snapshot.permissionCodes,
+      'asset:disposal:view',
+      'asset:disposal:create',
+      'asset:disposal:complete',
+      'asset:disposal:cancel',
+      'asset:disposal:export'
+    ]))
+    expect(result?.featureCodes).toEqual(expect.arrayContaining([
+      ...(snapshot.featureCodes || []),
+      'PORTAL_ASSETS',
+      'APP_WORKSPACE'
+    ]))
     expect(result?.roleCodes).toEqual(snapshot.roleCodes)
     expect(result?.source).toBe(snapshot.source)
+  })
+
+  it('does not expand permissions for non-administrator snapshots', async () => {
+    sdkMocks.loadPermissionSnapshot.mockResolvedValue({
+      permissionCodes: ['asset:item:view'],
+      featureCodes: ['PORTAL_ASSETS'],
+      roleCodes: ['VIEWER'],
+      source: 'REMOTE'
+    } as AuthzPermissionSnapshot)
+
+    const { loadPortalPermissionSnapshot } = await import('../../src/ecp')
+    const result = await loadPortalPermissionSnapshot('WLY5YG')
+
+    expect(result?.permissionCodes).not.toContain('asset:disposal:view')
+    expect(result?.permissionCodes).toEqual(expect.arrayContaining(['asset:item:view']))
   })
 })

@@ -3,7 +3,7 @@ import { initAuthzSdk } from '@acg/ecp-auth'
 import { createBundleFromGlob, validateAuthzBundle } from '@acg/ecp-auth-vue'
 import type { App as VueApp } from 'vue'
 import type { Router } from 'vue-router'
-import type { EcpAuthConfigSourceMode } from '@acg/ecp-sdk'
+import type { AuthzPermissionSnapshot, EcpAuthConfigSourceMode } from '@acg/ecp-sdk'
 import { formatPermissionDisplayName } from './authz/permission-display'
 import {
   primeEmployeeSelfServiceSession,
@@ -23,9 +23,47 @@ const authzBundle = createBundleFromGlob({
 
 export const localAuthzValidationReport = validateAuthzBundle(authzBundle)
 
+type PermissionBearingContext = {
+  permissionCodes: string[]
+  featureCodes?: string[]
+  roleCodes?: string[]
+  roles?: Array<{ code?: string; type?: string }>
+}
+
+const localAppAdminRole = authzBundle.roles?.roles?.find((role) =>
+  String(role.code || '').trim().toUpperCase() === 'APP_ADMIN'
+)
+const localAppAdminPermissions = localAppAdminRole?.permissions || []
+const localAppAdminFeatures = localAppAdminRole?.features || []
+
+const mergeCodes = (left: string[] | undefined, right: string[] | undefined): string[] =>
+  Array.from(new Set([...(left || []), ...(right || [])].map((code) => String(code || '').trim()).filter(Boolean)))
+
+const hasAppAdminIdentity = (context: PermissionBearingContext): boolean => {
+  const roleValues = [
+    ...(context.roleCodes || []),
+    ...(context.roles || []).flatMap((role) => [role.code, role.type])
+  ].map((value) => String(value || '').trim().toUpperCase())
+  if (roleValues.includes('APP_ADMIN')) return true
+
+  const permissions = new Set(context.permissionCodes || [])
+  return permissions.has('authz:application:edit') && permissions.has('authz:app_role:assign')
+}
+
+export const withLocalAppAdminGrants = <T extends PermissionBearingContext>(context: T): T => {
+  if (!hasAppAdminIdentity(context)) return context
+  return {
+    ...context,
+    permissionCodes: mergeCodes(context.permissionCodes, localAppAdminPermissions),
+    featureCodes: mergeCodes(context.featureCodes, localAppAdminFeatures)
+  }
+}
+
 export const loadPortalPermissionSnapshot = async (appCode: string) => {
   const snapshot = await initAuthzSdk(appCode).loadPermissionSnapshot(true)
-  return snapshot ? withEmployeeSelfServiceSnapshot(snapshot) : null
+  return snapshot
+    ? withLocalAppAdminGrants(withEmployeeSelfServiceSnapshot(snapshot) as AuthzPermissionSnapshot)
+    : null
 }
 
 authzBundle.catalog?.resources?.forEach((resource) => {
