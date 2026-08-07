@@ -9,7 +9,7 @@ ENV VITE_ECP_APP_CODE=$VITE_ECP_APP_CODE \
 COPY package.json package-lock.json .npmrc ./
 COPY vendor/ecp-sdk ./vendor/ecp-sdk
 RUN npm ci
-COPY index.html tsconfig.json vite.config.ts ./
+COPY index.html tsconfig.json vite.config.ts pom.xml ./
 COPY authz ./authz
 COPY public ./public
 COPY src ./src
