@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { Download, Refresh, RefreshLeft, Search, Switch as SwitchIcon, TakeawayBox, User } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { usePortalSession } from '../../../core/auth/portal-session'
@@ -18,6 +19,8 @@ const { isEmployeeTerminal } = useTerminalMode()
 const route = useRoute()
 const query = ref('')
 const tab = ref('全部')
+const employeeRequestPage = ref(1)
+const employeeRequestPageSize = ref(10)
 const detail = ref<ApprovalRecord | null>(null)
 const decisionOpen = ref(false)
 const requestOpen = ref(false)
@@ -71,6 +74,11 @@ const filtered = computed(() => rows.value.filter((item) => {
   const keyword = query.value.trim().toLowerCase()
   return matchesTab(item, tab.value) && (!keyword || [item.id, item.type, item.applicant, item.asset, item.status].some((value) => String(value || '').toLowerCase().includes(keyword)))
 }))
+const employeeRequestPageCount = computed(() => Math.max(1, Math.ceil(filtered.value.length / employeeRequestPageSize.value)))
+const pagedEmployeeRequests = computed(() => {
+  const start = (employeeRequestPage.value - 1) * employeeRequestPageSize.value
+  return filtered.value.slice(start, start + employeeRequestPageSize.value)
+})
 const statusType = (status: string): 'success' | 'warning' | 'danger' | 'info' => approvedStatuses.has(status) ? 'success' : pendingStatuses.has(status) ? 'warning' : rejectedStatuses.has(status) ? 'danger' : 'info'
 const isDecisionSyncing = (item: ApprovalRecord): boolean => Boolean(item.decisionSubmitted) && pendingStatuses.has(item.status)
 type ApprovalAssetRow = Partial<AssetRecord> & { id: string; name: string }
@@ -139,6 +147,7 @@ const openRequest = (type = '资产领用'): void => {
 }
 const onRequestSubmitted = (): void => {
   tab.value = '全部'
+  employeeRequestPage.value = 1
 }
 const openRequestFromRoute = (): void => {
   if (route.path !== '/requests' || !isEmployeeTerminal.value) return
@@ -172,7 +181,14 @@ watch(() => route.fullPath, () => {
   openRequestFromRoute()
   focusManagerRequestFromRoute()
 })
-watch(canReview, () => { tab.value = '全部' })
+watch([tab, query, employeeRequestPageSize], () => { employeeRequestPage.value = 1 })
+watch(filtered, () => {
+  employeeRequestPage.value = Math.min(employeeRequestPage.value, employeeRequestPageCount.value)
+})
+watch(canReview, () => {
+  tab.value = '全部'
+  employeeRequestPage.value = 1
+})
 </script>
 
 <template>
@@ -216,7 +232,69 @@ watch(canReview, () => { tab.value = '全部' })
       </section>
     </template>
     <template v-else>
-      <section class="employee-request-page"><section class="employee-request-head"><h1 class="employee-request-title">员工申请</h1><div v-if="employeeRequestActions.length" class="employee-request-actions-grid"><button v-for="action in employeeRequestActions" :key="action.type" class="employee-request-action" type="button" @click="openRequest(action.type)"><span class="employee-request-action-icon" :class="action.tone" aria-hidden="true"><component :is="action.icon" /></span><span class="employee-request-action-label">{{ action.label }}</span></button></div><div v-else class="employee-request-actions-empty">当前未开放自助申请</div></section><section class="employee-request-history"><div class="employee-request-list-head"><div class="employee-request-tabs" role="tablist"><button v-for="item in tabs" :key="item" :class="{ active: tab === item }" type="button" @click="tab = item">{{ item }} ({{ tabCount(item) }})</button></div><button class="employee-request-advanced" type="button">高级搜索</button></div><div class="employee-request-card-list"><article v-for="item in filtered" :key="item.id" class="employee-request-card"><div class="employee-request-card-main"><div class="employee-request-card-title"><span class="employee-request-status-pill" :class="statusType(item.status)">{{ displayStatus(item.status) }}</span><strong>{{ displayRequestType(item) }}</strong></div><div class="employee-request-card-fields"><div><span>单据编号</span><strong>{{ item.id }}</strong></div><div><span>发起时间</span><strong>{{ item.date || '-' }}</strong></div><div><span>审批时间</span><strong>{{ pendingStatuses.has(item.status) ? '-' : String(item.approvalDate || item.date || '-') }}</strong></div><div><span>资产数量</span><strong>{{ item.assetCount || (item.asset ? 1 : '-') }}</strong></div></div></div><button class="btn employee-request-detail" type="button" @click="detail = item">查看详情</button></article><div v-if="!filtered.length" class="employee-request-empty">当前分类下还没有可展示的申请。</div></div></section></section>
+      <section class="employee-request-page">
+        <section class="employee-request-head">
+          <h1 class="employee-request-title">员工申请</h1>
+          <div v-if="employeeRequestActions.length" class="employee-request-actions-grid">
+            <button v-for="action in employeeRequestActions" :key="action.type" class="employee-request-action" type="button" @click="openRequest(action.type)">
+              <span class="employee-request-action-icon" :class="action.tone" aria-hidden="true"><component :is="action.icon" /></span>
+              <span class="employee-request-action-label">{{ action.label }}</span>
+            </button>
+          </div>
+          <div v-else class="employee-request-actions-empty">当前未开放自助申请</div>
+        </section>
+        <section class="employee-request-history">
+          <div class="employee-request-list-head">
+            <div class="employee-request-tabs" role="tablist">
+              <button v-for="item in tabs" :key="item" :class="{ active: tab === item }" type="button" @click="tab = item">{{ item }} ({{ tabCount(item) }})</button>
+            </div>
+            <button class="employee-request-advanced" type="button">高级搜索</button>
+          </div>
+          <div class="employee-request-card-list">
+            <article v-for="item in pagedEmployeeRequests" :key="item.id" class="employee-request-card">
+              <div class="employee-request-card-main">
+                <div class="employee-request-card-title">
+                  <span class="employee-request-status-pill" :class="statusType(item.status)">{{ displayStatus(item.status) }}</span>
+                  <strong>{{ displayRequestType(item) }}</strong>
+                </div>
+                <div class="employee-request-card-fields">
+                  <div><span>单据编号</span><strong>{{ item.id }}</strong></div>
+                  <div><span>发起时间</span><strong>{{ item.date || '-' }}</strong></div>
+                  <div><span>审批时间</span><strong>{{ pendingStatuses.has(item.status) ? '-' : String(item.approvalDate || item.date || '-') }}</strong></div>
+                  <div><span>资产数量</span><strong>{{ item.assetCount || (item.asset ? 1 : '-') }}</strong></div>
+                </div>
+              </div>
+              <button class="btn employee-request-detail" type="button" @click="detail = item">查看详情</button>
+            </article>
+            <div v-if="!filtered.length" class="employee-request-empty">当前分类下还没有可展示的申请。</div>
+          </div>
+          <el-config-provider :locale="zhCn">
+            <div v-if="filtered.length" class="employee-request-pagination">
+              <el-pagination
+                v-model:current-page="employeeRequestPage"
+                class="employee-request-pagination-controls"
+                :pager-count="5"
+                :total="filtered.length"
+                :page-size="employeeRequestPageSize"
+                layout="total, prev, pager, next"
+              />
+              <el-select
+                v-model="employeeRequestPageSize"
+                class="employee-request-page-size-select asset-page-size-select"
+                aria-label="员工申请每页条数"
+                placement="top-start"
+                :fallback-placements="['top-start']"
+                popper-class="portal-upward-select-popper"
+              >
+                <el-option label="10 条/页" :value="10" />
+                <el-option label="20 条/页" :value="20" />
+                <el-option label="50 条/页" :value="50" />
+                <el-option label="100 条/页" :value="100" />
+              </el-select>
+            </div>
+          </el-config-provider>
+        </section>
+      </section>
     </template>
     <el-alert v-if="state.errorMessage" type="error" :title="state.errorMessage" show-icon :closable="false" />
 

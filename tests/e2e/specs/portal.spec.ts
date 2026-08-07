@@ -647,6 +647,56 @@ test.describe('登录后门户质量回归', () => {
     }
   })
 
+  test('员工申请列表支持翻页并可选择每页数量', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '员工申请分页完整交互在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    const approvals = Array.from({ length: 25 }, (_, index) => ({
+      id: `REQ-PAGE-${String(index + 1).padStart(2, '0')}`,
+      type: index % 2 === 0 ? '资产领用' : '资产借用',
+      applicant: '测试管理员',
+      company: '示例公司',
+      department: '研发部',
+      asset: `测试资产 ${index + 1}`,
+      assetCount: 1,
+      status: index % 3 === 0 ? '审批中' : '已完成',
+      date: '2026-08-07'
+    }))
+    await openApp(page, '/requests', { approvals })
+
+    const cards = page.locator('.employee-request-card')
+    const pagination = page.locator('.employee-request-pagination')
+    await expect(cards).toHaveCount(10)
+    await expect(cards.first()).toContainText('REQ-PAGE-01')
+    await expect(pagination).toBeVisible()
+    await expect(pagination).toContainText('共 25 条')
+    const listLayout = await page.locator('.employee-request-card-list').evaluate((element) => {
+      const pagination = element.nextElementSibling?.querySelector('.employee-request-pagination') || element.nextElementSibling
+      const paginationRect = pagination?.getBoundingClientRect()
+      return {
+        canScroll: element.scrollHeight > element.clientHeight,
+        overflowY: getComputedStyle(element).overflowY,
+        paginationBottom: paginationRect?.bottom || 0,
+        viewportHeight: window.innerHeight
+      }
+    })
+    expect(listLayout.canScroll, JSON.stringify(listLayout)).toBe(true)
+    expect(listLayout.overflowY, JSON.stringify(listLayout)).toBe('auto')
+    expect(listLayout.paginationBottom, JSON.stringify(listLayout)).toBeLessThanOrEqual(listLayout.viewportHeight + 1)
+
+    await pagination.locator('.btn-next').click()
+    await expect(cards).toHaveCount(10)
+    await expect(cards.first()).toContainText('REQ-PAGE-11')
+
+    const pageSize = pagination.locator('.el-select')
+    await pageSize.click()
+    for (const label of ['10 条/页', '20 条/页', '50 条/页', '100 条/页']) {
+      await expect(page.getByRole('option', { name: label, exact: true })).toBeVisible()
+    }
+    await page.getByRole('option', { name: '20 条/页', exact: true }).click()
+    await expect(cards).toHaveCount(20)
+    await expect(cards.first()).toContainText('REQ-PAGE-01')
+  })
+
   test('自助退还按配置展示并支持名下领用资产批量申请', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '批量退还完整流程在桌面项目执行')
     await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))

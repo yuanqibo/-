@@ -5,6 +5,8 @@ import { configureAuthzBrowserRuntime } from '@acg/ecp-auth'
 
 export type { AuthzSessionContext } from '@acg/ecp-sdk'
 
+export const withLocalAppAdminGrants = <T extends { permissionCodes: string[] }>(context: T): T => context
+
 type AccessInput = { permissions?: string[]; features?: string[] }
 type TestMenu = { id: string; parentId?: string; title: string; path: string; pageKey: string; order: number; permissionCodes?: string[]; featureCodes?: string[]; permissionMode?: 'ANY' | 'ALL'; children?: TestMenu[] }
 
