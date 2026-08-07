@@ -167,7 +167,7 @@ public class BusinessDataController {
         if (selfServiceRequest) {
             EcpRequestOperatorService requestOperatorService = requestOperators.getIfAvailable();
             List<EcpRequestOperatorService.RequestOperator> assignedOperators = requestOperatorService == null
-                ? List.of() : requestOperatorService.list();
+                ? List.of() : requestOperatorService.list(request);
             String operatorNames = assignedOperators.stream().map(EcpRequestOperatorService.RequestOperator::name)
                 .filter(value -> value != null && !value.isBlank()).distinct()
                 .collect(java.util.stream.Collectors.joining("、"));

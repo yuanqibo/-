@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -24,6 +26,7 @@ import team.acg.access.assets.auth.RequestIdentityService;
 
 @RestController
 public class EcpProxyController {
+    private static final Logger log = LoggerFactory.getLogger(EcpProxyController.class);
     private static final int MAX_REQUEST_BODY_BYTES = 64 * 1024;
     private static final Map<String, Set<String>> ALLOWED_ENDPOINTS = Map.of(
         "/public/session", Set.of("GET"),
@@ -47,12 +50,14 @@ public class EcpProxyController {
     private final String appCode;
     private final ObjectProvider<SessionTokenResolver> sessionTokenResolverProvider;
     private final ObjectProvider<EcpIdentityService> identityCacheProvider;
+    private final ObjectProvider<EcpRequestOperatorService> requestOperatorsProvider;
     private final RequestIdentityService identityService;
 
     public EcpProxyController(@Value("${asset-portal.ecp-api-base-url}") String baseUrl,
                               @Value("${ecp.sdk.app-code}") String appCode,
                               ObjectProvider<SessionTokenResolver> sessionTokenResolverProvider,
                               ObjectProvider<EcpIdentityService> identityCacheProvider,
+                              ObjectProvider<EcpRequestOperatorService> requestOperatorsProvider,
                               RequestIdentityService identityService) {
         this.baseUrl = baseUrl.replaceAll("/$", "");
         if (!EcpSecurityPolicy.APP_CODE.equals(appCode)) {
@@ -61,6 +66,7 @@ public class EcpProxyController {
         this.appCode = appCode;
         this.sessionTokenResolverProvider = sessionTokenResolverProvider;
         this.identityCacheProvider = identityCacheProvider;
+        this.requestOperatorsProvider = requestOperatorsProvider;
         this.identityService = identityService;
     }
 
@@ -103,6 +109,7 @@ public class EcpProxyController {
         HttpResponse<byte[]> upstream = client.send(request.build(), HttpResponse.BodyHandlers.ofByteArray());
         if (roleMutation && upstream.statusCode() >= 200 && upstream.statusCode() < 300) {
             invalidateIdentityCache();
+            refreshRequestOperators(roleMutationSessionToken);
         }
         HttpHeaders headers = new HttpHeaders();
         upstream.headers().map().forEach((name, values) -> {
@@ -158,6 +165,16 @@ public class EcpProxyController {
     private void invalidateIdentityCache() {
         EcpIdentityService identityCache = identityCacheProvider.getIfAvailable();
         if (identityCache != null) identityCache.invalidateAll();
+    }
+
+    private void refreshRequestOperators(String sessionToken) {
+        EcpRequestOperatorService requestOperators = requestOperatorsProvider.getIfAvailable();
+        if (requestOperators == null) return;
+        try {
+            requestOperators.refresh(sessionToken);
+        } catch (RuntimeException error) {
+            log.warn("Role mutation succeeded, but the request operator snapshot could not be refreshed", error);
+        }
     }
 
     private String forwardedPort(HttpServletRequest request) {

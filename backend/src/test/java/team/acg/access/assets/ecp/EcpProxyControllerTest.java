@@ -31,6 +31,7 @@ class EcpProxyControllerTest {
     private EcpProxyController controller;
     private RequestIdentityService identityService;
     private EcpIdentityService identityCache;
+    private EcpRequestOperatorService requestOperators;
     private SessionTokenResolver sessionTokenResolver;
     private final AtomicReference<String> forwardedAuthorization = new AtomicReference<>();
     private final AtomicReference<String> forwardedTenantId = new AtomicReference<>();
@@ -70,17 +71,21 @@ class EcpProxyControllerTest {
 
         ObjectProvider<SessionTokenResolver> sessionTokenResolverProvider = mock(ObjectProvider.class);
         ObjectProvider<EcpIdentityService> identityCacheProvider = mock(ObjectProvider.class);
+        ObjectProvider<EcpRequestOperatorService> requestOperatorsProvider = mock(ObjectProvider.class);
         identityCache = mock(EcpIdentityService.class);
+        requestOperators = mock(EcpRequestOperatorService.class);
         identityService = mock(RequestIdentityService.class);
         sessionTokenResolver = mock(SessionTokenResolver.class);
         when(sessionTokenResolverProvider.getIfAvailable()).thenReturn(sessionTokenResolver);
         when(sessionTokenResolver.resolveSessionToken(any())).thenReturn("Bearer session-token");
         when(identityCacheProvider.getIfAvailable()).thenReturn(identityCache);
+        when(requestOperatorsProvider.getIfAvailable()).thenReturn(requestOperators);
         controller = new EcpProxyController(
             "http://127.0.0.1:" + upstream.getAddress().getPort(),
             "WLY5YG",
             sessionTokenResolverProvider,
             identityCacheProvider,
+            requestOperatorsProvider,
             identityService);
     }
 
@@ -167,6 +172,7 @@ class EcpProxyControllerTest {
         assertThat(forwardedBody.get()).contains("account:user-1", "appRoleIds");
         verify(identityService).requirePermission(request, "authz:app_role:assign");
         verify(identityCache).invalidateAll();
+        verify(requestOperators).refresh("session-token");
     }
 
     @Test
@@ -184,6 +190,7 @@ class EcpProxyControllerTest {
         assertThat(forwardedBody.get()).contains("account:user-1", "appRoleId");
         verify(identityService).requirePermission(request, "authz:app_role:assign");
         verify(identityCache).invalidateAll();
+        verify(requestOperators).refresh("session-token");
     }
 
     @Test
@@ -201,6 +208,7 @@ class EcpProxyControllerTest {
         assertThat(forwardedBody.get()).contains("assignmentIds", "11");
         verify(identityService).requirePermission(request, "authz:app_role:assign");
         verify(identityCache).invalidateAll();
+        verify(requestOperators).refresh("session-token");
     }
 
     @Test
@@ -218,6 +226,7 @@ class EcpProxyControllerTest {
         assertThat(forwardedPath.get()).isNull();
         verify(identityService).requirePermission(request, "authz:app_role:assign");
         verify(identityCache, never()).invalidateAll();
+        verify(requestOperators, never()).refresh(any());
     }
 
     @Test

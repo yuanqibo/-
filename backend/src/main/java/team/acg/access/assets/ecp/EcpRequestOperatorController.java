@@ -1,6 +1,7 @@
 package team.acg.access.assets.ecp;
 
 import com.idanchuang.ecp.sdk.spring.annotation.RequirePermission;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,8 +21,8 @@ public class EcpRequestOperatorController {
 
     @GetMapping
     @RequirePermission(permissions = "asset:request:create")
-    public OperatorResponse list() {
-        return new OperatorResponse(operators.list());
+    public OperatorResponse list(HttpServletRequest request) {
+        return new OperatorResponse(operators.list(request));
     }
 
     public record OperatorResponse(List<EcpRequestOperatorService.RequestOperator> items) {}

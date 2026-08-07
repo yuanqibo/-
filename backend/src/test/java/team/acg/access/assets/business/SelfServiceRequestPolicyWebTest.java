@@ -51,7 +51,7 @@ class SelfServiceRequestPolicyWebTest {
         jdbc.update("DELETE FROM approval_request_record");
         jdbc.update("DELETE FROM asset_operation_record");
         jdbc.update("DELETE FROM asset_record");
-        when(requestOperators.list()).thenReturn(List.of(
+        when(requestOperators.list(any())).thenReturn(List.of(
             new EcpRequestOperatorService.RequestOperator("admin-1", "管理员甲", "示例公司", "信息部"),
             new EcpRequestOperatorService.RequestOperator("admin-2", "管理员乙", "示例公司", "信息部")));
         useIdentity(employee());
