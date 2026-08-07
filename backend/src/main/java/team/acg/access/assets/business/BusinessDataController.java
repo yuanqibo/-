@@ -168,10 +168,19 @@ public class BusinessDataController {
             EcpRequestOperatorService requestOperatorService = requestOperators.getIfAvailable();
             List<EcpRequestOperatorService.RequestOperator> assignedOperators = requestOperatorService == null
                 ? List.of() : requestOperatorService.list(request);
-            String operatorNames = assignedOperators.stream().map(EcpRequestOperatorService.RequestOperator::name)
-                .filter(value -> value != null && !value.isBlank()).distinct()
-                .collect(java.util.stream.Collectors.joining("、"));
-            item.put("operator", operatorNames.isBlank() ? "待分配" : operatorNames);
+            String requestedOperatorSubject = command.details() == null
+                ? "" : command.details().path("operatorSubject").asText("").trim();
+            if (requestedOperatorSubject.isBlank()) {
+                throw new IllegalArgumentException("Request operator is required");
+            }
+            EcpRequestOperatorService.RequestOperator selectedOperator = assignedOperators.stream()
+                .filter(operator -> operator.subject().equalsIgnoreCase(requestedOperatorSubject))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Selected request operator is not authorized"));
+            item.put("operator", selectedOperator.name());
+            item.put("operatorSubject", selectedOperator.subject());
+            item.put("operatorCompany", selectedOperator.company());
+            item.put("operatorDepartment", selectedOperator.department());
             item.set("operatorCandidates", mapper.valueToTree(assignedOperators));
         }
         item.put("status", selfServiceRequest ? "待审批" : "审批中");

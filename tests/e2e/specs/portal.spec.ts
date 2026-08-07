@@ -810,7 +810,13 @@ test.describe('登录后门户质量回归', () => {
       await expect(dialog.getByText(label, { exact: true }).first()).toBeVisible()
     }
     await expect(dialog.getByLabel('领用类型')).toHaveValue('个人领用')
-    await expect(dialog.locator('.el-form-item').filter({ hasText: '经办人' }).locator('input')).toHaveValue('资产管理员甲、资产管理员乙')
+    const operatorSelect = dialog.locator('.el-form-item').filter({ hasText: '经办人' }).locator('.el-select')
+    await expect(operatorSelect.locator('input')).toHaveValue('')
+    await operatorSelect.click()
+    await expect(page.getByRole('option', { name: '资产管理员甲', exact: true })).toBeVisible()
+    await expect(page.getByRole('option', { name: '资产管理员乙', exact: true })).toBeVisible()
+    await page.getByRole('option', { name: '资产管理员乙', exact: true }).click()
+    await expect(operatorSelect.locator('input')).toHaveValue('资产管理员乙')
     await expect(dialog).toContainText('AST-RECEIVE-001')
     await expect(dialog).not.toContainText('AST-RECEIVE-002')
     await expect(dialog).not.toContainText('AST-RECEIVE-003')
@@ -827,6 +833,8 @@ test.describe('登录后门户质量回归', () => {
     await dialog.getByPlaceholder('请输入领用备注').fill('项目办公领用')
     await dialog.getByRole('button', { name: '确认提交', exact: true }).click()
     await expect(dialog).toBeHidden()
+    const requestSubmission = state.requests.find((item) => item.method === 'POST' && item.path === '/api/business-data/requests')
+    expect(requestSubmission?.body).toMatchObject({ details: { operatorSubject: 'admin-2' } })
 
     const submitted = state.requests.find((request) => request.method === 'POST' && request.path === '/api/business-data/requests')
     expect(submitted?.body).toMatchObject({
@@ -1153,6 +1161,11 @@ test.describe('登录后门户质量回归', () => {
       await expect(dialog.locator('.el-form-item').filter({ hasText: label }).first()).toBeVisible()
     }
     await expectPortalSelectOpensBelow(page, dialog.locator('.el-form-item').filter({ hasText: '使用公司' }).first().locator('.el-select'))
+    const administratorField = dialog.locator('.el-form-item').filter({ hasText: '管理员' }).first()
+    await administratorField.locator('.el-select').click()
+    await expect(page.getByRole('option', { name: '资产管理员甲', exact: true })).toBeVisible()
+    await expect(page.getByRole('option', { name: '资产管理员乙', exact: true })).toBeVisible()
+    await page.getByRole('option', { name: '资产管理员乙', exact: true }).click()
     const personField = dialog.locator('.el-form-item').filter({ hasText: '人员姓名' })
     const departmentField = dialog.locator('.el-form-item').filter({ hasText: '使用部门' })
     const personInput = personField.locator('input')
@@ -1206,7 +1219,7 @@ test.describe('登录后门户质量回归', () => {
     await expect(dialog).toBeHidden()
     expect(state.requests.some((item) => item.method === 'POST' && item.path === '/api/assets')).toBe(true)
     const createRequest = state.requests.find((item) => item.method === 'POST' && item.path === '/api/assets')
-    expect(createRequest?.body).toMatchObject({ item: { name: '新测试设备', category: 'IT设备', type: 'IT设备', brand: '测试品牌', condition: '正常', location: '杭州仓库', purchaseMethod: '采购' } })
+    expect(createRequest?.body).toMatchObject({ item: { name: '新测试设备', category: 'IT设备', type: 'IT设备', custodian: '资产管理员乙', brand: '测试品牌', condition: '正常', location: '杭州仓库', purchaseMethod: '采购' } })
   })
 
   test('新增资产的分类和位置树默认收起并可按需展开', async ({ page, isMobile }) => {

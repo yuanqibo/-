@@ -225,7 +225,8 @@ class SelfServiceRequestPolicyWebTest {
             .andExpect(jsonPath("$.item.status").value("待审批"))
             .andExpect(jsonPath("$.item.currentNode").value("管理员审批"))
             .andExpect(jsonPath("$.item.receiveType").value("个人领用"))
-            .andExpect(jsonPath("$.item.operator").value("管理员甲、管理员乙"))
+            .andExpect(jsonPath("$.item.operator").value("管理员甲"))
+            .andExpect(jsonPath("$.item.operatorSubject").value("admin-1"))
             .andExpect(jsonPath("$.item.operatorCandidates[0].subject").value("admin-1"))
             .andExpect(jsonPath("$.item.operatorCandidates[1].subject").value("admin-2"))
             .andReturn().getResponse().getContentAsString();
@@ -250,6 +251,19 @@ class SelfServiceRequestPolicyWebTest {
         org.assertj.core.api.Assertions.assertThat(received.path("custodian").asText()).isEqualTo("管理员");
         org.assertj.core.api.Assertions.assertThat(received.path("owner").asText()).isEqualTo("李雷");
         org.assertj.core.api.Assertions.assertThat(received.path("ownerSubject").asText()).isEqualTo("user-1");
+    }
+
+    @Test
+    void rejectsAnUnassignedRequestOperator() throws Exception {
+        insertAsset("A-RECEIVE-OPERATOR", "笔记本电脑", "空闲", "", "未分配");
+        saveSettings(true, false, List.of("笔记本电脑"), true, true);
+        ObjectNode command = (ObjectNode) mapper.readTree(request("资产领用", "办公需要", "A-RECEIVE-OPERATOR"));
+        ((ObjectNode) command.path("details")).put("operatorSubject", "not-an-authorized-admin");
+
+        mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(command)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Selected request operator is not authorized"));
     }
 
     @Test
@@ -498,6 +512,7 @@ class SelfServiceRequestPolicyWebTest {
         ObjectNode details = request.putObject("details");
         details.set("assetIds", mapper.valueToTree(List.of(assetId)));
         details.put("assetCount", 1);
+        details.put("operatorSubject", "admin-1");
         if ("资产领用".equals(type)) {
             details.put("receiveType", "个人领用");
             details.put("receiveLocation", "杭州公司 / 19幢1楼");
@@ -522,6 +537,7 @@ class SelfServiceRequestPolicyWebTest {
         ObjectNode details = request.putObject("details");
         details.set("assetIds", mapper.valueToTree(List.of(assetId)));
         details.put("assetCount", 1);
+        details.put("operatorSubject", "admin-1");
         details.put("receiverSubject", "user-2");
         details.put("receiverName", "韩梅梅");
         details.put("receiverCompany", "示例公司");
@@ -541,6 +557,7 @@ class SelfServiceRequestPolicyWebTest {
         ObjectNode details = request.putObject("details");
         details.set("assetIds", mapper.valueToTree(List.of(assetId)));
         details.put("assetCount", 1);
+        details.put("operatorSubject", "admin-1");
         details.put("returnLocation", "杭州公司 / 19幢1楼");
         details.put("returnDate", "2026-07-22");
         return mapper.writeValueAsString(request);

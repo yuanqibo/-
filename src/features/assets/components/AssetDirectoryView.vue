@@ -13,6 +13,7 @@ import { hasPortalPermission } from '../../../authz/permission-aliases'
 import AssetLabelPrintPreview from './AssetLabelPrintPreview.vue'
 import AssetOrderPrintPreview, { type AssetOrderPrintKind } from './AssetOrderPrintPreview.vue'
 import AssetDisposalCreateDrawer from '../../disposals/components/AssetDisposalCreateDrawer.vue'
+import { fetchRequestOperators, type RequestOperator } from '../../approvals/api/approvals.api'
 
 type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return' | 'handover'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
@@ -86,6 +87,8 @@ const orderPrintOpen = ref(false)
 const orderPrintKind = ref<AssetOrderPrintKind>('inbound')
 const orderPrintRows = ref<AssetRecord[]>([])
 const labelPrintRows = ref<AssetRecord[]>([])
+const authorizedAdministrators = ref<RequestOperator[]>([])
+const authorizedAdministratorsLoading = ref(false)
 const submitting = ref(false)
 const parsing = ref(false)
 const createFormRef = ref<FormInstance>()
@@ -256,8 +259,10 @@ const formDepartments = computed(() => Array.from(new Set([
   ...assets.value.map((item) => item.department)
 ].filter(Boolean) as string[])))
 const formAdministrators = computed(() => Array.from(new Set([
-  user.value?.name,
-  ...assets.value.map((item) => item.custodian)
+  ...authorizedAdministrators.value.map((item) => item.name),
+  createDraft.custodian,
+  editForm.custodian,
+  ...(authorizedAdministrators.value.length ? [] : [user.value?.name])
 ].filter(Boolean) as string[])))
 const assetConditions = ['正常', '全新', '良好', '维修中', '待验收']
 const purchaseMethods = ['采购', '租赁', '自购', '调拨入库']
@@ -590,6 +595,17 @@ const emptyDraft = (): AssetDraft => ({
   purchaseDate: new Date().toISOString().slice(0, 10), receiveDate: new Date().toISOString().slice(0, 10),
   purchaseMethod: '', condition: '', usageMonths: '', orderNo: '', unit: '台', rent: undefined, note: ''
 })
+const loadAuthorizedAdministrators = async (): Promise<void> => {
+  authorizedAdministratorsLoading.value = true
+  try {
+    authorizedAdministrators.value = await fetchRequestOperators()
+  } catch (error) {
+    authorizedAdministrators.value = []
+    console.error('[asset-portal] Unable to load ECP asset administrators', error)
+  } finally {
+    authorizedAdministratorsLoading.value = false
+  }
+}
 const openCreate = (source?: AssetRecord): void => {
   copySourceId.value = source?.id || ''
   Object.assign(createDraft, source ? {
@@ -986,7 +1002,7 @@ const disposeSelected = (): void => {
   disposalOpen.value = true
 }
 const handleAssetDisposalCreated = (): void => { selected.value = [] }
-onMounted(() => void load())
+onMounted(() => void Promise.all([load(), loadAuthorizedAdministrators()]))
 </script>
 
 <template>
@@ -1283,7 +1299,7 @@ onMounted(() => void load())
             <el-form-item class="field" label="资产编码"><el-input v-model="createDraft.id" placeholder="未填写按自动编码规则生成" /></el-form-item>
             <el-form-item class="field" label="资产名称" prop="name"><el-input v-model="createDraft.name" placeholder="请输入" /></el-form-item>
             <el-form-item class="field" label="资产分类" prop="category"><el-tree-select v-model="createDraft.category" :data="managedCategoryTree" node-key="value" filterable :default-expand-all="false" placement="bottom-start" placeholder="资产分类" @change="applyCategoryDefaults($event, createDraft)" /></el-form-item>
-            <el-form-item class="field" label="管理员" prop="custodian"><el-select v-model="createDraft.custodian" filterable allow-create placement="bottom-start" placeholder="管理员"><el-option v-for="item in formAdministrators" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item class="field" label="管理员" prop="custodian"><el-select v-model="createDraft.custodian" filterable :loading="authorizedAdministratorsLoading" placement="bottom-start" placeholder="请选择管理员"><el-option v-for="item in formAdministrators" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item class="field" label="品牌" prop="brand"><el-input v-model="createDraft.brand" placeholder="请输入" /></el-form-item>
             <el-form-item class="field" label="型号"><el-input v-model="createDraft.model" placeholder="请输入" /></el-form-item>
             <el-form-item class="field" label="所属/承租公司" prop="ownerCompany"><el-select v-model="createDraft.ownerCompany" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
@@ -1321,7 +1337,7 @@ onMounted(() => void load())
               <el-form-item class="field" label="资产编码"><el-input :model-value="editSource?.id" readonly /></el-form-item>
               <el-form-item class="field" label="资产名称" required><el-input v-model="editForm.name" placeholder="请输入" /></el-form-item>
               <el-form-item class="field" label="资产分类" required><el-tree-select v-model="editForm.category" :data="managedCategoryTree" node-key="value" filterable :default-expand-all="false" placement="bottom-start" @change="applyCategoryDefaults($event, editForm)" /></el-form-item>
-              <el-form-item class="field" label="管理员" required><el-select v-model="editForm.custodian" filterable allow-create placement="bottom-start"><el-option v-for="item in formAdministrators" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+              <el-form-item class="field" label="管理员" required><el-select v-model="editForm.custodian" filterable :loading="authorizedAdministratorsLoading" placement="bottom-start" placeholder="请选择管理员"><el-option v-for="item in formAdministrators" :key="item" :label="item" :value="item" /></el-select></el-form-item>
               <el-form-item class="field" label="品牌" required><el-input v-model="editForm.brand" placeholder="请输入" /></el-form-item>
               <el-form-item class="field" label="型号"><el-input v-model="editForm.model" placeholder="请输入" /></el-form-item>
               <el-form-item class="field" label="所属/承租公司" required><el-select v-model="editForm.ownerCompany" filterable allow-create placement="bottom-start"><el-option v-for="item in formCompanies" :key="item" :label="item" :value="item" /></el-select></el-form-item>
