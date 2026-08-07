@@ -1,8 +1,10 @@
 import type { Directive, DirectiveBinding } from 'vue'
 
 type WidthMap = Record<string, number>
+type ResizeMode = 'default' | 'asset-disposal'
 type ResizeState = {
   storageKey: string
+  mode: ResizeMode
   widths: WidthMap
   defaults: WidthMap
   frame?: number
@@ -10,10 +12,20 @@ type ResizeState = {
 }
 
 const states = new WeakMap<HTMLTableElement, ResizeState>()
-const MIN_COLUMN_WIDTH = 64
-const MAX_COLUMN_WIDTH = 640
+const DEFAULT_MIN_COLUMN_WIDTH = 64
+const DEFAULT_MAX_COLUMN_WIDTH = 640
+const ASSET_MIN_COLUMN_WIDTH = 48
 
-const clamp = (value: number): number => Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, Math.round(value)))
+const resolveMode = (key: string): ResizeMode => key.startsWith('assets:') ? 'asset-disposal' : 'default'
+const minimumWidth = (state: ResizeState, header: HTMLTableCellElement): number => {
+  const configured = Number.parseFloat(header.dataset.minWidth || '')
+  if (Number.isFinite(configured) && configured > 0) return configured
+  return state.mode === 'asset-disposal' ? ASSET_MIN_COLUMN_WIDTH : DEFAULT_MIN_COLUMN_WIDTH
+}
+const clamp = (state: ResizeState, header: HTMLTableCellElement, value: number): number => {
+  const rounded = Math.max(minimumWidth(state, header), Math.round(value))
+  return state.mode === 'asset-disposal' ? rounded : Math.min(DEFAULT_MAX_COLUMN_WIDTH, rounded)
+}
 const storageName = (key: string): string => `asset-table-column-widths:${key}`
 const readWidths = (key: string): WidthMap => {
   try {
@@ -51,18 +63,22 @@ const ensureColumns = (table: HTMLTableElement, count: number): HTMLTableColElem
   while (columns.length > count) columns.pop()?.remove()
   return columns
 }
-const syncTableWidth = (table: HTMLTableElement, columns: HTMLTableColElement[]): void => {
+const syncTableWidth = (table: HTMLTableElement, state: ResizeState, columns: HTMLTableColElement[]): void => {
   const total = columns.reduce((sum, column) => sum + (Number.parseFloat(column.style.width) || 0), 0)
-  if (total > 0) table.style.width = `${Math.round(total)}px`
+  if (total <= 0) return
+  const width = `${Math.round(total)}px`
+  table.style.width = width
+  if (state.mode === 'asset-disposal') table.style.minWidth = width
 }
-const setColumnWidth = (table: HTMLTableElement, state: ResizeState, index: number, id: string, width: number): void => {
+const setColumnWidth = (table: HTMLTableElement, state: ResizeState, header: HTMLTableCellElement, index: number, id: string, width: number): void => {
   const columns = ensureColumns(table, table.tHead?.rows[0]?.cells.length || 0)
   const column = columns[index]
   if (!column) return
-  const next = clamp(width)
+  const next = clamp(state, header, width)
   column.style.width = `${next}px`
   state.widths[id] = next
-  syncTableWidth(table, columns)
+  header.querySelector<HTMLButtonElement>(':scope > .column-resize-handle')?.setAttribute('aria-valuenow', String(next))
+  syncTableWidth(table, state, columns)
 }
 const beginResize = (event: PointerEvent, table: HTMLTableElement, state: ResizeState, header: HTMLTableCellElement, index: number, id: string, handle: HTMLButtonElement): void => {
   event.preventDefault()
@@ -73,7 +89,7 @@ const beginResize = (event: PointerEvent, table: HTMLTableElement, state: Resize
   handle.classList.add('active')
   table.classList.add('is-column-resizing')
   document.body.classList.add('is-resizing-column')
-  const move = (moveEvent: PointerEvent): void => setColumnWidth(table, state, index, id, startWidth + moveEvent.clientX - startX)
+  const move = (moveEvent: PointerEvent): void => setColumnWidth(table, state, header, index, id, startWidth + moveEvent.clientX - startX)
   const stop = (): void => {
     window.removeEventListener('pointermove', move)
     window.removeEventListener('pointerup', stop)
@@ -97,17 +113,25 @@ const attachHandle = (table: HTMLTableElement, state: ResizeState, header: HTMLT
   handle.className = 'column-resize-handle'
   handle.setAttribute('aria-label', `调整${label}列宽`)
   handle.setAttribute('title', '拖动调整列宽，双击恢复')
+  if (state.mode === 'asset-disposal') {
+    handle.setAttribute('role', 'separator')
+    handle.setAttribute('aria-orientation', 'vertical')
+    handle.setAttribute('aria-valuemin', String(minimumWidth(state, header)))
+  }
   handle.addEventListener('pointerdown', (event) => beginResize(event, table, state, header, index, id, handle))
   handle.addEventListener('dblclick', (event) => {
     event.preventDefault()
     event.stopPropagation()
-    setColumnWidth(table, state, index, id, state.defaults[id] || header.getBoundingClientRect().width)
+    setColumnWidth(table, state, header, index, id, state.defaults[id] || header.getBoundingClientRect().width)
     saveWidths(state)
   })
   handle.addEventListener('keydown', (event) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    const assetKeys = ['ArrowLeft', 'ArrowRight', 'Home', 'End']
+    if (state.mode === 'asset-disposal' ? !assetKeys.includes(event.key) : (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return
     event.preventDefault()
-    setColumnWidth(table, state, index, id, header.getBoundingClientRect().width + (event.key === 'ArrowRight' ? 12 : -12))
+    if (event.key === 'Home') setColumnWidth(table, state, header, index, id, minimumWidth(state, header))
+    else if (event.key === 'End') setColumnWidth(table, state, header, index, id, state.defaults[id] || header.getBoundingClientRect().width)
+    else setColumnWidth(table, state, header, index, id, header.getBoundingClientRect().width + (event.key === 'ArrowRight' ? 12 : -12))
     saveWidths(state)
   })
   header.append(handle)
@@ -116,16 +140,18 @@ const setup = (table: HTMLTableElement, state: ResizeState): void => {
   const headers = Array.from(table.tHead?.rows[0]?.cells || [])
   if (!headers.length) return
   table.classList.add('resizable-columns-table')
+  table.classList.toggle('asset-disposal-resize-table', state.mode === 'asset-disposal')
   const columns = ensureColumns(table, headers.length)
   headers.forEach((header, index) => {
     const id = columnId(header, index)
     const measured = header.getBoundingClientRect().width || Number.parseFloat(columns[index]?.style.width || '') || 120
-    state.defaults[id] ||= clamp(measured)
+    state.defaults[id] ||= clamp(state, header, measured)
     const width = state.widths[id] || state.defaults[id]
     if (columns[index]) columns[index].style.width = `${width}px`
     if (!header.querySelector('input[type="checkbox"]')) attachHandle(table, state, header, index, id)
+    header.querySelector<HTMLButtonElement>(':scope > .column-resize-handle')?.setAttribute('aria-valuenow', String(width))
   })
-  syncTableWidth(table, columns)
+  syncTableWidth(table, state, columns)
 }
 const scheduleSetup = (table: HTMLTableElement, state: ResizeState): void => {
   if (state.frame) cancelAnimationFrame(state.frame)
@@ -139,7 +165,7 @@ const resolveKey = (binding: DirectiveBinding<string>): string => binding.value 
 export const resizableColumns: Directive<HTMLTableElement, string> = {
   mounted(table, binding) {
     const storageKey = resolveKey(binding)
-    const state: ResizeState = { storageKey, widths: readWidths(storageKey), defaults: {} }
+    const state: ResizeState = { storageKey, mode: resolveMode(storageKey), widths: readWidths(storageKey), defaults: {} }
     states.set(table, state)
     scheduleSetup(table, state)
   },
@@ -149,6 +175,7 @@ export const resizableColumns: Directive<HTMLTableElement, string> = {
     const storageKey = resolveKey(binding)
     if (storageKey !== state.storageKey) {
       state.storageKey = storageKey
+      state.mode = resolveMode(storageKey)
       state.widths = readWidths(storageKey)
     }
     scheduleSetup(table, state)
