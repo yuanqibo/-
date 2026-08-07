@@ -1009,6 +1009,24 @@ test.describe('登录后门户质量回归', () => {
     await expect(categoryRow).toContainText('IT设备')
   })
 
+  test('签字设置菜单可以展开和收回', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '签字设置菜单交互在桌面项目执行')
+    await openApp(page, '/system/self-service')
+
+    const signButton = page.getByRole('button', { name: '签字设置', exact: true })
+    const signChildren = page.locator('.self-service-children')
+    await expect(signButton).toHaveAttribute('aria-expanded', 'false')
+    await expect(signChildren).not.toBeVisible()
+
+    await signButton.click()
+    await expect(signButton).toHaveAttribute('aria-expanded', 'true')
+    await expect(signChildren).toBeVisible()
+
+    await signButton.click()
+    await expect(signButton).toHaveAttribute('aria-expanded', 'false')
+    await expect(signChildren).not.toBeVisible()
+  })
+
   test('管理员关闭自助退还后员工入口隐藏', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '员工自助入口配置在桌面项目执行')
     await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))

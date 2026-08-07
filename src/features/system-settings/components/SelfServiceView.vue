@@ -15,6 +15,7 @@ const form = reactive<SelfServiceSettings>({})
 const saving = ref(false)
 const activeSection = ref('main')
 const activeSignPage = ref('assetReceive')
+const signExpanded = ref(false)
 const canUpdate = computed(() => (user.value?.permissionCodes || []).includes('asset:self_service:update'))
 
 const definitions = [
@@ -74,6 +75,19 @@ const ensureSignItem = (key: string): SelfServiceSignItem => {
 const setTiming = (itemKey: string, timingKey: string, checked: boolean): void => {
   ensureSignItem(itemKey).timings[timingKey] = checked
 }
+const openMainSection = (): void => {
+  activeSection.value = 'main'
+  signExpanded.value = false
+}
+const toggleSignSection = (): void => {
+  activeSection.value = 'sign'
+  signExpanded.value = !signExpanded.value
+}
+const openSignPage = (key: string): void => {
+  activeSection.value = 'sign'
+  activeSignPage.value = key
+  signExpanded.value = true
+}
 const sync = (): void => {
   Object.keys(form).forEach((key) => delete form[key])
   Object.assign(form, structuredClone(toRaw(selfService.value)))
@@ -91,7 +105,7 @@ onMounted(async () => { await loadSelfService(); sync() })
 
 <template>
   <div class="system-content self-service-management self-service-vue-view">
-    <aside class="self-service-panel"><div class="self-service-heading"><h2>自助管理</h2></div><div class="self-service-rule" aria-hidden="true"></div><div class="self-service-list"><button class="self-service-item" :class="{ active: activeSection === 'main' }" type="button" @click="activeSection = 'main'"><span>员工自助管理</span></button><div class="self-service-group" :class="{ open: activeSection === 'sign' }"><button class="self-service-item self-service-parent" :class="{ active: activeSection === 'sign' }" type="button" @click="activeSection = 'sign'"><span>签字设置</span><span class="self-service-caret" aria-hidden="true"></span></button><div class="self-service-children"><button v-for="page in signPages" :key="page.key" class="self-service-child" :class="{ active: activeSignPage === page.key }" type="button" @click="activeSection = 'sign'; activeSignPage = page.key">{{ page.title }}</button></div></div></div></aside>
+    <aside class="self-service-panel"><div class="self-service-heading"><h2>自助管理</h2></div><div class="self-service-rule" aria-hidden="true"></div><div class="self-service-list"><button class="self-service-item" :class="{ active: activeSection === 'main' }" type="button" @click="openMainSection"><span>员工自助管理</span></button><div class="self-service-group" :class="{ open: signExpanded }"><button class="self-service-item self-service-parent" :class="{ active: activeSection === 'sign' }" type="button" :aria-expanded="signExpanded" @click="toggleSignSection"><span>签字设置</span><span class="self-service-caret" aria-hidden="true"></span></button><div class="self-service-children"><button v-for="page in signPages" :key="page.key" class="self-service-child" :class="{ active: activeSignPage === page.key }" type="button" @click="openSignPage(page.key)">{{ page.title }}</button></div></div></div></aside>
     <el-skeleton v-if="state.loading" :rows="8" animated />
     <section v-else-if="activeSection === 'main'" class="panel self-service-config-panel"><form class="self-service-config-form" @submit.prevent="submit"><div class="self-service-config-list"><div v-for="definition in definitions" :key="definition.key" class="self-service-config-block"><div class="self-service-config-title"><h2>{{ definition.title }} <button class="self-service-help" type="button" :aria-label="definition.description">i</button></h2></div><div class="self-service-config-rule" aria-hidden="true"></div><div class="self-service-config-rows"><div class="self-service-config-row compact"><label>启用</label><el-switch v-model="ensureItem(definition.key).enabled" :disabled="!canUpdate" /></div><div v-if="['receiveAsset', 'borrowAsset', 'handoverAsset'].includes(definition.key)" class="self-service-config-row compact"><label>需要管理员审批</label><el-switch v-model="ensureItem(definition.key).approvalRequired" :disabled="!canUpdate" /></div><div v-if="definition.categories" class="self-service-config-row category-row"><label>自助申请资产类别</label><el-select v-model="ensureItem(definition.key).categories" multiple filterable allow-create default-first-option placeholder="输入或选择分类" :disabled="!canUpdate"><el-option v-for="item in ensureItem(definition.key).categories || []" :key="item" :label="item" :value="item" /></el-select></div><div v-if="definition.key === 'deviceRequest'" class="self-service-config-row compact"><label>允许员工添加设备</label><el-switch v-model="ensureItem(definition.key).allowEmployeeAddDevice" :disabled="!canUpdate" /></div><div class="self-service-config-row compact"><label>备注必填</label><el-switch v-model="ensureItem(definition.key).remarkRequired" :disabled="!canUpdate" /></div><div class="self-service-config-row textarea-row"><label>备注提示语</label><div class="self-service-textarea-wrap"><textarea v-model="ensureItem(definition.key).remarkPrompt" maxlength="300" rows="3" placeholder="请输入提示语" :disabled="!canUpdate"></textarea><div class="self-service-char-count">{{ ensureItem(definition.key).remarkPrompt.length }} / 300</div></div></div></div></div></div><div class="self-service-config-actions"><button v-if="canUpdate" class="btn primary" type="submit">{{ saving ? '保存中...' : '保存' }}</button></div></form></section>
     <section v-else class="panel self-service-sign-panel"><form class="self-service-sign-form" @submit.prevent="submit"><div class="self-service-sign-list"><template v-for="page in signPages" :key="page.key"><template v-if="page.key === activeSignPage"><section v-for="item in page.items" :key="item.key" class="self-service-sign-block"><div class="self-service-sign-title"><h2>{{ item.title }} <button class="self-service-help" type="button" :aria-label="item.help">i</button></h2></div><div class="self-service-sign-row"><div class="self-service-sign-label">员工签字</div><el-switch v-if="!item.timings?.length" v-model="ensureSignItem(item.key).employeeSign" :disabled="!canUpdate" /><div v-else class="self-service-sign-inline"><el-checkbox v-for="timing in item.timings" :key="timing.key" :model-value="ensureSignItem(item.key).timings[timing.key]" :disabled="!canUpdate || timing.disabled" @change="setTiming(item.key, timing.key, Boolean($event))">{{ timing.label }}</el-checkbox></div></div><div class="self-service-sign-row"><div class="self-service-sign-label">展示须知内容</div><el-checkbox v-model="ensureSignItem(item.key).noticeEnabled" :disabled="!canUpdate">{{ item.noticeLabel }}</el-checkbox></div><div class="self-service-sign-row textarea-row"><label class="self-service-sign-label">须知内容</label><div class="self-service-textarea-wrap"><textarea v-model="ensureSignItem(item.key).noticeContent" maxlength="500" rows="3" :placeholder="`请输入${item.noticeLabel}`" :disabled="!canUpdate"></textarea><div class="self-service-char-count">{{ ensureSignItem(item.key).noticeContent.length }} / 500</div></div></div></section></template></template></div><div class="self-service-config-actions"><button v-if="canUpdate" class="btn primary" type="submit">{{ saving ? '保存中...' : '保存' }}</button></div></form></section>
