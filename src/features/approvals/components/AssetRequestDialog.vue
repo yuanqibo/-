@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { Aim, Close, Search } from '@element-plus/icons-vue'
+import { Aim, Close, Delete, Plus, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import SignaturePad from '../../../shared/components/SignaturePad.vue'
 import { usePortalSession } from '../../../core/auth/portal-session'
@@ -12,6 +12,7 @@ import { fetchRequestOperators, type RequestOperator } from '../api/approvals.ap
 import { useApprovals } from '../composables/useApprovals'
 
 type ReceiverSuggestion = DirectoryPerson & { value: string }
+type DeviceRequestItem = { name: string; specification: string; quantity: number }
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
@@ -49,7 +50,8 @@ const form = reactive({
   receiverName: '',
   receiverCompany: '',
   receiverDepartment: '',
-  reason: ''
+  reason: '',
+  deviceItems: [{ name: '', specification: '', quantity: 1 }] as DeviceRequestItem[]
 })
 
 const isHandover = computed(() => form.type === '资产交接')
@@ -57,7 +59,27 @@ const isSelfReturn = computed(() => form.type === '资产退还')
 const isSelfGiveBack = computed(() => form.type === '资产归还')
 const isSelfReceive = computed(() => form.type === '资产领用')
 const isSelfBorrow = computed(() => form.type === '资产借用')
+const isDeviceRequest = computed(() => form.type === '办公设备申领')
 const isAvailableSelfService = computed(() => isSelfReceive.value || isSelfBorrow.value)
+const requestSettingKey = computed(() => ({
+  '资产领用': 'receiveAsset',
+  '资产借用': 'borrowAsset',
+  '资产归还': 'giveBackAsset',
+  '资产退还': 'returnAsset',
+  '资产交接': 'handoverAsset',
+  '办公设备申领': 'deviceRequest'
+}[form.type] || ''))
+const requestPolicy = computed<Record<string, unknown>>(() => {
+  const settings = store.value.assetPortalSelfServiceSettingsV9
+  if (!settings || !requestSettingKey.value) return {}
+  const value = settings[requestSettingKey.value]
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+})
+const requestEnabled = computed(() => requestPolicy.value.enabled === true)
+const remarkRequired = computed(() => requestPolicy.value.remarkRequired === true)
+const remarkPlaceholder = computed(() => String(requestPolicy.value.remarkPrompt || '').trim()
+  || (isDeviceRequest.value ? '请补充使用场景或申领原因' : isHandover.value ? '请输入交接备注' : isSelfReturn.value ? '请输入退库备注' : isSelfGiveBack.value ? '请输入归还备注' : isSelfBorrow.value ? '请输入借用备注' : '请输入领用备注'))
+const allowMultipleDeviceItems = computed(() => requestPolicy.value.allowEmployeeAddDevice === true)
 const requestSignatureKey = computed(() => ({
   '资产领用': 'selfReceiveAsset',
   '资产借用': 'selfBorrowAsset',
@@ -70,13 +92,18 @@ const requestSignaturePolicy = computed<Record<string, unknown>>(() => {
   const value = (settings as Record<string, unknown>)[requestSignatureKey.value]
   return value && typeof value === 'object' ? value as Record<string, unknown> : {}
 })
+const requestNoticeEnabled = computed(() => requestSignaturePolicy.value.noticeEnabled === true)
 const requestSignatureRequired = computed(() => {
   const timings = requestSignaturePolicy.value.timings
-  const start = timings && typeof timings === 'object' && Boolean((timings as Record<string, unknown>).start)
-  return start || Boolean(requestSignaturePolicy.value.noticeEnabled)
+  if (!timings || typeof timings !== 'object') return false
+  const timingKey = isSelfGiveBack.value ? 'return' : isSelfReceive.value || isSelfBorrow.value ? 'start' : ''
+  return Boolean(timingKey && (timings as Record<string, unknown>)[timingKey])
 })
-const requestSignatureNotice = computed(() => requestSignaturePolicy.value.noticeEnabled
+const requestSignatureNotice = computed(() => requestNoticeEnabled.value
   ? String(requestSignaturePolicy.value.noticeContent || '') : '')
+const requestConfirmationRequired = computed(() => requestSignatureRequired.value || requestNoticeEnabled.value)
+const requestConfirmationTitle = computed(() => requestSignatureRequired.value ? '申请签字确认' : '申请须知')
+const requestConfirmed = ref(false)
 const usesAssetPicker = computed(() => isHandover.value || isSelfReturn.value || isSelfGiveBack.value || isAvailableSelfService.value)
 const flattenLocations = (nodes: CatalogNode[], parent: string[] = []): string[] => nodes.flatMap((node) => {
   if (node.enabled === false) return []
@@ -171,14 +198,22 @@ const prepare = async (): Promise<void> => {
     receiverName: '',
     receiverCompany: '',
     receiverDepartment: '',
-    reason: ''
+    reason: '',
+    deviceItems: [{ name: '', specification: '', quantity: 1 }]
   })
   assetQuery.value = ''
   selectedCategory.value = ''
   scanOpen.value = false
   scanCode.value = ''
   receiverQuery.value = ''
+  requestConfirmed.value = false
+  requestSignatureImage.value = ''
   await Promise.all([loadAssets(true), loadRequestOperators()])
+  if (!requestEnabled.value) {
+    ElMessage.warning('该员工自助功能已关闭')
+    close()
+    return
+  }
   const selected = assets.value.find((item) => item.id === props.preselectedAssetId)
   if (props.preselectedAssetId && !requestAssets.value.some((item) => item.id === props.preselectedAssetId)) form.assetIds = []
   if (selected && locationOptions.value.includes(selected.location)) form.location = selected.location
@@ -237,29 +272,53 @@ const assetModel = (item: AssetRecord): string => [item.brand, item.model].filte
 const assetMeta = (item: AssetRecord): string => isSelfGiveBack.value
   ? `序列号：${item.sn || '-'}　借用日期：${item.borrowDate || '-'}　预计归还日期：${item.expectedReturnDate || '-'}`
   : `序列号：${item.sn || '-'}　位置：${item.location || '-'}　品牌/型号：${assetModel(item)}`
+const addDeviceItem = (): void => {
+  if (!allowMultipleDeviceItems.value || form.deviceItems.length >= 20) return
+  form.deviceItems.push({ name: '', specification: '', quantity: 1 })
+}
+const removeDeviceItem = (index: number): void => {
+  if (form.deviceItems.length <= 1) return
+  form.deviceItems.splice(index, 1)
+}
 
 const submit = async (): Promise<void> => {
+  if (!requestEnabled.value) { ElMessage.warning('该员工自助功能已关闭'); close(); return }
   if (requestOperatorsLoading.value) { ElMessage.warning('经办人正在加载，请稍候'); return }
   if (!requestOperators.value.length) { ElMessage.warning('未获取到已授权的资产管理员，请联系系统管理员'); return }
   if (!form.operatorSubject) { ElMessage.warning('请选择经办人'); return }
-  if (!form.assetIds.length) { ElMessage.warning('请至少选择一项资产'); return }
-  if (!form.location.trim()) { ElMessage.warning(isHandover.value ? '请选择接收位置' : isSelfReturn.value ? '请选择退库后位置' : isSelfGiveBack.value ? '请选择归还后位置' : isSelfBorrow.value ? '请选择借用后位置' : '请选择领用后位置'); return }
+  if (!isDeviceRequest.value && !form.assetIds.length) { ElMessage.warning('请至少选择一项资产'); return }
+  if (!isDeviceRequest.value && !form.location.trim()) { ElMessage.warning(isHandover.value ? '请选择接收位置' : isSelfReturn.value ? '请选择退库后位置' : isSelfGiveBack.value ? '请选择归还后位置' : isSelfBorrow.value ? '请选择借用后位置' : '请选择领用后位置'); return }
   if (form.type === '资产借用' && !form.expectedReturnDate) { ElMessage.warning('请选择预计归还日期'); return }
   if (isSelfBorrow.value && form.expectedReturnDate < form.date) { ElMessage.warning('预计归还日期不能早于借用日期'); return }
   if (isHandover.value && (!form.receiverSubject || !form.receiverName)) { ElMessage.warning('请从组织目录选择接收人'); return }
-  if (requestSignatureRequired.value && !requestSignatureImage.value) {
+  if (remarkRequired.value && !form.reason.trim()) { ElMessage.warning('请填写备注'); return }
+  if (isDeviceRequest.value) {
+    if (!allowMultipleDeviceItems.value && form.deviceItems.length > 1) { ElMessage.warning('当前仅允许申领一项设备'); return }
+    if (!form.deviceItems.length || form.deviceItems.some((item) => !item.name.trim() || item.quantity < 1 || item.quantity > 100)) {
+      ElMessage.warning('请完整填写设备名称和数量')
+      return
+    }
+  }
+  if (requestConfirmationRequired.value && !requestConfirmed.value) {
     requestSignatureOpen.value = true
     return
   }
-  const details: Record<string, unknown> = { assetIds: [...form.assetIds], assetCount: form.assetIds.length }
+  const details: Record<string, unknown> = isDeviceRequest.value
+    ? { deviceItems: form.deviceItems.map((item) => ({ name: item.name.trim(), specification: item.specification.trim(), quantity: item.quantity })), assetCount: form.deviceItems.length, requestDate: form.date, selfServiceRequest: true }
+    : { assetIds: [...form.assetIds], assetCount: form.assetIds.length, selfServiceRequest: true }
   details.operatorSubject = form.operatorSubject
-  const fieldPrefix = form.type === '资产借用' ? 'borrow' : form.type === '资产归还' || form.type === '资产退还' ? 'return' : isHandover.value ? 'handover' : 'receive'
-  details[`${fieldPrefix}Location`] = form.location
-  details[`${fieldPrefix}Date`] = form.date
+  if (!isDeviceRequest.value) {
+    const fieldPrefix = form.type === '资产借用' ? 'borrow' : form.type === '资产归还' || form.type === '资产退还' ? 'return' : isHandover.value ? 'handover' : 'receive'
+    details[`${fieldPrefix}Location`] = form.location
+    details[`${fieldPrefix}Date`] = form.date
+  }
   if (isSelfReceive.value) details.receiveType = '个人领用'
   if (form.expectedReturnDate) details.expectedReturnDate = form.expectedReturnDate
   if (requestSignatureImage.value) {
     details.signatureImage = requestSignatureImage.value
+  }
+  if (requestConfirmed.value && requestNoticeEnabled.value) {
+    details.noticeAcknowledged = true
     details.signatureNotice = requestSignatureNotice.value
   }
   if (isHandover.value) Object.assign(details, {
@@ -274,7 +333,9 @@ const submit = async (): Promise<void> => {
     const item = await create({
       type: form.type,
       applicant: user.value?.name || '',
-      asset: selectedAssets.value.map((asset) => `${asset.id} ${asset.name}`).join('、'),
+      asset: isDeviceRequest.value
+        ? form.deviceItems.map((item) => `${item.name.trim()} x${item.quantity}`).join('、')
+        : selectedAssets.value.map((asset) => `${asset.id} ${asset.name}`).join('、'),
       reason: form.reason,
       details
     })
@@ -285,6 +346,8 @@ const submit = async (): Promise<void> => {
       ? item.status === '已同意' ? '领用已生效' : '领用申请已提交，等待管理员审批'
       : isSelfBorrow.value
         ? item.status === '已同意' ? '借用已生效' : '借用申请已提交，等待管理员审批'
+      : isDeviceRequest.value
+        ? '办公设备申领已提交，等待管理员审批'
       : isSelfGiveBack.value
         ? '归还申请已提交，等待管理员审批'
       : isSelfReturn.value
@@ -303,7 +366,8 @@ const submit = async (): Promise<void> => {
 }
 
 const confirmRequestSignature = (): void => {
-  if (!requestSignatureImage.value) { ElMessage.warning('请先完成签字'); return }
+  if (requestSignatureRequired.value && !requestSignatureImage.value) { ElMessage.warning('请先完成签字'); return }
+  requestConfirmed.value = true
   requestSignatureOpen.value = false
   void submit()
 }
@@ -381,7 +445,7 @@ watch(() => [props.modelValue, props.type, props.preselectedAssetId] as const, (
             <el-form-item label="领用日期" required><el-date-picker v-model="form.date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
           </template>
         </div>
-        <el-form-item :label="isHandover ? '交接备注' : isSelfReturn ? '退库备注' : isSelfGiveBack ? '归还备注' : isSelfBorrow ? '借用备注' : '领用备注'"><el-input v-model="form.reason" type="textarea" :rows="3" maxlength="500" show-word-limit :placeholder="isHandover ? '请输入交接备注' : isSelfReturn ? '请输入退库备注' : isSelfGiveBack ? '请输入归还备注' : isSelfBorrow ? '请输入借用备注' : '请输入领用备注'" /></el-form-item>
+        <el-form-item :label="isHandover ? '交接备注' : isSelfReturn ? '退库备注' : isSelfGiveBack ? '归还备注' : isSelfBorrow ? '借用备注' : '领用备注'" :required="remarkRequired"><el-input v-model="form.reason" type="textarea" :rows="3" maxlength="500" show-word-limit :placeholder="remarkPlaceholder" /></el-form-item>
       </el-form>
 
       <section class="handover-asset-picker" :class="{ 'self-receive-asset-picker': isAvailableSelfService }" :aria-label="isHandover ? '交接资产' : isSelfReturn ? '退还资产' : isSelfGiveBack ? '归还资产' : isSelfBorrow ? '借用资产' : '领用资产'">
@@ -419,6 +483,28 @@ watch(() => [props.modelValue, props.type, props.preselectedAssetId] as const, (
       </section>
     </template>
 
+    <el-form v-else-if="isDeviceRequest" label-position="top" class="device-request-form">
+      <div class="handover-request-fields">
+        <el-form-item label="申领人"><el-input :model-value="user?.name || ''" readonly /></el-form-item>
+        <el-form-item label="所属公司"><el-input :model-value="user?.company || ''" readonly /></el-form-item>
+        <el-form-item label="所在部门"><el-input :model-value="user?.department || ''" readonly /></el-form-item>
+        <el-form-item label="经办人" required><el-select v-model="form.operatorSubject" filterable clearable :loading="requestOperatorsLoading" :disabled="requestOperatorsError || !requestOperators.length" :placeholder="requestOperatorPlaceholder"><el-option v-for="item in requestOperators" :key="item.subject" :label="item.name" :value="item.subject" /></el-select></el-form-item>
+        <el-form-item label="申请日期" required><el-date-picker v-model="form.date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
+      </div>
+      <section class="device-request-items">
+        <div class="device-request-items-head"><strong>设备需求</strong><el-button v-if="allowMultipleDeviceItems" :icon="Plus" :disabled="form.deviceItems.length >= 20" @click="addDeviceItem">添加设备</el-button></div>
+        <div class="device-request-item-list">
+          <div v-for="(item, index) in form.deviceItems" :key="index" class="device-request-item">
+            <el-form-item :label="`设备名称 ${index + 1}`" required><el-input v-model="item.name" maxlength="128" placeholder="例如：笔记本电脑" /></el-form-item>
+            <el-form-item label="规格要求"><el-input v-model="item.specification" maxlength="500" placeholder="型号、配置或其他要求" /></el-form-item>
+            <el-form-item label="数量" required><el-input-number v-model="item.quantity" :min="1" :max="100" /></el-form-item>
+            <el-button v-if="form.deviceItems.length > 1" class="device-request-remove" text :icon="Delete" aria-label="删除设备" @click="removeDeviceItem(index)" />
+          </div>
+        </div>
+        <p v-if="!allowMultipleDeviceItems" class="device-request-limit-note">管理员当前仅允许每张申请单填写一项设备。</p>
+      </section>
+      <el-form-item label="申领备注" :required="remarkRequired"><el-input v-model="form.reason" type="textarea" :rows="3" maxlength="500" show-word-limit :placeholder="remarkPlaceholder" /></el-form-item>
+    </el-form>
     <el-form v-else label-position="top" class="standard-form-grid">
       <el-form-item label="选择资产" class="standard-form-span" required><el-select v-model="form.assetIds" multiple filterable collapse-tags placeholder="搜索并选择资产" style="width: 100%"><el-option v-for="item in requestAssets" :key="item.id" :label="`${item.id} · ${item.name}`" :value="item.id" /></el-select></el-form-item>
       <el-form-item label="资产位置" required><el-select v-model="form.location" filterable placeholder="选择资产位置" style="width: 100%"><el-option v-for="location in locationOptions" :key="location" :label="location" :value="location" /></el-select></el-form-item>
@@ -428,10 +514,10 @@ watch(() => [props.modelValue, props.type, props.preselectedAssetId] as const, (
     </el-form>
     <template #footer><el-button @click="close">取消</el-button><el-button type="primary" :loading="submitting" @click="submit">{{ isAvailableSelfService ? '确认提交' : usesAssetPicker ? '确认' : '提交申请' }}</el-button></template>
   </el-dialog>
-  <el-dialog v-model="requestSignatureOpen" title="申请签字确认" width="min(760px, 94vw)" append-to-body destroy-on-close>
+  <el-dialog v-model="requestSignatureOpen" :title="requestConfirmationTitle" width="min(760px, 94vw)" append-to-body destroy-on-close>
     <p v-if="requestSignatureNotice" class="signature-notice">{{ requestSignatureNotice }}</p>
-    <div class="signature-dialog-label">请签字确认后发起申请</div>
-    <SignaturePad v-model="requestSignatureImage" :height="280" />
+    <template v-if="requestSignatureRequired"><div class="signature-dialog-label">请签字确认后发起申请</div><SignaturePad v-model="requestSignatureImage" :height="280" /></template>
+    <p v-else class="signature-confirm-hint">请阅读以上内容，确认后再提交申请。</p>
     <template #footer><el-button @click="requestSignatureOpen = false">取消</el-button><el-button type="primary" @click="confirmRequestSignature">确定</el-button></template>
   </el-dialog>
 </template>

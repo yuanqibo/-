@@ -33,18 +33,19 @@ class AssetWorkflowPolicyTest {
     }
 
     @Test
-    void administratorFlowRequiresSignatureOnlyWhenSigningOrNoticeConfirmationIsEnabled() throws Exception {
+    void administratorFlowRequiresSignatureOnlyWhenEmployeeSigningIsEnabled() throws Exception {
         var value = mapper.readTree("""
             {"signSettings":{
               "assetReceive":{"employeeSign":true,"noticeEnabled":false},
-              "assetBorrow":{"employeeSign":false,"noticeEnabled":true}
+              "assetBorrow":{"employeeSign":false,"noticeEnabled":true,"noticeContent":"请阅读借用须知"}
             }}
             """);
         when(repository.find("assetPortalSelfServiceSettingsV9"))
             .thenReturn(Optional.of(new AppStoreRepository.StoreValue(value, Instant.now())));
 
         assertThat(policy.requiresEmployeeSignature("RECEIVE")).isTrue();
-        assertThat(policy.requiresEmployeeSignature("BORROW")).isTrue();
+        assertThat(policy.requiresEmployeeSignature("BORROW")).isFalse();
+        assertThat(policy.noticeContent("BORROW")).isNotBlank();
         assertThat(policy.requiresEmployeeSignature("HANDOVER")).isFalse();
     }
 

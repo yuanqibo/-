@@ -39,7 +39,7 @@ public class BusinessDataController {
     private static final int MAX_REQUEST_DETAILS_BYTES = 256 * 1024;
     private static final Set<String> TYPES = Set.of("requests", "stocktakes", "consumables", "repairs", "contracts");
     private static final Set<String> EMPLOYEE_SELF_SERVICE_TYPES = Set.of(
-        "资产领用", "资产借用", "资产归还", "资产退还", "资产交接");
+        "资产领用", "资产借用", "资产归还", "资产退还", "资产交接", "办公设备申领");
     private static final Map<String, String> VIEW_PERMISSIONS = Map.of(
         "requests", "asset:request:view",
         "stocktakes", "asset:stocktake:view",
@@ -141,12 +141,19 @@ public class BusinessDataController {
         validateRequestDetails(command.details());
         validateRequestLocation(command.type(), command.details());
         var identity = identityService.current(request);
-        identity.ifPresent(value ->
-            selfServiceRequestPolicy.enforce(command.type(), command.reason(), command.details(), value));
-        boolean immediateSelfService = identity
-            .filter(value -> !value.manager() && EMPLOYEE_SELF_SERVICE_TYPES.contains(command.type().trim()))
-            .map(value -> !selfServiceRequestPolicy.requiresApproval(command.type(), value))
+        boolean employeeSelfServiceType = EMPLOYEE_SELF_SERVICE_TYPES.contains(command.type().trim());
+        boolean explicitlySelfService = command.details() != null
+            && command.details().path("selfServiceRequest").asBoolean(false);
+        boolean selfServicePolicyApplies = identity
+            .map(value -> !value.manager() || explicitlySelfService)
             .orElse(false);
+        identity.filter(value -> selfServicePolicyApplies).ifPresent(value ->
+            selfServiceRequestPolicy.enforce(command.type(), command.reason(), command.details(), value));
+        boolean selfServiceRequest = identity
+            .map(value -> employeeSelfServiceType && selfServicePolicyApplies)
+            .orElse(false);
+        boolean immediateSelfService = selfServiceRequest
+            && !selfServiceRequestPolicy.requiresApproval(command.type());
         String applicant = identityService.trustedName(request, command.applicant());
         ObjectNode item = mapper.createObjectNode();
         item.put("id", id("REQ"));
@@ -160,9 +167,6 @@ public class BusinessDataController {
         });
         item.put("asset", command.asset().trim());
         item.put("reason", command.reason() == null ? "" : command.reason().trim());
-        boolean selfServiceRequest = identity
-            .map(value -> !value.manager() && EMPLOYEE_SELF_SERVICE_TYPES.contains(command.type().trim()))
-            .orElse(false);
         item.put("selfServiceRequest", selfServiceRequest);
         if (selfServiceRequest) {
             EcpRequestOperatorService requestOperatorService = requestOperators.getIfAvailable();
@@ -191,7 +195,8 @@ public class BusinessDataController {
             Set.of("assetCount", "assetIds", "receiveType", "receiveLocation", "receiveDate", "borrowLocation", "borrowDate",
                     "returnLocation", "returnDate", "expectedReturnDate", "handoverLocation", "handoverDate",
                     "receiverSubject", "receiverName", "receiverCompany", "receiverDepartment",
-                    "handoverType", "approvalDate", "signatureImage", "signatureNotice")
+                    "handoverType", "approvalDate", "signatureImage", "signatureNotice", "noticeAcknowledged",
+                    "deviceItems", "requestDate")
                 .forEach(field -> {
                     JsonNode value = command.details().get(field);
                     if (value != null) item.set(field, value);

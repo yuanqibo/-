@@ -2,7 +2,7 @@
 import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
-import { Download, Refresh, RefreshLeft, Search, Switch as SwitchIcon, TakeawayBox, User } from '@element-plus/icons-vue'
+import { Download, Monitor, Refresh, RefreshLeft, Search, Switch as SwitchIcon, TakeawayBox, User } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useTerminalMode } from '../../../core/auth/terminal-mode'
@@ -41,7 +41,8 @@ const employeeRequestActionDefinitions = [
   { label: '资产借用', type: '资产借用', tone: 'sky', settingKey: 'borrowAsset', icon: SwitchIcon },
   { label: '资产归还', type: '资产归还', tone: 'orange', settingKey: 'giveBackAsset', icon: Download },
   { label: '自助退还', type: '资产退还', tone: 'violet', settingKey: 'returnAsset', icon: RefreshLeft },
-  { label: '自助交接', type: '资产交接', tone: 'green', settingKey: 'handoverAsset', icon: User }
+  { label: '自助交接', type: '资产交接', tone: 'green', settingKey: 'handoverAsset', icon: User },
+  { label: '办公设备申领', type: '办公设备申领', tone: 'teal', settingKey: 'deviceRequest', icon: Monitor }
 ]
 const selfServiceSettings = computed(() => store.value.assetPortalSelfServiceSettingsV9 || {})
 const employeeRequestActions = computed(() => employeeRequestActionDefinitions.filter((action) => {
@@ -69,6 +70,9 @@ const displayRequestType = (item: ApprovalRecord): string => {
   if (item.type === '资产归还' && Boolean(item.selfServiceRequest)) return '自助归还'
   return item.type
 }
+const deviceItems = (item: ApprovalRecord): Array<Record<string, unknown>> => Array.isArray(item.deviceItems)
+  ? item.deviceItems.filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === 'object')
+  : []
 const tabCount = (selected: string): number => selected === '全部' ? rows.value.length : rows.value.filter((item) => matchesTab(item, selected)).length
 const filtered = computed(() => rows.value.filter((item) => {
   const keyword = query.value.trim().toLowerCase()
@@ -300,7 +304,11 @@ watch(canReview, () => {
 
     <el-drawer :model-value="Boolean(detail) && !decisionOpen" class="approval-detail-drawer" :title="detail ? displayRequestType(detail) : '审批详情'" direction="rtl" size="min(1120px, 96vw)" append-to-body destroy-on-close @close="detail = null">
       <template v-if="detail">
-        <section class="approval-detail-section">
+        <section v-if="detail.type === '办公设备申领'" class="approval-detail-section">
+          <div class="approval-detail-section-head"><h3>设备需求</h3><span>共 {{ deviceItems(detail).length }} 项</span></div>
+          <div class="approval-device-items"><article v-for="(item, index) in deviceItems(detail)" :key="index"><strong>{{ textValue(item.name) }}</strong><span>{{ textValue(item.specification) }}</span><em>数量 {{ Number(item.quantity || 1) }}</em></article></div>
+        </section>
+        <section v-else class="approval-detail-section">
           <h3>申请信息</h3>
           <div class="approval-detail-fields"><div v-for="field in approvalSummaryFields(detail)" :key="String(field[0])" class="approval-detail-field" :class="{ wide: field[0] === '说明' }"><span>{{ field[0] }}</span><strong>{{ textValue(field[1]) }}</strong></div></div>
         </section>

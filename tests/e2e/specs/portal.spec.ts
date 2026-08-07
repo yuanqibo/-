@@ -1016,6 +1016,35 @@ test.describe('登录后门户质量回归', () => {
     await expect(page.getByText('自助退还', { exact: true })).toHaveCount(0)
   })
 
+  test('办公设备申领开关控制员工入口和多设备追加', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '办公设备申领配置在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    await openApp(page, '/requests', { deviceRequestEnabled: true, allowEmployeeAddDevice: false })
+
+    await page.getByRole('button', { name: '办公设备申领', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '办公设备申领' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('button', { name: '添加设备', exact: true })).toHaveCount(0)
+    await expect(dialog.getByText('管理员当前仅允许每张申请单填写一项设备。', { exact: true })).toBeVisible()
+    await expect(dialog.locator('.device-request-item')).toHaveCount(1)
+  })
+
+  test('备注必填和提示语同步到员工申请表单', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '员工自助备注策略在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    await openApp(page, '/requests', {
+      receiveRemarkRequired: true,
+      receiveRemarkPrompt: '请填写领用用途和项目名称',
+      assets: [{ id: 'AST-REMARK', name: '备注测试设备', status: '空闲', category: 'IT设备', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'R1', sn: 'R1-SN', assetTag: '', price: 5000 }]
+    })
+
+    await page.getByRole('button', { name: '资产领用', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '资产领用' })
+    const remark = dialog.locator('.el-form-item').filter({ hasText: '领用备注' })
+    await expect(remark).toHaveClass(/is-required/)
+    await expect(remark.locator('textarea')).toHaveAttribute('placeholder', '请填写领用用途和项目名称')
+  })
+
   test('首页保留迁移前的统计与仪表盘板块', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '仪表盘完整板块在桌面项目执行')
     await openApp(page, '/')

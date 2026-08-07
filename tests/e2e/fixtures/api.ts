@@ -10,10 +10,14 @@ export type ApiMockOptions = {
   borrowApprovalRequired?: boolean
   borrowCategories?: string[]
   borrowEnabled?: boolean
+  deviceRequestEnabled?: boolean
+  allowEmployeeAddDevice?: boolean
   giveBackEnabled?: boolean
   receiveApprovalRequired?: boolean
   receiveCategories?: string[]
   receiveEnabled?: boolean
+  receiveRemarkPrompt?: string
+  receiveRemarkRequired?: boolean
   returnEnabled?: boolean
   selfServiceEnabled?: boolean
 }
@@ -96,6 +100,8 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
         ...storeValues.assetPortalSelfServiceSettingsV9.receiveAsset,
         enabled: selfServiceEnabled && options.receiveEnabled !== false,
         approvalRequired: receiveApprovalRequired,
+        remarkRequired: options.receiveRemarkRequired === true,
+        remarkPrompt: options.receiveRemarkPrompt || '',
         categories: options.receiveCategories || storeValues.assetPortalSelfServiceSettingsV9.receiveAsset.categories
       },
       returnAsset: { ...storeValues.assetPortalSelfServiceSettingsV9.returnAsset, enabled: selfServiceEnabled && returnEnabled },
@@ -106,7 +112,12 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
         categories: options.borrowCategories || storeValues.assetPortalSelfServiceSettingsV9.borrowAsset.categories
       },
       giveBackAsset: { ...storeValues.assetPortalSelfServiceSettingsV9.giveBackAsset, enabled: selfServiceEnabled && options.giveBackEnabled !== false },
-      handoverAsset: { ...storeValues.assetPortalSelfServiceSettingsV9.handoverAsset, enabled: selfServiceEnabled, approvalRequired }
+      handoverAsset: { ...storeValues.assetPortalSelfServiceSettingsV9.handoverAsset, enabled: selfServiceEnabled, approvalRequired },
+      deviceRequest: {
+        ...storeValues.assetPortalSelfServiceSettingsV9.deviceRequest,
+        enabled: selfServiceEnabled && options.deviceRequestEnabled === true,
+        allowEmployeeAddDevice: options.allowEmployeeAddDevice !== false
+      }
     }
   }
   await page.route('http://127.0.0.1:4174/api/**', async (route) => {
@@ -183,8 +194,9 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
       const selfServiceGiveBack = draft.type === '资产归还'
       const selfServiceReceive = draft.type === '资产领用'
       const selfServiceBorrow = draft.type === '资产借用'
+      const deviceRequest = draft.type === '办公设备申领'
       const immediate = handover && !approvalRequired || selfServiceReceive && !receiveApprovalRequired || selfServiceBorrow && !borrowApprovalRequired
-      const selfServiceRequest = handover || selfServiceReturn || selfServiceGiveBack || selfServiceReceive || selfServiceBorrow
+      const selfServiceRequest = handover || selfServiceReturn || selfServiceGiveBack || selfServiceReceive || selfServiceBorrow || deviceRequest
       const item: Record<string, unknown> = {
         id: 'REQ-NEW',
         ...draft,

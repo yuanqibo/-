@@ -19,9 +19,7 @@ public class AssetWorkflowPolicy {
 
     public boolean requiresEmployeeSignature(String operationType) {
         JsonNode policy = signaturePolicy(operationType);
-        return policy.isObject() && (
-            policy.path("employeeSign").asBoolean(false)
-                || policy.path("noticeEnabled").asBoolean(false));
+        return policy.isObject() && policy.path("employeeSign").asBoolean(false);
     }
 
     public String noticeContent(String operationType) {

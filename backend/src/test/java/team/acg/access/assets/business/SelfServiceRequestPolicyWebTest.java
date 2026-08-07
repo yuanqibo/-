@@ -79,6 +79,66 @@ class SelfServiceRequestPolicyWebTest {
     }
 
     @Test
+    void noticeRequiresAcknowledgementButDoesNotRequireASignature() throws Exception {
+        insertAsset("A-NOTICE", "笔记本电脑", "空闲", "", "未分配");
+        ObjectNode settings = baseSettings(true, false, List.of("笔记本电脑"));
+        settings.putObject("signSettings").putObject("selfReceiveAsset")
+            .put("noticeEnabled", true)
+            .put("noticeContent", "请阅读领用须知")
+            .putObject("timings").put("start", false);
+        storeRepository.saveAll(Map.of(SelfServiceRequestPolicy.SETTINGS_KEY, settings));
+
+        ObjectNode command = (ObjectNode) mapper.readTree(request("资产领用", "办公需要", "A-NOTICE"));
+        mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(command)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Employee must acknowledge the configured request notice"));
+
+        ((ObjectNode) command.path("details")).put("noticeAcknowledged", true);
+        mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(command)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.item.noticeAcknowledged").value(true));
+    }
+
+    @Test
+    void configuredRequestTimingRequiresASignature() throws Exception {
+        insertAsset("A-SIGN", "笔记本电脑", "空闲", "", "未分配");
+        ObjectNode settings = baseSettings(true, false, List.of("笔记本电脑"));
+        settings.putObject("signSettings").putObject("selfReceiveAsset")
+            .put("noticeEnabled", false)
+            .putObject("timings").put("start", true);
+        storeRepository.saveAll(Map.of(SelfServiceRequestPolicy.SETTINGS_KEY, settings));
+
+        mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
+                .content(request("资产领用", "办公需要", "A-SIGN")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Employee signature is required before submitting this request"));
+    }
+
+    @Test
+    void deviceRequestSwitchesControlAvailabilityAndMultipleItems() throws Exception {
+        saveDeviceSettings(false, true);
+        mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
+                .content(deviceRequest(1)))
+            .andExpect(status().isForbidden());
+
+        saveDeviceSettings(true, false);
+        mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
+                .content(deviceRequest(2)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Multiple device items are disabled for employee requests"));
+
+        saveDeviceSettings(true, true);
+        mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
+                .content(deviceRequest(2)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.item.type").value("办公设备申领"))
+            .andExpect(jsonPath("$.item.deviceItems.length()").value(2))
+            .andExpect(jsonPath("$.item.status").value("待审批"));
+    }
+
+    @Test
     void rejectsAssetOutsideConfiguredCategories() throws Exception {
         insertAsset("A-1", "笔记本电脑", "空闲", "", "未分配");
         saveSettings(true, false, List.of("显示器"));
@@ -437,6 +497,19 @@ class SelfServiceRequestPolicyWebTest {
             .andExpect(jsonPath("$.item.type").value("管理员补录"));
     }
 
+    @Test
+    void managerUsingEmployeeSelfServiceStillFollowsTheSwitches() throws Exception {
+        useIdentity(manager());
+        saveSettings(false, false, List.of("笔记本电脑"));
+        ObjectNode command = (ObjectNode) mapper.readTree(request("资产领用", "办公需要", "A-DISABLED"));
+        ((ObjectNode) command.path("details")).put("selfServiceRequest", true);
+
+        mvc.perform(post("/api/business-data/requests").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(command)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.error").value("Employee self-service request is disabled: 资产领用"));
+    }
+
     private void saveSettings(boolean enabled, boolean remarkRequired, List<String> categories) {
         saveSettings(enabled, remarkRequired, categories, true);
     }
@@ -455,19 +528,52 @@ class SelfServiceRequestPolicyWebTest {
     private void saveSettings(boolean enabled, boolean remarkRequired, List<String> categories,
                               boolean receiveApprovalRequired, boolean borrowApprovalRequired,
                               boolean handoverApprovalRequired) {
+        ObjectNode settings = baseSettings(enabled, remarkRequired, categories);
+        ((ObjectNode) settings.path("receiveAsset")).put("approvalRequired", receiveApprovalRequired);
+        ((ObjectNode) settings.path("borrowAsset")).put("approvalRequired", borrowApprovalRequired);
+        ((ObjectNode) settings.path("handoverAsset")).put("approvalRequired", handoverApprovalRequired);
+        storeRepository.saveAll(Map.of(SelfServiceRequestPolicy.SETTINGS_KEY, settings));
+    }
+
+    private ObjectNode baseSettings(boolean enabled, boolean remarkRequired, List<String> categories) {
         ObjectNode settings = mapper.createObjectNode();
         ObjectNode receive = policy(enabled, remarkRequired, categories);
-        receive.put("approvalRequired", receiveApprovalRequired);
+        receive.put("approvalRequired", true);
         settings.set("receiveAsset", receive);
         ObjectNode borrow = policy(enabled, remarkRequired, categories);
-        borrow.put("approvalRequired", borrowApprovalRequired);
+        borrow.put("approvalRequired", true);
         settings.set("borrowAsset", borrow);
         settings.set("giveBackAsset", policy(enabled, remarkRequired, List.of()));
         settings.set("returnAsset", policy(enabled, remarkRequired, List.of()));
         ObjectNode handover = policy(enabled, remarkRequired, List.of());
-        handover.put("approvalRequired", handoverApprovalRequired);
+        handover.put("approvalRequired", true);
         settings.set("handoverAsset", handover);
+        return settings;
+    }
+
+    private void saveDeviceSettings(boolean enabled, boolean allowMultiple) {
+        ObjectNode settings = mapper.createObjectNode();
+        settings.set("deviceRequest", policy(enabled, false, List.of())
+            .put("allowEmployeeAddDevice", allowMultiple));
         storeRepository.saveAll(Map.of(SelfServiceRequestPolicy.SETTINGS_KEY, settings));
+    }
+
+    private String deviceRequest(int itemCount) throws Exception {
+        ObjectNode request = mapper.createObjectNode();
+        request.put("type", "办公设备申领");
+        request.put("applicant", "李雷");
+        request.put("asset", "办公设备");
+        request.put("reason", "项目需要");
+        ObjectNode details = request.putObject("details");
+        details.put("operatorSubject", "admin-1");
+        var items = details.putArray("deviceItems");
+        for (int index = 0; index < itemCount; index++) {
+            items.addObject().put("name", "笔记本电脑 " + (index + 1))
+                .put("specification", "16GB 内存").put("quantity", 1);
+        }
+        details.put("assetCount", itemCount);
+        details.put("requestDate", "2026-08-07");
+        return mapper.writeValueAsString(request);
     }
 
     private ObjectNode policy(boolean enabled, boolean remarkRequired, List<String> categories) {

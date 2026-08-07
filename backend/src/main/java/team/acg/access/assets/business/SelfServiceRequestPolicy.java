@@ -23,7 +23,8 @@ public class SelfServiceRequestPolicy {
         "资产借用", "borrowAsset",
         "资产归还", "giveBackAsset",
         "资产退还", "returnAsset",
-        "资产交接", "handoverAsset");
+        "资产交接", "handoverAsset",
+        "办公设备申领", "deviceRequest");
     private static final Map<String, String> REQUEST_SIGNATURE_KEYS = Map.of(
         "资产领用", "selfReceiveAsset",
         "资产借用", "selfBorrowAsset",
@@ -47,8 +48,6 @@ public class SelfServiceRequestPolicy {
 
     public void enforce(String requestType, String reason, JsonNode details,
                         RequestIdentityService.Identity identity) {
-        if (identity.manager()) return;
-
         String normalizedType = requestType == null ? "" : requestType.trim();
         String settingKey = REQUEST_SETTING_KEYS.get(normalizedType);
         if (settingKey == null) {
@@ -66,8 +65,10 @@ public class SelfServiceRequestPolicy {
         if (policy.path("remarkRequired").asBoolean(false) && (reason == null || reason.isBlank())) {
             throw new IllegalArgumentException("Request reason is required");
         }
-        enforceStartSignature(normalizedType, details, settings);
-        if (AVAILABLE_ASSET_SETTINGS.contains(settingKey)) {
+        enforceRequestSignature(normalizedType, details, settings);
+        if ("deviceRequest".equals(settingKey)) {
+            enforceDeviceRequest(details, policy);
+        } else if (AVAILABLE_ASSET_SETTINGS.contains(settingKey)) {
             enforceAvailableAssetSelection(details, policy, identity, settingKey);
         } else if (OWNED_ASSET_STATUSES.containsKey(settingKey)) {
             enforceOwnedAssetSelection(details, identity, OWNED_ASSET_STATUSES.get(settingKey));
@@ -78,12 +79,18 @@ public class SelfServiceRequestPolicy {
         if ("handoverAsset".equals(settingKey)) enforceHandoverTarget(details, identity);
     }
 
-    private void enforceStartSignature(String requestType, JsonNode details, JsonNode settings) {
+    private void enforceRequestSignature(String requestType, JsonNode details, JsonNode settings) {
         String signatureKey = REQUEST_SIGNATURE_KEYS.get(requestType);
         if (signatureKey == null) return;
         JsonNode signature = settings.path("signSettings").path(signatureKey);
-        boolean required = signature.path("timings").path("start").asBoolean(false)
-            || signature.path("noticeEnabled").asBoolean(false);
+        if (signature.path("noticeEnabled").asBoolean(false)
+            && (details == null || !details.path("noticeAcknowledged").asBoolean(false))) {
+            throw new IllegalArgumentException("Employee must acknowledge the configured request notice");
+        }
+        String timingKey = "资产归还".equals(requestType) ? "return"
+            : Set.of("资产领用", "资产借用").contains(requestType) ? "start" : "";
+        boolean required = !timingKey.isEmpty()
+            && signature.path("timings").path(timingKey).asBoolean(false);
         if (!required) return;
         String image = details == null ? "" : details.path("signatureImage").asText("").trim();
         if (!image.matches("^data:image/(png|jpeg);base64,[A-Za-z0-9+/=]+$") || image.length() > 700_000) {
@@ -91,9 +98,34 @@ public class SelfServiceRequestPolicy {
         }
     }
 
-    public boolean requiresApproval(String requestType, RequestIdentityService.Identity identity) {
+    private void enforceDeviceRequest(JsonNode details, JsonNode policy) {
+        JsonNode items = details == null ? null : details.get("deviceItems");
+        if (items == null || !items.isArray() || items.isEmpty() || items.size() > 20) {
+            throw new IllegalArgumentException("A device request must contain between 1 and 20 items");
+        }
+        if (!policy.path("allowEmployeeAddDevice").asBoolean(false) && items.size() > 1) {
+            throw new IllegalArgumentException("Multiple device items are disabled for employee requests");
+        }
+        for (JsonNode item : items) {
+            if (!item.isObject()) throw new IllegalArgumentException("Device request items must be objects");
+            String name = item.path("name").asText("").trim();
+            String specification = item.path("specification").asText("").trim();
+            int quantity = item.path("quantity").asInt(0);
+            if (name.isEmpty() || name.length() > 128) {
+                throw new IllegalArgumentException("Device name is required and cannot exceed 128 characters");
+            }
+            if (specification.length() > 500) {
+                throw new IllegalArgumentException("Device specification cannot exceed 500 characters");
+            }
+            if (quantity < 1 || quantity > 100) {
+                throw new IllegalArgumentException("Device quantity must be between 1 and 100");
+            }
+        }
+    }
+
+    public boolean requiresApproval(String requestType) {
         String settingKey = REQUEST_SETTING_KEYS.get(requestType == null ? "" : requestType.trim());
-        if (identity.manager() || !CONFIGURABLE_APPROVAL_SETTINGS.contains(settingKey)) return true;
+        if (!CONFIGURABLE_APPROVAL_SETTINGS.contains(settingKey)) return true;
         JsonNode settings = storeRepository.find(SETTINGS_KEY)
             .map(AppStoreRepository.StoreValue::value)
             .orElseThrow(() -> new ResponseStatusException(
