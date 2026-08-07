@@ -792,6 +792,9 @@ test.describe('登录后门户质量回归', () => {
     const state = await openApp(page, '/requests', {
       receiveApprovalRequired: true,
       receiveCategories: ['IT设备'],
+      locationTree: [{ id: 'loc-hz', code: 'HZ', name: '杭州公司', enabled: true, children: [
+        { id: 'loc-hz-19-1', code: 'HZ-19-1', name: '19幢1楼', enabled: true, children: [] }
+      ] }],
       assets: [
         { id: 'AST-RECEIVE-001', name: '可领用笔记本', status: '空闲', category: 'IT设备', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'R-1', sn: 'RECEIVE-SN-1', assetTag: 'TAG-RECEIVE-1', price: 5000 },
         { id: 'AST-RECEIVE-002', name: '未配置分类显示器', status: '空闲', category: '显示器', type: '设备', owner: '未分配', ownerSubject: '', department: '', company: '示例公司', location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'R-2', sn: 'RECEIVE-SN-2', assetTag: '', price: 3000 },
@@ -802,10 +805,12 @@ test.describe('登录后门户质量回归', () => {
     await page.getByRole('button', { name: '资产领用', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '资产领用' })
     await expect(dialog).toBeVisible()
+    await expect(page.locator('.el-select-dropdown:visible')).toHaveCount(0)
     for (const label of ['领用人', '领用类型', '所属公司', '所在部门', '领用后位置', '经办人', '领用日期', '领用备注', '资产分类', '选择领用资产']) {
       await expect(dialog.getByText(label, { exact: true }).first()).toBeVisible()
     }
     await expect(dialog.getByLabel('领用类型')).toHaveValue('个人领用')
+    await expect(dialog.locator('.el-form-item').filter({ hasText: '经办人' }).locator('input')).toHaveValue('资产管理员甲、资产管理员乙')
     await expect(dialog).toContainText('AST-RECEIVE-001')
     await expect(dialog).not.toContainText('AST-RECEIVE-002')
     await expect(dialog).not.toContainText('AST-RECEIVE-003')
@@ -815,7 +820,10 @@ test.describe('登录后门户质量回归', () => {
     await scanInput.fill('TAG-RECEIVE-1')
     await scanInput.press('Enter')
     await expect(dialog.getByText('已选择资产 1', { exact: true })).toBeVisible()
-    await choosePortalSelectOption(page, dialog.locator('.handover-request-fields .el-select'), '杭州仓库')
+    const locationSelect = dialog.locator('.el-form-item').filter({ hasText: '领用后位置' }).locator('.el-select')
+    await locationSelect.click()
+    await expect(page.locator('.el-select-dropdown:visible .el-tree-node.is-expanded')).toHaveCount(0)
+    await page.getByRole('option', { name: '杭州公司', exact: true }).last().click()
     await dialog.getByPlaceholder('请输入领用备注').fill('项目办公领用')
     await dialog.getByRole('button', { name: '确认提交', exact: true }).click()
     await expect(dialog).toBeHidden()
@@ -828,7 +836,7 @@ test.describe('登录后门户质量回归', () => {
         assetIds: ['AST-RECEIVE-001'],
         assetCount: 1,
         receiveType: '个人领用',
-        receiveLocation: '杭州仓库'
+        receiveLocation: '杭州公司'
       }
     })
     const createdCard = page.locator('.employee-request-card').filter({ hasText: 'REQ-NEW' })

@@ -8,6 +8,7 @@ import { searchDirectoryPeople } from '../../assets/api/assets.api'
 import { useAssets } from '../../assets/composables/useAssets'
 import type { ApprovalRecord } from '../types/approval'
 import type { AssetRecord, CatalogNode, DirectoryPerson } from '../../assets/types/assets'
+import { fetchRequestOperators, type RequestOperator } from '../api/approvals.api'
 import { useApprovals } from '../composables/useApprovals'
 
 type ReceiverSuggestion = DirectoryPerson & { value: string }
@@ -34,6 +35,9 @@ const scanInput = ref<{ focus: () => void }>()
 const receiverQuery = ref('')
 const requestSignatureOpen = ref(false)
 const requestSignatureImage = ref('')
+const requestOperators = ref<RequestOperator[]>([])
+const requestOperatorsLoading = ref(false)
+const requestOperatorsError = ref(false)
 const form = reactive({
   type: '资产领用',
   assetIds: [] as string[],
@@ -79,6 +83,25 @@ const flattenLocations = (nodes: CatalogNode[], parent: string[] = []): string[]
   return [path.join(' / '), ...flattenLocations(node.children || [], path)]
 })
 const locationOptions = computed(() => flattenLocations(store.value.assetLocationTree || []))
+type LocationTreeOption = { value: string; label: string; children?: LocationTreeOption[] }
+const buildLocationTree = (nodes: CatalogNode[], parent: string[] = []): LocationTreeOption[] => nodes
+  .filter((node) => node.enabled !== false)
+  .map((node) => {
+    const path = [...parent, node.name]
+    const children = buildLocationTree(node.children || [], path)
+    return {
+      value: path.join(' / '),
+      label: node.name,
+      ...(children.length ? { children } : {})
+    }
+  })
+const locationTreeOptions = computed(() => buildLocationTree(store.value.assetLocationTree || []))
+const requestOperatorNames = computed(() => requestOperators.value.map((item) => item.name).filter(Boolean).join('、'))
+const requestOperatorDisplay = computed(() => requestOperatorsLoading.value
+  ? '正在加载经办人'
+  : requestOperatorsError.value
+    ? '经办人加载失败'
+    : requestOperatorNames.value || '暂未配置经办人')
 const availableCategories = computed(() => {
   const settingKey = isSelfBorrow.value ? 'borrowAsset' : 'receiveAsset'
   const settings = store.value.assetPortalSelfServiceSettingsV9?.[settingKey]
@@ -123,6 +146,19 @@ const clearReceiver = (): void => {
   requestSignatureOpen.value = false
   requestSignatureImage.value = ''
 }
+const loadRequestOperators = async (): Promise<void> => {
+  requestOperatorsLoading.value = true
+  requestOperatorsError.value = false
+  try {
+    requestOperators.value = await fetchRequestOperators()
+  } catch (error) {
+    requestOperators.value = []
+    requestOperatorsError.value = true
+    console.error('[asset-portal] Unable to load ECP request operators', error)
+  } finally {
+    requestOperatorsLoading.value = false
+  }
+}
 const prepare = async (): Promise<void> => {
   Object.assign(form, {
     type: props.type,
@@ -141,7 +177,7 @@ const prepare = async (): Promise<void> => {
   scanOpen.value = false
   scanCode.value = ''
   receiverQuery.value = ''
-  await loadAssets(true)
+  await Promise.all([loadAssets(true), loadRequestOperators()])
   const selected = assets.value.find((item) => item.id === props.preselectedAssetId)
   if (props.preselectedAssetId && !requestAssets.value.some((item) => item.id === props.preselectedAssetId)) form.assetIds = []
   if (selected && locationOptions.value.includes(selected.location)) form.location = selected.location
@@ -202,6 +238,8 @@ const assetMeta = (item: AssetRecord): string => isSelfGiveBack.value
   : `序列号：${item.sn || '-'}　位置：${item.location || '-'}　品牌/型号：${assetModel(item)}`
 
 const submit = async (): Promise<void> => {
+  if (requestOperatorsLoading.value) { ElMessage.warning('经办人正在加载，请稍候'); return }
+  if (!requestOperators.value.length) { ElMessage.warning('未获取到已授权的资产管理员，请联系系统管理员'); return }
   if (!form.assetIds.length) { ElMessage.warning('请至少选择一项资产'); return }
   if (!form.location.trim()) { ElMessage.warning(isHandover.value ? '请选择接收位置' : isSelfReturn.value ? '请选择退库后位置' : isSelfGiveBack.value ? '请选择归还后位置' : isSelfBorrow.value ? '请选择借用后位置' : '请选择领用后位置'); return }
   if (form.type === '资产借用' && !form.expectedReturnDate) { ElMessage.warning('请选择预计归还日期'); return }
@@ -226,7 +264,6 @@ const submit = async (): Promise<void> => {
     receiverName: form.receiverName,
     receiverCompany: form.receiverCompany,
     receiverDepartment: form.receiverDepartment,
-    operator: user.value?.name || '',
     handoverType: '员工交接'
   })
   submitting.value = true
@@ -302,32 +339,32 @@ watch(() => [props.modelValue, props.type, props.preselectedAssetId] as const, (
             </el-form-item>
             <el-form-item label="接收公司"><el-input :model-value="form.receiverCompany" readonly placeholder="选择接收人后自动带出" /></el-form-item>
             <el-form-item label="接收部门"><el-input :model-value="form.receiverDepartment" readonly placeholder="选择接收人后自动带出" /></el-form-item>
-            <el-form-item label="接收位置" required><el-select v-model="form.location" filterable placeholder="选择接收位置"><el-option v-for="location in locationOptions" :key="location" :label="location" :value="location" /></el-select></el-form-item>
+            <el-form-item label="接收位置" required><el-tree-select v-model="form.location" :data="locationTreeOptions" filterable check-strictly :automatic-dropdown="false" :render-after-expand="false" :default-expanded-keys="[]" placeholder="选择接收位置" /></el-form-item>
             <el-form-item label="交接日期" required><el-date-picker v-model="form.date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
-            <el-form-item label="经办人"><el-input :model-value="user?.name || ''" readonly /></el-form-item>
+            <el-form-item label="经办人"><el-input :model-value="requestOperatorDisplay" :title="requestOperatorNames" readonly /></el-form-item>
           </template>
           <template v-else-if="isSelfReturn">
             <el-form-item label="退库人"><el-input :model-value="user?.name || ''" readonly /></el-form-item>
             <el-form-item label="所属公司"><el-input :model-value="user?.company || ''" readonly /></el-form-item>
             <el-form-item label="所在部门"><el-input :model-value="user?.department || ''" readonly /></el-form-item>
-            <el-form-item label="退库后位置" required><el-select v-model="form.location" filterable placeholder="选择退库后位置"><el-option v-for="location in locationOptions" :key="location" :label="location" :value="location" /></el-select></el-form-item>
-            <el-form-item label="经办人"><el-input :model-value="user?.name || ''" readonly /></el-form-item>
+            <el-form-item label="退库后位置" required><el-tree-select v-model="form.location" :data="locationTreeOptions" filterable check-strictly :automatic-dropdown="false" :render-after-expand="false" :default-expanded-keys="[]" placeholder="选择退库后位置" /></el-form-item>
+            <el-form-item label="经办人"><el-input :model-value="requestOperatorDisplay" :title="requestOperatorNames" readonly /></el-form-item>
             <el-form-item label="退库日期" required><el-date-picker v-model="form.date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
           </template>
           <template v-else-if="isSelfGiveBack">
             <el-form-item label="归还人"><el-input :model-value="user?.name || ''" readonly /></el-form-item>
             <el-form-item label="所属公司"><el-input :model-value="user?.company || ''" readonly /></el-form-item>
             <el-form-item label="所在部门"><el-input :model-value="user?.department || ''" readonly /></el-form-item>
-            <el-form-item label="归还后位置" required><el-select v-model="form.location" filterable placeholder="选择归还后位置"><el-option v-for="location in locationOptions" :key="location" :label="location" :value="location" /></el-select></el-form-item>
-            <el-form-item label="经办人"><el-input :model-value="user?.name || ''" readonly /></el-form-item>
+            <el-form-item label="归还后位置" required><el-tree-select v-model="form.location" :data="locationTreeOptions" filterable check-strictly :automatic-dropdown="false" :render-after-expand="false" :default-expanded-keys="[]" placeholder="选择归还后位置" /></el-form-item>
+            <el-form-item label="经办人"><el-input :model-value="requestOperatorDisplay" :title="requestOperatorNames" readonly /></el-form-item>
             <el-form-item label="归还日期" required><el-date-picker v-model="form.date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
           </template>
           <template v-else-if="isSelfBorrow">
             <el-form-item label="借用人"><el-input :model-value="user?.name || ''" readonly /></el-form-item>
             <el-form-item label="所属公司"><el-input :model-value="user?.company || ''" readonly /></el-form-item>
             <el-form-item label="所在部门"><el-input :model-value="user?.department || ''" readonly /></el-form-item>
-            <el-form-item label="借用后位置" required><el-select v-model="form.location" filterable placeholder="选择借用后位置"><el-option v-for="location in locationOptions" :key="location" :label="location" :value="location" /></el-select></el-form-item>
-            <el-form-item label="经办人"><el-input :model-value="user?.name || ''" readonly /></el-form-item>
+            <el-form-item label="借用后位置" required><el-tree-select v-model="form.location" :data="locationTreeOptions" filterable check-strictly :automatic-dropdown="false" :render-after-expand="false" :default-expanded-keys="[]" placeholder="选择借用后位置" /></el-form-item>
+            <el-form-item label="经办人"><el-input :model-value="requestOperatorDisplay" :title="requestOperatorNames" readonly /></el-form-item>
             <el-form-item label="借用日期" required><el-date-picker v-model="form.date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
             <el-form-item label="预计归还日期" required><el-date-picker v-model="form.expectedReturnDate" :disabled-date="(date: Date) => date.getTime() < new Date(`${form.date}T00:00:00`).getTime()" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
           </template>
@@ -336,8 +373,8 @@ watch(() => [props.modelValue, props.type, props.preselectedAssetId] as const, (
             <el-form-item label="领用类型"><el-input model-value="个人领用" readonly /></el-form-item>
             <el-form-item label="所属公司"><el-input :model-value="user?.company || ''" readonly /></el-form-item>
             <el-form-item label="所在部门"><el-input :model-value="user?.department || ''" readonly /></el-form-item>
-            <el-form-item label="领用后位置" required><el-select v-model="form.location" filterable placeholder="选择领用后位置"><el-option v-for="location in locationOptions" :key="location" :label="location" :value="location" /></el-select></el-form-item>
-            <el-form-item label="经办人"><el-input :model-value="user?.name || ''" readonly /></el-form-item>
+            <el-form-item label="领用后位置" required><el-tree-select v-model="form.location" :data="locationTreeOptions" filterable check-strictly :automatic-dropdown="false" :render-after-expand="false" :default-expanded-keys="[]" placeholder="选择领用后位置" /></el-form-item>
+            <el-form-item label="经办人"><el-input :model-value="requestOperatorDisplay" :title="requestOperatorNames" readonly /></el-form-item>
             <el-form-item label="领用日期" required><el-date-picker v-model="form.date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
           </template>
         </div>

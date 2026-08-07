@@ -14,7 +14,9 @@ import team.acg.access.assets.approval.ApprovalRequestStateService;
 import team.acg.access.assets.approval.ApprovedAssetRequestExecutor;
 import team.acg.access.assets.auth.RequestIdentityService;
 import team.acg.access.assets.asset.AssetService;
+import team.acg.access.assets.ecp.EcpRequestOperatorService;
 import team.acg.access.assets.store.PortalReferenceCatalog;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -60,6 +62,7 @@ public class BusinessDataController {
     private final ApprovalRequestStateService approvalState;
     private final ApprovedAssetRequestExecutor requestExecutor;
     private final PortalReferenceCatalog referenceCatalog;
+    private final ObjectProvider<EcpRequestOperatorService> requestOperators;
 
     public BusinessDataController(BusinessDataRepository repository, ApprovalRequestRepository approvalRequests,
                                   ObjectMapper mapper,
@@ -69,7 +72,8 @@ public class BusinessDataController {
                                   ApprovalIntegrationService approvalIntegration,
                                   ApprovalRequestStateService approvalState,
                                   ApprovedAssetRequestExecutor requestExecutor,
-                                  PortalReferenceCatalog referenceCatalog) {
+                                  PortalReferenceCatalog referenceCatalog,
+                                  ObjectProvider<EcpRequestOperatorService> requestOperators) {
         this.repository = repository;
         this.approvalRequests = approvalRequests;
         this.mapper = mapper;
@@ -80,6 +84,7 @@ public class BusinessDataController {
         this.approvalState = approvalState;
         this.requestExecutor = requestExecutor;
         this.referenceCatalog = referenceCatalog;
+        this.requestOperators = requestOperators;
     }
 
     @GetMapping
@@ -159,7 +164,16 @@ public class BusinessDataController {
             .map(value -> !value.manager() && EMPLOYEE_SELF_SERVICE_TYPES.contains(command.type().trim()))
             .orElse(false);
         item.put("selfServiceRequest", selfServiceRequest);
-        if (selfServiceRequest) item.put("operator", applicant);
+        if (selfServiceRequest) {
+            EcpRequestOperatorService requestOperatorService = requestOperators.getIfAvailable();
+            List<EcpRequestOperatorService.RequestOperator> assignedOperators = requestOperatorService == null
+                ? List.of() : requestOperatorService.list();
+            String operatorNames = assignedOperators.stream().map(EcpRequestOperatorService.RequestOperator::name)
+                .filter(value -> value != null && !value.isBlank()).distinct()
+                .collect(java.util.stream.Collectors.joining("、"));
+            item.put("operator", operatorNames.isBlank() ? "待分配" : operatorNames);
+            item.set("operatorCandidates", mapper.valueToTree(assignedOperators));
+        }
         item.put("status", selfServiceRequest ? "待审批" : "审批中");
         item.put("system", selfServiceRequest ? "资产管理员审批" : "ECP审批");
         item.put("date", java.time.LocalDate.now().toString());

@@ -228,6 +228,10 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
     if (url.pathname === '/api/store' && method === 'GET') return fulfill({ values: currentStoreValues })
     if (url.pathname === '/api/store' && method === 'POST') return fulfill({ values: currentStoreValues })
     if (url.pathname.startsWith('/api/config/')) return fulfill({ ok: true })
+    if (url.pathname === '/api/ecp/request-operators') return fulfill({ items: [
+      { subject: 'admin-1', name: '资产管理员甲', company: '示例公司', department: '信息部' },
+      { subject: 'admin-2', name: '资产管理员乙', company: '示例公司', department: '信息部' }
+    ] })
     if (url.pathname === '/api/ecp/organization') return fulfill(organization)
     if (url.pathname.includes('/api/ecp/control-plane/iam/account-sets')) return fulfill({ items: organization.accountSets })
     if (url.pathname === '/api/ecp/directory/users') {

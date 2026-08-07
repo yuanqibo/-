@@ -15,6 +15,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import team.acg.access.assets.auth.RequestIdentityService;
 import team.acg.access.assets.asset.AssetOperationRepository;
+import team.acg.access.assets.ecp.EcpRequestOperatorService;
 import team.acg.access.assets.store.AppStoreRepository;
 
 import java.sql.Timestamp;
@@ -42,6 +43,7 @@ class SelfServiceRequestPolicyWebTest {
     @Autowired AppStoreRepository storeRepository;
     @Autowired AssetOperationRepository operationRepository;
     @MockitoBean RequestIdentityService identityService;
+    @MockitoBean EcpRequestOperatorService requestOperators;
 
     @BeforeEach
     void resetData() {
@@ -49,6 +51,9 @@ class SelfServiceRequestPolicyWebTest {
         jdbc.update("DELETE FROM approval_request_record");
         jdbc.update("DELETE FROM asset_operation_record");
         jdbc.update("DELETE FROM asset_record");
+        when(requestOperators.list()).thenReturn(List.of(
+            new EcpRequestOperatorService.RequestOperator("admin-1", "管理员甲", "示例公司", "信息部"),
+            new EcpRequestOperatorService.RequestOperator("admin-2", "管理员乙", "示例公司", "信息部")));
         useIdentity(employee());
         saveSettings(true, false, List.of("笔记本电脑"));
     }
@@ -220,6 +225,9 @@ class SelfServiceRequestPolicyWebTest {
             .andExpect(jsonPath("$.item.status").value("待审批"))
             .andExpect(jsonPath("$.item.currentNode").value("管理员审批"))
             .andExpect(jsonPath("$.item.receiveType").value("个人领用"))
+            .andExpect(jsonPath("$.item.operator").value("管理员甲、管理员乙"))
+            .andExpect(jsonPath("$.item.operatorCandidates[0].subject").value("admin-1"))
+            .andExpect(jsonPath("$.item.operatorCandidates[1].subject").value("admin-2"))
             .andReturn().getResponse().getContentAsString();
 
         org.assertj.core.api.Assertions.assertThat(asset("A-RECEIVE-PENDING").path("status").asText())
