@@ -15,6 +15,7 @@ const states = new WeakMap<HTMLTableElement, ResizeState>()
 const DEFAULT_MIN_COLUMN_WIDTH = 64
 const DEFAULT_MAX_COLUMN_WIDTH = 640
 const ASSET_MIN_COLUMN_WIDTH = 48
+const ASSET_SELECTION_COLUMN_WIDTH = 36
 
 const resolveMode = (key: string): ResizeMode => key.startsWith('assets:') ? 'asset-disposal' : 'default'
 const minimumWidth = (state: ResizeState, header: HTMLTableCellElement): number => {
@@ -144,11 +145,13 @@ const setup = (table: HTMLTableElement, state: ResizeState): void => {
   const columns = ensureColumns(table, headers.length)
   headers.forEach((header, index) => {
     const id = columnId(header, index)
+    const hasSelectionControl = Boolean(header.querySelector('input[type="checkbox"]'))
+    const isAssetSelectionColumn = state.mode === 'asset-disposal' && hasSelectionControl
     const measured = header.getBoundingClientRect().width || Number.parseFloat(columns[index]?.style.width || '') || 120
-    state.defaults[id] ||= clamp(state, header, measured)
-    const width = state.widths[id] || state.defaults[id]
+    state.defaults[id] ||= isAssetSelectionColumn ? ASSET_SELECTION_COLUMN_WIDTH : clamp(state, header, measured)
+    const width = isAssetSelectionColumn ? ASSET_SELECTION_COLUMN_WIDTH : (state.widths[id] || state.defaults[id])
     if (columns[index]) columns[index].style.width = `${width}px`
-    if (!header.querySelector('input[type="checkbox"]')) attachHandle(table, state, header, index, id)
+    if (!hasSelectionControl) attachHandle(table, state, header, index, id)
     header.querySelector<HTMLButtonElement>(':scope > .column-resize-handle')?.setAttribute('aria-valuenow', String(width))
   })
   syncTableWidth(table, state, columns)

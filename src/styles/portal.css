@@ -13652,8 +13652,9 @@ body.is-resizing-column * {
 }
 
 .asset-flow-table .asset-flow-select-cell {
-  width: 54px;
-  min-width: 54px;
+  width: 36px;
+  min-width: 36px;
+  padding-inline: 4px;
   text-align: center;
 }
 

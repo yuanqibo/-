@@ -19,6 +19,14 @@ const createTable = (key: string): HTMLTableElement => {
   return table
 }
 
+const createSelectionTable = (): HTMLTableElement => {
+  const table = document.createElement('table')
+  table.innerHTML = '<thead><tr><th><input type="checkbox" aria-label="全选"></th><th>入库状态</th></tr></thead><tbody><tr><td><input type="checkbox"></td><td>已完成</td></tr></tbody>'
+  document.body.append(table)
+  callHook('mounted', table, 'assets:inbound')
+  return table
+}
+
 const dragFirstColumn = (table: HTMLTableElement, distance: number): void => {
   const handle = table.querySelector<HTMLButtonElement>('.column-resize-handle')!
   handle.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 100 }))
@@ -95,5 +103,16 @@ describe('resizableColumns asset mode', () => {
     expect(table.style.minWidth).toBe('900px')
 
     callHook('beforeUnmount', table, 'approvals:test')
+  })
+
+  it('keeps the asset selection column tight around its checkbox', () => {
+    const table = createSelectionTable()
+    const columns = table.querySelectorAll<HTMLTableColElement>('col')
+
+    expect(columns[0].style.width).toBe('36px')
+    expect(table.querySelectorAll('.column-resize-handle')).toHaveLength(1)
+    expect(table.querySelector<HTMLButtonElement>('.column-resize-handle')?.getAttribute('aria-label')).toBe('调整入库状态列宽')
+
+    callHook('beforeUnmount', table, 'assets:inbound')
   })
 })
