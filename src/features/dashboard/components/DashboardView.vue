@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { PictureFilled } from '@element-plus/icons-vue'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useTerminalMode } from '../../../core/auth/terminal-mode'
@@ -10,6 +10,16 @@ import AssetRequestDialog from '../../approvals/components/AssetRequestDialog.vu
 type DistributionMode = 'organization' | 'location'
 type CategoryMetricMode = 'count' | 'amount'
 type ChartRow = { key: string; label: string; title: string; count: number; amount: number }
+type DashboardTooltip = {
+  visible: boolean
+  compact: boolean
+  left: number
+  top: number
+  title: string
+  metric: string
+  value: string
+  color: string
+}
 
 const { state, assets, requests, load } = useDashboard()
 const { user } = usePortalSession()
@@ -20,6 +30,44 @@ const statusScope = ref('')
 const requestOpen = ref(false)
 const requestType = ref('资产退还')
 const requestAssetId = ref('')
+const dashboardTooltip = reactive<DashboardTooltip>({
+  visible: false,
+  compact: false,
+  left: 0,
+  top: 0,
+  title: '',
+  metric: '数量',
+  value: '0',
+  color: '#1fa4e5'
+})
+
+const positionDashboardTooltip = (event: MouseEvent): void => {
+  const tooltipWidth = 220
+  const tooltipHeight = 72
+  dashboardTooltip.left = event.clientX + tooltipWidth + 24 > window.innerWidth
+    ? Math.max(12, event.clientX - tooltipWidth - 12)
+    : event.clientX + 12
+  dashboardTooltip.top = event.clientY + tooltipHeight + 24 > window.innerHeight
+    ? Math.max(12, event.clientY - tooltipHeight - 12)
+    : event.clientY + 12
+}
+const showDashboardTooltip = (
+  event: MouseEvent,
+  title: string,
+  metric: string,
+  value: string,
+  color = '#1fa4e5',
+  compact = false
+): void => {
+  dashboardTooltip.title = title
+  dashboardTooltip.metric = metric
+  dashboardTooltip.value = value
+  dashboardTooltip.color = color
+  dashboardTooltip.compact = compact
+  dashboardTooltip.visible = true
+  positionDashboardTooltip(event)
+}
+const hideDashboardTooltip = (): void => { dashboardTooltip.visible = false }
 
 const totalValue = computed(() => assets.value.reduce((sum, item) => sum + Number(item.price || 0), 0))
 const activeCount = computed(() => assets.value.filter((item) => item.status === '领用').length)
@@ -119,6 +167,9 @@ const categoryScale = computed(() => chartScale(Math.max(...categoryRows.value.m
 const columns = (rows: ChartRow[]): string => `repeat(${rows.length}, minmax(0, 1fr))`
 const barHeight = (value: number, max: number): string => `${max ? Math.max(value / max * 100, value ? 6 : 0).toFixed(2) : 0}%`
 const metricLabel = (value: number, mode: CategoryMetricMode = 'count'): string => mode === 'amount' && value >= 10000 ? `${Math.round(value / 10000).toLocaleString('zh-CN')}万` : Math.round(value).toLocaleString('zh-CN')
+const exactMetricLabel = (value: number, mode: CategoryMetricMode = 'count'): string => mode === 'amount'
+  ? `¥${Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`
+  : Math.round(value).toLocaleString('zh-CN')
 </script>
 
 <template>
@@ -175,7 +226,7 @@ const metricLabel = (value: number, mode: CategoryMetricMode = 'count'): string 
           <div class="dashboard-card-head"><h3>资产状态占比</h3><div class="dashboard-card-filters"><el-select v-model="statusScope" aria-label="资产状态范围" placeholder="全部"><el-option label="全部" value="" /></el-select><el-select model-value="" aria-label="所属或承租公司" placeholder="所属/承租公司" disabled><el-option label="所属/承租公司" value="" /></el-select></div></div>
           <div class="donut-layout">
             <div class="dashboard-donut">
-              <svg class="donut-svg" viewBox="0 0 100 100" aria-hidden="true"><circle class="donut-ring donut-ring-base" cx="50" cy="50" r="34" /><circle v-for="segment in statusSegments.filter((item) => item.count > 0)" :key="segment.key" class="donut-ring donut-ring-segment" :class="`donut-ring-${segment.key}`" cx="50" cy="50" r="34" :style="{ '--segment-color': segment.color, '--segment-dash': segment.dash, '--segment-offset': segment.offset }" /></svg>
+              <svg class="donut-svg" viewBox="0 0 100 100" aria-hidden="true"><circle class="donut-ring donut-ring-base" cx="50" cy="50" r="34" /><circle v-for="segment in statusSegments.filter((item) => item.count > 0)" :key="segment.key" class="donut-ring donut-ring-segment" :class="`donut-ring-${segment.key}`" cx="50" cy="50" r="34" :style="{ '--segment-color': segment.color, '--segment-dash': segment.dash, '--segment-offset': segment.offset }" @mouseenter="showDashboardTooltip($event, segment.label, '', `${segment.count}(${segment.percent}%)`, segment.color, true)" @mousemove="positionDashboardTooltip" @mouseleave="hideDashboardTooltip" /></svg>
               <div><span>全部</span><strong>{{ assets.length }}</strong></div>
             </div>
             <div class="chart-legend"><div v-for="segment in statusSegments" :key="segment.key"><i class="legend-dot" :style="{ '--legend-color': segment.color }"></i><span>{{ segment.label }}</span><strong>{{ segment.count }}</strong><em>{{ segment.percent }}%</em></div></div>
@@ -185,23 +236,42 @@ const metricLabel = (value: number, mode: CategoryMetricMode = 'count'): string 
         <article class="dashboard-chart-card asset-distribution-card">
           <div class="dashboard-card-head"><h3>资产分布情况</h3></div>
           <div class="asset-distribution-chart">
-            <div class="asset-distribution-body" :style="{ '--tick-intervals': Math.max(distributionScale.ticks.length - 1, 1) }"><div class="asset-distribution-axis" aria-hidden="true"><span v-for="tick in distributionScale.ticks" :key="tick">{{ tick.toLocaleString('zh-CN') }}</span></div><div class="asset-distribution-plot" :style="{ '--distribution-columns': columns(distributionRows), '--tick-intervals': Math.max(distributionScale.ticks.length - 1, 1) }"><div class="asset-distribution-plot-inner"><div class="asset-distribution-grid" aria-hidden="true"><span v-for="index in Math.max(distributionScale.ticks.length - 1, 1)" :key="index"></span></div><div class="asset-distribution-bars"><div v-for="item in distributionRows" :key="item.key" class="asset-distribution-bar" :style="{ '--bar-height': barHeight(item.count, distributionScale.max) }" :title="`${item.title}，资产分布情况：${item.count}`"><strong v-if="item.count">{{ item.count.toLocaleString('zh-CN') }}</strong><span></span></div></div><div class="asset-distribution-labels"><span v-for="item in distributionRows" :key="item.key" :title="item.title">{{ item.label }}</span></div></div></div></div>
+            <div class="asset-distribution-body" :style="{ '--tick-intervals': Math.max(distributionScale.ticks.length - 1, 1) }"><div class="asset-distribution-axis" aria-hidden="true"><span v-for="tick in distributionScale.ticks" :key="tick">{{ tick.toLocaleString('zh-CN') }}</span></div><div class="asset-distribution-plot" :style="{ '--distribution-columns': columns(distributionRows), '--tick-intervals': Math.max(distributionScale.ticks.length - 1, 1) }"><div class="asset-distribution-plot-inner"><div class="asset-distribution-grid" aria-hidden="true"><span v-for="index in Math.max(distributionScale.ticks.length - 1, 1)" :key="index"></span></div><div class="asset-distribution-bars"><div v-for="item in distributionRows" :key="item.key" class="asset-distribution-bar" :style="{ '--bar-height': barHeight(item.count, distributionScale.max) }"><strong v-if="item.count">{{ item.count.toLocaleString('zh-CN') }}</strong><span @mouseenter="showDashboardTooltip($event, item.title, '资产分布情况', exactMetricLabel(item.count))" @mousemove="positionDashboardTooltip" @mouseleave="hideDashboardTooltip"></span></div></div><div class="asset-distribution-labels"><span v-for="item in distributionRows" :key="item.key" :title="item.title">{{ item.label }}</span></div></div></div></div>
             <div class="asset-distribution-tabs"><button :class="{ active: distributionMode === 'organization' }" type="button" :aria-pressed="distributionMode === 'organization'" @click="distributionMode = 'organization'">组织架构</button><button :class="{ active: distributionMode === 'location' }" type="button" :aria-pressed="distributionMode === 'location'" @click="distributionMode = 'location'">所在位置</button></div>
           </div>
         </article>
 
         <article class="dashboard-chart-card active-asset-stat-card">
           <div class="dashboard-card-head"><h3>领用资产统计</h3></div>
-          <div class="asset-distribution-chart active-asset-stat-chart"><div class="asset-distribution-body" :style="{ '--tick-intervals': Math.max(activeScale.ticks.length - 1, 1) }"><div class="asset-distribution-axis" aria-hidden="true"><span v-for="tick in activeScale.ticks" :key="tick">{{ tick.toLocaleString('zh-CN') }}</span></div><div class="asset-distribution-plot" :style="{ '--distribution-columns': columns(activeAssetRows), '--tick-intervals': Math.max(activeScale.ticks.length - 1, 1) }"><div class="asset-distribution-plot-inner"><div class="asset-distribution-grid" aria-hidden="true"><span v-for="index in Math.max(activeScale.ticks.length - 1, 1)" :key="index"></span></div><div class="asset-distribution-bars"><div v-for="item in activeAssetRows" :key="item.key" class="asset-distribution-bar" :style="{ '--bar-height': barHeight(item.count, activeScale.max) }" :title="`${item.title}，领用资产统计：${item.count}`"><strong v-if="item.count">{{ item.count.toLocaleString('zh-CN') }}</strong><span></span></div></div><div class="asset-distribution-labels"><span v-for="item in activeAssetRows" :key="item.key" :title="item.title">{{ item.label }}</span></div></div></div></div></div>
+          <div class="asset-distribution-chart active-asset-stat-chart"><div class="asset-distribution-body" :style="{ '--tick-intervals': Math.max(activeScale.ticks.length - 1, 1) }"><div class="asset-distribution-axis" aria-hidden="true"><span v-for="tick in activeScale.ticks" :key="tick">{{ tick.toLocaleString('zh-CN') }}</span></div><div class="asset-distribution-plot" :style="{ '--distribution-columns': columns(activeAssetRows), '--tick-intervals': Math.max(activeScale.ticks.length - 1, 1) }"><div class="asset-distribution-plot-inner"><div class="asset-distribution-grid" aria-hidden="true"><span v-for="index in Math.max(activeScale.ticks.length - 1, 1)" :key="index"></span></div><div class="asset-distribution-bars"><div v-for="item in activeAssetRows" :key="item.key" class="asset-distribution-bar" :style="{ '--bar-height': barHeight(item.count, activeScale.max) }"><strong v-if="item.count">{{ item.count.toLocaleString('zh-CN') }}</strong><span @mouseenter="showDashboardTooltip($event, item.title, '领用资产统计', exactMetricLabel(item.count))" @mousemove="positionDashboardTooltip" @mouseleave="hideDashboardTooltip"></span></div></div><div class="asset-distribution-labels"><span v-for="item in activeAssetRows" :key="item.key" :title="item.title">{{ item.label }}</span></div></div></div></div></div>
         </article>
 
         <article class="dashboard-chart-card asset-category-stat-card">
           <div class="dashboard-card-head"><h3>资产分类统计</h3></div>
-          <div class="asset-distribution-chart asset-category-stat-chart"><div class="asset-distribution-body" :style="{ '--tick-intervals': Math.max(categoryScale.ticks.length - 1, 1) }"><div class="asset-distribution-axis" aria-hidden="true"><span v-for="tick in categoryScale.ticks" :key="tick">{{ metricLabel(tick, categoryMetricMode) }}</span></div><div class="asset-distribution-plot" :style="{ '--distribution-columns': columns(categoryRows), '--tick-intervals': Math.max(categoryScale.ticks.length - 1, 1) }"><div class="asset-distribution-plot-inner"><div class="asset-distribution-grid" aria-hidden="true"><span v-for="index in Math.max(categoryScale.ticks.length - 1, 1)" :key="index"></span></div><div class="asset-distribution-bars"><div v-for="item in categoryRows" :key="item.key" class="asset-distribution-bar" :style="{ '--bar-height': barHeight(categoryMetricMode === 'amount' ? item.amount : item.count, categoryScale.max) }" :title="`${item.title}，资产分类统计：${metricLabel(categoryMetricMode === 'amount' ? item.amount : item.count, categoryMetricMode)}`"><strong v-if="item.count || item.amount">{{ metricLabel(categoryMetricMode === 'amount' ? item.amount : item.count, categoryMetricMode) }}</strong><span></span></div></div><div class="asset-distribution-labels"><span v-for="item in categoryRows" :key="item.key" :title="item.title">{{ item.label }}</span></div></div></div></div><div class="asset-distribution-tabs asset-category-stat-tabs"><button :class="{ active: categoryMetricMode === 'count' }" type="button" :aria-pressed="categoryMetricMode === 'count'" @click="categoryMetricMode = 'count'">数量</button><button :class="{ active: categoryMetricMode === 'amount' }" type="button" :aria-pressed="categoryMetricMode === 'amount'" @click="categoryMetricMode = 'amount'">金额</button></div></div>
+          <div class="asset-distribution-chart asset-category-stat-chart"><div class="asset-distribution-body" :style="{ '--tick-intervals': Math.max(categoryScale.ticks.length - 1, 1) }"><div class="asset-distribution-axis" aria-hidden="true"><span v-for="tick in categoryScale.ticks" :key="tick">{{ metricLabel(tick, categoryMetricMode) }}</span></div><div class="asset-distribution-plot" :style="{ '--distribution-columns': columns(categoryRows), '--tick-intervals': Math.max(categoryScale.ticks.length - 1, 1) }"><div class="asset-distribution-plot-inner"><div class="asset-distribution-grid" aria-hidden="true"><span v-for="index in Math.max(categoryScale.ticks.length - 1, 1)" :key="index"></span></div><div class="asset-distribution-bars"><div v-for="item in categoryRows" :key="item.key" class="asset-distribution-bar" :style="{ '--bar-height': barHeight(categoryMetricMode === 'amount' ? item.amount : item.count, categoryScale.max) }"><strong v-if="item.count || item.amount">{{ metricLabel(categoryMetricMode === 'amount' ? item.amount : item.count, categoryMetricMode) }}</strong><span @mouseenter="showDashboardTooltip($event, item.title, '资产分类统计', exactMetricLabel(categoryMetricMode === 'amount' ? item.amount : item.count, categoryMetricMode))" @mousemove="positionDashboardTooltip" @mouseleave="hideDashboardTooltip"></span></div></div><div class="asset-distribution-labels"><span v-for="item in categoryRows" :key="item.key" :title="item.title">{{ item.label }}</span></div></div></div></div><div class="asset-distribution-tabs asset-category-stat-tabs"><button :class="{ active: categoryMetricMode === 'count' }" type="button" :aria-pressed="categoryMetricMode === 'count'" @click="categoryMetricMode = 'count'">数量</button><button :class="{ active: categoryMetricMode === 'amount' }" type="button" :aria-pressed="categoryMetricMode === 'amount'" @click="categoryMetricMode = 'amount'">金额</button></div></div>
         </article>
       </div>
     </article>
   </section>
+  <Teleport to="body">
+    <div
+      v-show="dashboardTooltip.visible"
+      class="dashboard-bar-tooltip show"
+      :class="{ compact: dashboardTooltip.compact }"
+      data-testid="dashboard-chart-tooltip"
+      :style="{ left: `${dashboardTooltip.left}px`, top: `${dashboardTooltip.top}px` }"
+      role="status"
+    >
+      <span v-if="dashboardTooltip.compact" class="dashboard-bar-tooltip-compact-text">{{ dashboardTooltip.title }}：{{ dashboardTooltip.value }}</span>
+      <template v-else>
+        <strong>{{ dashboardTooltip.title }}</strong>
+        <div class="dashboard-bar-tooltip-detail">
+          <i :style="{ background: dashboardTooltip.color }"></i>
+          <span>{{ dashboardTooltip.metric }}：{{ dashboardTooltip.value }}</span>
+        </div>
+      </template>
+    </div>
+  </Teleport>
   </template>
   <AssetRequestDialog v-model="requestOpen" :type="requestType" :preselected-asset-id="requestAssetId" @submitted="load" />
 </template>
