@@ -579,6 +579,39 @@ test.describe('登录后门户质量回归', () => {
     await expect(page.getByText('资产总数', { exact: true })).toBeVisible()
   })
 
+  test('员工首页资产编码打开数据库资产详情', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '员工资产详情完整字段在桌面项目执行')
+    await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))
+    await installApiMocks(page)
+    await page.route('http://127.0.0.1:4174/api/assets', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [{
+        id: 'AST-EMP-001', name: '员工显示器', status: '领用', category: 'IT设备', type: '设备',
+        owner: '测试管理员', ownerSubject: 'E2E001', department: '研发部', company: '示例公司', ownerCompany: '资产所属公司',
+        location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'M-1', sn: 'SN-1', condition: '正常',
+        price: 5000, purchaseDate: '2026-07-01', receiveDate: '2026-07-21'
+      }] })
+    }))
+    await page.goto('/')
+
+    await page.getByRole('button', { name: '查看资产 AST-EMP-001 详情', exact: true }).click()
+    const assetDetail = page.getByRole('dialog', { name: '资产详情' })
+    await expect(assetDetail).toBeVisible()
+    for (const value of ['员工显示器', 'AST-EMP-001', 'IT设备', '测试品牌 M-1', 'SN-1', '示例公司', '杭州仓库', '资产管理员', '2026-07-21', '正常']) {
+      await expect(assetDetail.getByText(value, { exact: true }).first()).toBeVisible()
+    }
+    for (const label of ['资产分类', '设备序列号', '使用公司', '所在位置', '管理员', '领用日期', '资产状况']) {
+      await expect(assetDetail.getByText(label, { exact: true })).toBeVisible()
+    }
+    const detailBounds = await assetDetail.locator('.employee-asset-detail-dialog').boundingBox()
+    expect(detailBounds?.width).toBeLessThanOrEqual(520)
+    await expect(assetDetail.getByRole('button', { name: '退还', exact: true })).toBeVisible()
+    await expect(assetDetail.getByRole('button', { name: '交接', exact: true })).toBeVisible()
+    await assetDetail.locator('.el-dialog__headerbtn').click()
+    await expect(assetDetail).toBeHidden()
+  })
+
   test('员工首页退还和交接直接打开已选资产的申请表单', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '员工首页快捷申请在桌面项目执行')
     await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))

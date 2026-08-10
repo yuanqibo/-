@@ -6,6 +6,7 @@ import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { useDashboard } from '../composables/useDashboard'
 import type { AssetRecord } from '../../assets/types/assets'
 import AssetRequestDialog from '../../approvals/components/AssetRequestDialog.vue'
+import EmployeeAssetDetailDrawer from './EmployeeAssetDetailDrawer.vue'
 
 type DistributionMode = 'organization' | 'location'
 type CategoryMetricMode = 'count' | 'amount'
@@ -30,6 +31,7 @@ const statusScope = ref('')
 const requestOpen = ref(false)
 const requestType = ref('资产退还')
 const requestAssetId = ref('')
+const employeeAssetDetail = ref<AssetRecord | null>(null)
 const dashboardTooltip = reactive<DashboardTooltip>({
   visible: false,
   compact: false,
@@ -97,6 +99,7 @@ const assetCustodian = (item: AssetRecord): string => {
 }
 const assetModelLabel = (item: AssetRecord): string => [item.brand, item.model].filter(Boolean).join(' ') || '-'
 const openEmployeeRequest = (action: 'return' | 'handover', item: AssetRecord): void => {
+  employeeAssetDetail.value = null
   requestType.value = action === 'handover' ? '资产交接' : item.status === '借用中' ? '资产归还' : '资产退还'
   requestAssetId.value = item.id
   requestOpen.value = true
@@ -194,7 +197,7 @@ const exactMetricLabel = (value: number, mode: CategoryMetricMode = 'count'): st
                 <span class="device-card-status" :class="{ borrowed: item.status === '借用中' }">{{ assetAssignmentLabel(item) }}</span>
               </div>
               <dl class="device-card-fields">
-                <div><dt>资产编码</dt><dd class="device-card-code" :title="item.id">{{ item.id }}</dd></div>
+                <div><dt>资产编码</dt><dd><button class="device-card-code" type="button" :title="`查看资产 ${item.id} 详情`" :aria-label="`查看资产 ${item.id} 详情`" @click="employeeAssetDetail = item">{{ item.id }}</button></dd></div>
                 <div><dt>品牌/型号</dt><dd :title="assetModelLabel(item)">{{ assetModelLabel(item) }}</dd></div>
                 <div><dt>管理员</dt><dd :title="assetCustodian(item)">{{ assetCustodian(item) }}</dd></div>
                 <div><dt>{{ assetAssignmentDateLabel(item) }}</dt><dd :title="assetAssignmentDate(item)">{{ assetAssignmentDate(item) }}</dd></div>
@@ -273,5 +276,14 @@ const exactMetricLabel = (value: number, mode: CategoryMetricMode = 'count'): st
     </div>
   </Teleport>
   </template>
+  <EmployeeAssetDetailDrawer
+    :asset="employeeAssetDetail"
+    :assignment-date="employeeAssetDetail ? assetAssignmentDate(employeeAssetDetail) : '-'"
+    :assignment-date-label="employeeAssetDetail ? assetAssignmentDateLabel(employeeAssetDetail) : '领用日期'"
+    :assignment-label="employeeAssetDetail ? assetAssignmentLabel(employeeAssetDetail) : '领用'"
+    :custodian="employeeAssetDetail ? assetCustodian(employeeAssetDetail) : '-'"
+    @close="employeeAssetDetail = null"
+    @request="openEmployeeRequest"
+  />
   <AssetRequestDialog v-model="requestOpen" :type="requestType" :preselected-asset-id="requestAssetId" @submitted="load" />
 </template>
