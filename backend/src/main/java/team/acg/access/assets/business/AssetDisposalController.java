@@ -23,7 +23,7 @@ import java.util.*;
 public class AssetDisposalController {
     private static final String SNAPSHOT_TYPE = "disposals";
     private static final int MAX_ASSETS_PER_ORDER = 500;
-    private static final Set<String> DISPOSAL_TYPES = Set.of("退租", "报废", "捐赠", "其他");
+    private static final Set<String> DISPOSAL_TYPES = Set.of("退租", "报废", "捐赠", "变卖", "其他");
     private static final DateTimeFormatter ORDER_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
     private final BusinessDataRepository repository;

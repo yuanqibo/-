@@ -78,6 +78,13 @@ export type AssetOperationRecord = {
   signer?: string
   signerSubject?: string
   signatureImage?: string
+  handoverType?: string
+  previousParty?: string
+  previousPartySubject?: string
+  previousCompany?: string
+  previousDepartment?: string
+  previousLocation?: string
+  assetOwnerCompany?: string
   noticeContent?: string
   rejectionReason?: string
   [key: string]: unknown

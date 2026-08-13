@@ -48,7 +48,7 @@ const assetOperations = [
   { id: 'TK-001', type: 'RETURN', assetId: 'AST-0006', status: '已完成', date: '2026-07-16', operator: '管理员', party: '员工6', company: '示例公司', department: '综合部', location: '杭州仓库' },
   { id: 'JY-001', returnOrderId: 'GH-001', type: 'BORROW', assetId: 'AST-0008', status: '待归还', date: '2026-07-12', expectedReturnDate: '2026-07-22', operator: '管理员', party: '员工8', company: '示例公司', department: '综合部', location: '会议室' },
   { id: 'GH-002', type: 'BORROW_RETURN', assetId: 'AST-0015', status: '已完成', date: '2026-07-18', operator: '管理员', party: '员工15', company: '示例公司', department: '综合部', location: '杭州仓库' },
-  { id: 'JJ-001', type: 'HANDOVER', assetId: 'AST-0001', status: '待签字', date: '2026-07-19', operator: '管理员', party: '李四', company: '示例公司', department: '研发部', location: '研发办公室', canSign: true }
+  { id: 'JJ-001', type: 'HANDOVER', assetId: 'AST-0001', status: '待签字', date: '2026-07-19', operator: '管理员', party: '李四', company: '示例公司', department: '研发部', location: '研发办公室', handoverType: '员工交接', note: '项目设备交接', previousParty: '张三', previousCompany: '示例公司', previousDepartment: '研发部', previousLocation: '杭州仓库', assetOwnerCompany: '示例公司', canSign: true }
 ]
 
 const employees = Array.from({ length: 60 }, (_, index) => ({

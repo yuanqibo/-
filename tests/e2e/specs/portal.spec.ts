@@ -141,6 +141,61 @@ test.describe('登录后门户质量回归', () => {
     await expect(page.getByRole('button', { name: '＋ 新增', exact: true })).toBeVisible()
   })
 
+  test('资产交接自定义列覆盖单据字段和资产明细并持久化', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '资产交接密集表格在桌面项目执行')
+    await openApp(page, '/assets/handover')
+    await page.evaluate(() => localStorage.removeItem('assetHandoverColumnSettingsV1'))
+    await page.reload()
+
+    const defaultHeaders = [
+      ['status', '交接状态'], ['order', '交接单号'], ['operator', '经办人'], ['receiver', '接收人'],
+      ['receiverCompany', '接收公司'], ['receiverDepartment', '接收部门'], ['date', '交接日期'], ['handoverType', '交接类型'],
+      ['targetLocation', '交接后位置'], ['note', '交接备注'], ['signer', '签字人'], ['signatureImage', '签字图片'],
+      ['assetImage', '资产图片'], ['assetId', '资产编码'], ['assetCategory', '资产分类'], ['assetName', '资产名称'],
+      ['assetBrand', '品牌'], ['assetModel', '型号'], ['assetSn', '设备序列号'], ['assetOwnerCompany', '所属/承租公司'],
+      ['assetLocation', '所在位置'], ['actions', '操作']
+    ] as const
+    for (const [key, label] of defaultHeaders) {
+      await expect(page.locator(`.handover-custom-table th[data-column-key="${key}"]`)).toContainText(label)
+    }
+    for (const key of ['handoverPerson', 'handoverCompany', 'handoverDepartment']) {
+      await expect(page.locator(`.handover-custom-table th[data-column-key="${key}"]`)).toHaveCount(0)
+    }
+
+    await page.getByRole('button', { name: '列表设置', exact: true }).click()
+    const drawer = page.locator('.asset-advanced-search-drawer:visible').last()
+    const documentSection = drawer.locator('[data-column-group="document"]')
+    const assetSection = drawer.locator('[data-column-group="asset"]')
+    await expect(documentSection).toContainText('(13/13)')
+    await expect(assetSection).toContainText('(9/12)')
+
+    for (const label of ['交接状态', '交接单号', '经办人', '操作']) {
+      const checkbox = documentSection.getByRole('checkbox', { name: label, exact: true })
+      await expect(checkbox).toBeChecked()
+      await expect(checkbox).toBeDisabled()
+    }
+    for (const label of ['交接人', '交接人公司', '交接人部门']) {
+      await expect(assetSection.getByRole('checkbox', { name: label, exact: true })).not.toBeChecked()
+    }
+
+    await documentSection.getByRole('checkbox', { name: '交接备注', exact: true }).uncheck()
+    await assetSection.getByRole('checkbox', { name: '交接人', exact: true }).check()
+    await expect(page.locator('.handover-custom-table th[data-column-key="note"]')).toHaveCount(0)
+    await expect(page.locator('.handover-custom-table th[data-column-key="handoverPerson"]')).toContainText('交接人')
+    await expect(page.locator('.handover-custom-table tbody')).toContainText('张三')
+
+    await page.reload()
+    await expect(page.locator('.handover-custom-table th[data-column-key="note"]')).toHaveCount(0)
+    await expect(page.locator('.handover-custom-table th[data-column-key="handoverPerson"]')).toContainText('交接人')
+
+    await page.getByRole('button', { name: '列表设置', exact: true }).click()
+    const reloadedDrawer = page.locator('.asset-advanced-search-drawer:visible').last()
+    await reloadedDrawer.locator('[data-column-group="document"]').getByRole('button', { name: '重置', exact: true }).click()
+    await reloadedDrawer.locator('[data-column-group="asset"]').getByRole('button', { name: '重置', exact: true }).click()
+    await expect(page.locator('.handover-custom-table th[data-column-key="note"]')).toContainText('交接备注')
+    await expect(page.locator('.handover-custom-table th[data-column-key="handoverPerson"]')).toHaveCount(0)
+  })
+
   test('资产处置支持退租、部分取消与完成流转', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '处置明细密集表格在桌面项目执行')
     const disposableAssets = [
@@ -154,6 +209,7 @@ test.describe('登录后门户质量回归', () => {
     await expect(dialog.getByLabel('处置金额')).toHaveValue('')
     await expect(dialog.getByLabel('处置费用')).toHaveValue('')
     await dialog.getByText('请选择', { exact: true }).click()
+    await expect(page.getByRole('option', { name: '变卖', exact: true })).toBeVisible()
     await page.getByRole('option', { name: '退租', exact: true }).click()
     await dialog.getByLabel('处置说明').fill('租期结束，设备退还供应商')
     await dialog.getByLabel('导入资产编码文件').setInputFiles({
@@ -1375,6 +1431,36 @@ test.describe('登录后门户质量回归', () => {
     await expect(importDialog.getByText('最大数据行数不超过5000行；', { exact: true })).toBeVisible()
   })
 
+  test('领用退库新增入口的位置选择默认收起且员工申领不提供新增', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '密集流程表单在桌面项目执行')
+    await openApp(page, '/assets/receive-return')
+
+    for (const entry of [
+      { tab: '领用', title: '新增领用单', label: '领用后位置', placeholder: '请选择领用后位置' },
+      { tab: '退库', title: '新增退库单', label: '退库后位置', placeholder: '请选择退库后位置' }
+    ]) {
+      await page.locator('.receive-return-tab').filter({ hasText: entry.tab }).click()
+      await page.getByRole('button', { name: '＋ 新增', exact: true }).click()
+      const dialog = page.getByRole('dialog', { name: entry.title })
+      await expect(dialog).toBeVisible()
+      const locationSelect = dialog.locator('.el-form-item').filter({ hasText: entry.label }).locator('.el-select')
+      const combobox = locationSelect.getByRole('combobox')
+      await expect(locationSelect.locator('.el-select__placeholder')).toHaveText(entry.placeholder)
+      await expect(combobox).toHaveAttribute('aria-expanded', 'false')
+      await expect(page.locator('.el-select-dropdown:visible')).toHaveCount(0)
+      await locationSelect.click()
+      await expect(combobox).toHaveAttribute('aria-expanded', 'true')
+      await expect(page.locator('.el-select-dropdown:visible .el-tree-node.is-expanded')).toHaveCount(0)
+      await locationSelect.click()
+      await expect(combobox).toHaveAttribute('aria-expanded', 'false')
+      await dialog.getByRole('button', { name: '取消', exact: true }).click()
+      await expect(dialog).toBeHidden()
+    }
+
+    await page.locator('.receive-return-tab').filter({ hasText: '员工申领' }).click()
+    await expect(page.locator('.receive-return-toolbar').getByRole('button', { name: '＋ 新增', exact: true })).toHaveCount(0)
+  })
+
   test('领用与借用表单保留资产明细和逐项日期', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '密集流程表单在桌面项目执行')
     const state = await openApp(page, '/assets/receive-return')
@@ -1466,14 +1552,14 @@ test.describe('登录后门户质量回归', () => {
     await expect(handoverDepartment.locator('.el-select__wrapper')).not.toHaveClass(/is-disabled/)
     await handoverDialog.getByRole('button', { name: '取消', exact: true }).click()
 
-    for (const tab of ['退库', '员工申领']) {
-      await page.locator('.receive-return-tab').filter({ hasText: tab }).click()
-      await page.getByRole('button', { name: '＋ 新增', exact: true }).click()
-      const title = tab === '退库' ? '新增退库单' : '新增领用单'
-      await expect(page.getByRole('dialog', { name: title })).toBeVisible()
-      await expect(page.getByRole('dialog', { name: tab === '退库' ? '选择退库资产' : '选择领用资产' })).toHaveCount(0)
-      await page.getByRole('dialog', { name: title }).getByRole('button', { name: '取消', exact: true }).click()
-    }
+    await page.locator('.receive-return-tab').filter({ hasText: '退库' }).click()
+    await page.getByRole('button', { name: '＋ 新增', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: '新增退库单' })).toBeVisible()
+    await expect(page.getByRole('dialog', { name: '选择退库资产' })).toHaveCount(0)
+    await page.getByRole('dialog', { name: '新增退库单' }).getByRole('button', { name: '取消', exact: true }).click()
+
+    await page.locator('.receive-return-tab').filter({ hasText: '员工申领' }).click()
+    await expect(page.locator('.receive-return-toolbar').getByRole('button', { name: '＋ 新增', exact: true })).toHaveCount(0)
   })
 
   test('入库单打印恢复资产信息预览并与标签打印区分', async ({ page, isMobile }) => {

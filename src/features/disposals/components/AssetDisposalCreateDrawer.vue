@@ -18,7 +18,7 @@ const emit = defineEmits<{
   (event: 'created', value: DisposalRecord): void
 }>()
 
-const disposalTypes = ['退租', '报废', '捐赠', '其他']
+const disposalTypes = ['退租', '报废', '捐赠', '变卖', '其他']
 const { user } = usePortalSession()
 const { assets, load: loadAssets } = useAssets()
 const { create } = useDisposals()

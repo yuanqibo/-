@@ -33,10 +33,18 @@ class BusinessDataControllerTest {
     @BeforeEach
     void clearBusinessData() {
         org.mockito.Mockito.reset(approvalIntegration);
-        jdbc.update("DELETE FROM business_snapshot");
+        clearBusinessRecordTables();
         jdbc.update("DELETE FROM approval_request_record");
         jdbc.update("DELETE FROM asset_operation_record");
         jdbc.update("DELETE FROM asset_record");
+    }
+
+    private void clearBusinessRecordTables() {
+        jdbc.update("DELETE FROM asset_stocktake_record");
+        jdbc.update("DELETE FROM consumable_record");
+        jdbc.update("DELETE FROM asset_repair_record");
+        jdbc.update("DELETE FROM asset_contract_record");
+        jdbc.update("DELETE FROM asset_disposal_record");
     }
 
     @Test
@@ -164,17 +172,14 @@ class BusinessDataControllerTest {
         insertDisposalAsset("D-LX-1", "凌雄租赁");
         insertDisposalAsset("D-OTHER-2", "普通供应商");
 
-        mvc.perform(post("/api/asset-disposals").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"disposalType\":\"变卖\",\"description\":\"不再支持的处置类型\",\"assetIds\":[]}"))
-            .andExpect(status().isBadRequest());
-
         String response = mvc.perform(post("/api/asset-disposals").contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                    {"disposalType":"退租","company":"示例公司","operator":"管理员",
-                     "description":"租期结束退还设备","returnDate":"2026-08-01",
+                    {"disposalType":"变卖","company":"示例公司","operator":"管理员",
+                     "description":"闲置资产变卖","returnDate":"2026-08-01",
                      "assetIds":["D-LX-1","D-OTHER-2"]}
                     """))
             .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.item.disposalType").value("变卖"))
             .andExpect(jsonPath("$.item.status").value("待处置"))
             .andExpect(jsonPath("$.item.integrationRequired").doesNotExist())
             .andExpect(jsonPath("$.item.lingxiongAssetIds").doesNotExist())
@@ -188,7 +193,7 @@ class BusinessDataControllerTest {
         assertThat(assetStatus("D-OTHER-2")).isEqualTo("处置中");
 
         mvc.perform(post("/api/asset-disposals/" + id + "/cancel").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"assetIds\":[\"D-LX-1\"],\"reason\":\"退租信息有误\"}"))
+                .content("{\"assetIds\":[\"D-LX-1\"],\"reason\":\"变卖信息有误\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].status").value("部分取消"))
             .andExpect(jsonPath("$.items[0].assets[0].status").value("已取消"));

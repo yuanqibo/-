@@ -234,7 +234,8 @@ class AssetControllerTest {
     void handoverRequiresSignatureAndCancellationRestoresThePreviousOwner() throws Exception {
         mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
             {"item":{"id":"PC-HANDOVER","name":"交接资产","category":"电脑","location":"总部",
-              "owner":"原责任人","ownerSubject":"user-old"}}
+              "owner":"原责任人","ownerSubject":"user-old","company":"原公司","department":"原部门",
+              "ownerCompany":"资产所属公司"}}
             """))
             .andExpect(status().isOk());
 
@@ -245,6 +246,15 @@ class AssetControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].status").value("交接待签字"))
             .andExpect(jsonPath("$.items[0].owner").value("新责任人"));
+
+        mvc.perform(get("/api/asset-operations").param("type", "HANDOVER"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].handoverType").value("员工交接"))
+            .andExpect(jsonPath("$.items[0].previousParty").value("原责任人"))
+            .andExpect(jsonPath("$.items[0].previousCompany").value("原公司"))
+            .andExpect(jsonPath("$.items[0].previousDepartment").value("原部门"))
+            .andExpect(jsonPath("$.items[0].previousLocation").value("总部"))
+            .andExpect(jsonPath("$.items[0].assetOwnerCompany").value("资产所属公司"));
 
         mvc.perform(post("/api/assets/commands/handover-cancel").contentType(MediaType.APPLICATION_JSON).content("""
             {"assetIds":["PC-HANDOVER"],"fields":{"operator":"管理员","date":"2026-07-11"}}

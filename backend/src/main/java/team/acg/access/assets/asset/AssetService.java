@@ -711,6 +711,13 @@ public class AssetService {
         operation.put("partySubject", operationPartySubject(type, asset, previous));
         operation.put("previousParty", previous == null ? "" : previous.path("owner").asText(""));
         operation.put("previousPartySubject", previous == null ? "" : previous.path("ownerSubject").asText(""));
+        if ("HANDOVER".equals(type)) {
+            operation.put("handoverType", fields.path("handoverType").asText(asset.path("handoverType").asText("")));
+            operation.put("previousCompany", previous == null ? "" : previous.path("company").asText(""));
+            operation.put("previousDepartment", previous == null ? "" : previous.path("department").asText(""));
+            operation.put("previousLocation", previous == null ? "" : previous.path("location").asText(""));
+            operation.put("assetOwnerCompany", asset.path("ownerCompany").asText(asset.path("company").asText("")));
+        }
         JsonNode usageSource = Set.of("RETURN", "BORROW_RETURN").contains(type) && previous != null
             ? previous : asset;
         operation.put("company", usageSource.path("company").asText(""));

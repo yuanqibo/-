@@ -33,7 +33,8 @@ class ApprovalWorkflowIntegrationTest {
     void resetState() {
         reset(executor);
         org.springframework.test.jdbc.JdbcTestUtils.deleteFromTables(
-            jdbc, "approval_callback_event", "approval_request_record", "business_snapshot");
+            jdbc, "approval_callback_event", "approval_request_record", "asset_stocktake_record",
+            "consumable_record", "asset_repair_record", "asset_contract_record", "asset_disposal_record");
     }
 
     @Test

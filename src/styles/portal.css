@@ -10163,6 +10163,19 @@ td .link {
   background: #f8fafc;
 }
 
+.handover-custom-table td {
+  vertical-align: middle;
+}
+
+.handover-table-image {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e2e8f0;
+  border-radius: 3px;
+  object-fit: cover;
+}
+
 .borrow-return-table {
   table-layout: fixed;
   min-width: 1800px;
@@ -11658,6 +11671,48 @@ body.is-resizing-column * {
   width: 14px;
   height: 14px;
   accent-color: #1296db;
+}
+
+.handover-custom-column-panel {
+  gap: 18px;
+  padding: 4px 0 18px;
+}
+
+.handover-column-section {
+  display: grid;
+  gap: 0;
+}
+
+.handover-column-section-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 4px 18px 0;
+  padding-left: 10px;
+  border-left: 3px solid #1296db;
+}
+
+.handover-column-section-title h3 {
+  margin: 0;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.handover-column-section-title button {
+  border: 0;
+  padding: 0;
+  color: #1296db;
+  background: transparent;
+  font-size: 12px;
+}
+
+.handover-column-section .custom-column-toolbar {
+  padding-block: 12px 8px;
+}
+
+.handover-column-section .custom-column-list label:has(input:disabled) {
+  color: #a8b0bc;
 }
 
 .compact-setting {

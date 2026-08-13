@@ -18,6 +18,10 @@ import { fetchRequestOperators, type RequestOperator } from '../../approvals/api
 type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return' | 'handover'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
 type ListColumnKey = 'status' | 'code' | 'name' | 'category' | 'brand' | 'model' | 'sn' | 'phone' | 'email' | 'date' | 'location' | 'price' | 'purchase' | 'rent' | 'supplier' | 'owner' | 'usage'
+type HandoverDocumentColumnKey = 'status' | 'order' | 'operator' | 'receiver' | 'receiverCompany' | 'receiverDepartment' | 'date' | 'handoverType' | 'targetLocation' | 'note' | 'signer' | 'signatureImage' | 'actions'
+type HandoverAssetColumnKey = 'assetImage' | 'assetId' | 'assetCategory' | 'assetName' | 'assetBrand' | 'assetModel' | 'assetSn' | 'assetOwnerCompany' | 'assetLocation' | 'handoverPerson' | 'handoverCompany' | 'handoverDepartment'
+type HandoverColumnKey = HandoverDocumentColumnKey | HandoverAssetColumnKey
+type HandoverColumnOption = { key: HandoverColumnKey; label: string; width: number; required?: boolean; defaultVisible?: boolean }
 type TableDensity = 'compact' | 'standard' | 'roomy'
 type ReceiveReturnTab = 'receive' | 'return' | 'employee' | 'handover'
 type BorrowReturnTab = 'borrow' | 'return'
@@ -214,6 +218,85 @@ const toggleListColumn = (key: ListColumnKey, checked: boolean): void => {
 }
 const resetListSettings = (): void => { listVisibleColumns.value = [...listColumnKeys]; listDensity.value = 'compact' }
 
+const handoverDocumentColumns: HandoverColumnOption[] = [
+  { key: 'status', label: '交接状态', width: 92, required: true, defaultVisible: true },
+  { key: 'order', label: '交接单号', width: 180, required: true, defaultVisible: true },
+  { key: 'operator', label: '经办人', width: 88, required: true, defaultVisible: true },
+  { key: 'receiver', label: '接收人', width: 88, defaultVisible: true },
+  { key: 'receiverCompany', label: '接收公司', width: 160, defaultVisible: true },
+  { key: 'receiverDepartment', label: '接收部门', width: 120, defaultVisible: true },
+  { key: 'date', label: '交接日期', width: 100, defaultVisible: true },
+  { key: 'handoverType', label: '交接类型', width: 100, defaultVisible: true },
+  { key: 'targetLocation', label: '交接后位置', width: 140, defaultVisible: true },
+  { key: 'note', label: '交接备注', width: 140, defaultVisible: true },
+  { key: 'signer', label: '签字人', width: 90, defaultVisible: true },
+  { key: 'signatureImage', label: '签字图片', width: 90, defaultVisible: true },
+  { key: 'actions', label: '操作', width: 100, required: true, defaultVisible: true }
+]
+const handoverAssetColumns: HandoverColumnOption[] = [
+  { key: 'assetImage', label: '资产图片', width: 76, defaultVisible: true },
+  { key: 'assetId', label: '资产编码', width: 110, defaultVisible: true },
+  { key: 'assetCategory', label: '资产分类', width: 100, defaultVisible: true },
+  { key: 'assetName', label: '资产名称', width: 140, defaultVisible: true },
+  { key: 'assetBrand', label: '品牌', width: 90, defaultVisible: true },
+  { key: 'assetModel', label: '型号', width: 140, defaultVisible: true },
+  { key: 'assetSn', label: '设备序列号', width: 140, defaultVisible: true },
+  { key: 'assetOwnerCompany', label: '所属/承租公司', width: 160, defaultVisible: true },
+  { key: 'assetLocation', label: '所在位置', width: 140, defaultVisible: true },
+  { key: 'handoverPerson', label: '交接人', width: 90 },
+  { key: 'handoverCompany', label: '交接人公司', width: 150 },
+  { key: 'handoverDepartment', label: '交接人部门', width: 120 }
+]
+const handoverColumns = [...handoverDocumentColumns, ...handoverAssetColumns]
+const handoverColumnKeys = handoverColumns.map((item) => item.key)
+const handoverRequiredColumnKeys = handoverColumns.filter((item) => item.required).map((item) => item.key)
+const handoverDefaultColumnKeys = handoverColumns.filter((item) => item.defaultVisible || item.required).map((item) => item.key)
+const parseHandoverColumns = (): HandoverColumnKey[] => {
+  try {
+    const stored = JSON.parse(localStorage.getItem('assetHandoverColumnSettingsV1') || 'null') as unknown
+    const selected = Array.isArray(stored)
+      ? stored.filter((item): item is HandoverColumnKey => handoverColumnKeys.includes(item as HandoverColumnKey))
+      : handoverDefaultColumnKeys
+    const normalized = new Set([...selected, ...handoverRequiredColumnKeys])
+    return handoverColumnKeys.filter((item) => normalized.has(item))
+  } catch { return [...handoverDefaultColumnKeys] }
+}
+const handoverVisibleColumns = ref<HandoverColumnKey[]>(parseHandoverColumns())
+const handoverDisplayedColumns = computed(() => {
+  const selected = new Set(handoverVisibleColumns.value)
+  const documents = handoverDocumentColumns.filter((item) => item.key !== 'actions' && selected.has(item.key))
+  const assets = handoverAssetColumns.filter((item) => selected.has(item.key))
+  const actions = handoverDocumentColumns.filter((item) => item.key === 'actions' && selected.has(item.key))
+  return [...documents, ...assets, ...actions]
+})
+const handoverTableMinWidth = computed(() => 36 + handoverDisplayedColumns.value.reduce((sum, item) => sum + item.width, 0))
+const handoverDocumentVisibleCount = computed(() => handoverDocumentColumns.filter((item) => handoverVisibleColumns.value.includes(item.key)).length)
+const handoverAssetVisibleCount = computed(() => handoverAssetColumns.filter((item) => handoverVisibleColumns.value.includes(item.key)).length)
+watch(handoverVisibleColumns, (value) => localStorage.setItem('assetHandoverColumnSettingsV1', JSON.stringify(value)), { deep: true })
+const toggleHandoverColumn = (key: HandoverColumnKey, checked: boolean): void => {
+  if (handoverRequiredColumnKeys.includes(key)) return
+  const selected = new Set(handoverVisibleColumns.value)
+  if (checked) selected.add(key)
+  else selected.delete(key)
+  handoverVisibleColumns.value = handoverColumnKeys.filter((item) => selected.has(item))
+}
+const setHandoverColumnGroup = (columns: HandoverColumnOption[], checked: boolean): void => {
+  const selected = new Set(handoverVisibleColumns.value)
+  columns.forEach((item) => {
+    if (checked || item.required) selected.add(item.key)
+    else selected.delete(item.key)
+  })
+  handoverVisibleColumns.value = handoverColumnKeys.filter((item) => selected.has(item))
+}
+const resetHandoverColumnGroup = (columns: HandoverColumnOption[]): void => {
+  const selected = new Set(handoverVisibleColumns.value)
+  columns.forEach((item) => {
+    if (item.defaultVisible || item.required) selected.add(item.key)
+    else selected.delete(item.key)
+  })
+  handoverVisibleColumns.value = handoverColumnKeys.filter((item) => selected.has(item))
+}
+
 const categories = computed(() => Array.from(new Set(assets.value.map((item) => item.category).filter(Boolean))).sort())
 const managedCategories = computed<ManagedOption[]>(() => {
   const configured = flattenManagedCatalog(store.value.assetCategoryTree || [], [], true)
@@ -362,6 +445,12 @@ const operationAsset = (record: AssetOperationRecord): AssetRecord => {
     rejectionReason: record.rejectionReason || '',
     noticeContent: record.noticeContent || '',
     note: record.note || current?.note || '',
+    handoverType: record.handoverType || '',
+    previousParty: record.previousParty || '',
+    previousCompany: record.previousCompany || '',
+    previousDepartment: record.previousDepartment || '',
+    previousLocation: record.previousLocation || '',
+    assetOwnerCompany: record.assetOwnerCompany || current?.ownerCompany || current?.company || '',
     purchaser: record.purchaser || current?.purchaser || '',
     phone: record.phone || current?.phone || '',
     email: record.email || current?.email || '',
@@ -486,6 +575,32 @@ const assetStatusClass = (value: string): string => {
   return 'violet'
 }
 const operationDate = (item: AssetRecord): string => String(item.operationDate || item.receiveDate || item.borrowDate || item.purchaseDate || '-')
+const handoverCellValue = (item: AssetRecord, key: HandoverColumnKey): string => {
+  const values: Partial<Record<HandoverColumnKey, unknown>> = {
+    operator: item.operator || item.custodian,
+    receiver: item.owner,
+    receiverCompany: item.company,
+    receiverDepartment: item.department,
+    date: operationDate(item),
+    handoverType: item.handoverType,
+    targetLocation: item.location,
+    note: item.note,
+    signer: item.signer,
+    assetId: item.id,
+    assetCategory: item.category,
+    assetName: item.name,
+    assetBrand: item.brand,
+    assetModel: item.model,
+    assetSn: item.sn,
+    assetOwnerCompany: item.assetOwnerCompany || item.ownerCompany,
+    assetLocation: item.previousLocation || item.location,
+    handoverPerson: item.previousParty,
+    handoverCompany: item.previousCompany,
+    handoverDepartment: item.previousDepartment
+  }
+  const value = values[key]
+  return value === undefined || value === null || value === '' ? '-' : String(value)
+}
 const operationId = (item: AssetRecord, prefix: string): string => String(
   props.mode === 'borrow-return' && borrowReturnTab.value === 'return' && item.operationType === 'BORROW' && item.returnOrderId
     ? item.returnOrderId
@@ -673,6 +788,13 @@ const actionDialogTitle = computed(() => ({
   receive: '新增领用单', return: '新增退库单', borrow: '新增借用单', 'borrow-return': '新增归还单', handover: '新增交接单',
   'cancel-inbound': '取消入库'
 } as Partial<Record<AssetCommand, string>>)[actionForm.action] || `${actionLabel(actionForm.action)}资产`)
+const actionLocationPlaceholder = computed(() => ({
+  receive: '请选择领用后位置',
+  return: '请选择退库后位置',
+  borrow: '请选择借用后位置',
+  'borrow-return': '请选择归还后位置',
+  handover: '请选择接收位置'
+} as Partial<Record<AssetCommand, string>>)[actionForm.action] || '请选择位置')
 const actionAssets = computed(() => actionForm.assetIds.map((id) => assets.value.find((item) => item.id === id)).filter((item): item is AssetRecord => Boolean(item)))
 const allActionAssetsSelected = computed(() => actionForm.assetIds.length > 0 && actionForm.assetIds.every((id) => actionSelectedIds.value.includes(id)))
 const needsPerson = computed(() => actionForm.action === 'receive' || actionForm.action === 'borrow' || (actionForm.action === 'handover' && actionForm.handoverType === 'personal'))
@@ -1108,11 +1230,33 @@ onMounted(() => void Promise.all([load(), loadAuthorizedAdministrators()]))
 
     <template v-else-if="isReceiveFlowMode">
       <div v-if="mode === 'receive-return'" class="receive-return-tabs"><button v-for="tab in ([['receive','领用'],['return','退库'],['employee','员工申领']] as const)" :key="tab[0]" class="receive-return-tab" :class="{ active: receiveReturnTab === tab[0] }" type="button" @click="receiveReturnTab = tab[0]">{{ tab[1] }}</button></div>
-      <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button v-if="canRunAction(receiveAction)" class="table-action primary" type="button" @click="openBlankAction(receiveAction)">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openOrderPrint(flowOrderPrintKind)">打印{{ receiveReturnTab === 'handover' ? '交接单' : receiveReturnTab === 'employee' ? '员工申领单' : receiveReturnTab === 'return' ? '领用退库单' : '领用单' }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
-      <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell"><div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="openAdvancedSearch">高级搜索</button><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置" @click="openAdvancedColumns">⚙</button></div><div class="asset-table-scroll receive-return-table-scroll"><table v-resizable-columns="`assets:receive-return:${receiveReturnTab}`" class="asset-list-table receive-return-table" style="min-width: 1040px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" :aria-label="receiveReturnTab === 'handover' ? '全选交接单' : '全选领用退库单'" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>{{ receiveReturnTab === 'handover' ? '交接状态' : receiveReturnTab === 'employee' ? '申领状态' : receiveReturnTab === 'return' ? '退库状态' : '领用状态' }}</th><th>{{ receiveReturnTab === 'handover' ? '交接单号' : receiveReturnTab === 'employee' ? '申领单号' : receiveReturnTab === 'return' ? '退库单号' : '领用单号' }}</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领日期' : receiveReturnTab === 'return' ? '退库日期' : '领用日期' }}</th><th>经办人</th><th>{{ receiveReturnTab === 'handover' ? '接收人' : receiveReturnTab === 'employee' ? '申领人' : '领用人' }}</th><th v-if="receiveReturnTab !== 'handover'">工号</th><th v-if="receiveReturnTab !== 'handover'">{{ receiveReturnTab === 'employee' ? '申领后位置' : receiveReturnTab === 'return' ? '退库后位置' : '领用后位置' }}</th><th>{{ receiveReturnTab === 'handover' ? '接收公司' : '所属公司' }}</th><th v-if="receiveReturnTab === 'handover'">接收部门</th><th v-else>资产编码</th><th>操作</th></tr></thead><tbody>
-        <tr v-for="item in displayedRows" :key="operationId(item, 'FLOW')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'FLOW')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="assetStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, receiveReturnTab === 'handover' ? 'JJ' : receiveReturnTab === 'return' ? 'TK' : 'LY') }}</button></td><td v-if="receiveReturnTab !== 'handover'">{{ operationDate(item) }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.employeeCode || '-' }}</td><td v-if="receiveReturnTab !== 'handover'">{{ item.location || '-' }}</td><td>{{ item.company || item.ownerCompany || '-' }}</td><td v-if="receiveReturnTab === 'handover'">{{ item.department || '-' }}</td><td v-else>{{ item.id }}</td><td><button class="link receive-return-action-link" type="button" @click="detail = item">查看</button><button v-if="item.operationStatus === '待签字' && can('asset:receive_return:cancel')" class="link receive-return-action-link" type="button" @click="terminateReceipt(item)">终止</button></td></tr>
-        <tr v-if="!displayedRows.length" class="empty-row"><td :colspan="receiveReturnTab === 'handover' ? 9 : 11">{{ receiveReturnTab === 'handover' ? (query ? '没有匹配的交接记录。' : '暂无交接记录。') : (query ? '没有匹配的领用退库记录。' : '暂无领用退库记录。') }}</td></tr>
-      </tbody></table></div></div>
+      <div class="asset-list-toolbar receive-return-toolbar"><div class="asset-list-actions"><button v-if="receiveReturnTab !== 'employee' && canRunAction(receiveAction)" class="table-action primary" type="button" @click="openBlankAction(receiveAction)">＋ 新增</button><el-dropdown placement="bottom-start" trigger="click"><button class="table-action has-caret" type="button">打印<span class="action-caret" aria-hidden="true"></span></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="openOrderPrint(flowOrderPrintKind)">打印{{ receiveReturnTab === 'handover' ? '交接单' : receiveReturnTab === 'employee' ? '员工申领单' : receiveReturnTab === 'return' ? '领用退库单' : '领用单' }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown><button v-if="can('asset:item:export')" class="table-action receive-return-export" type="button" @click="exportAssets">⇱ 导出</button></div><div class="asset-list-search receive-return-search"><input v-model="query" class="local-search" type="search" placeholder="模糊查询" autocomplete="off"><button class="table-action primary" type="button" aria-label="搜索" @click="page = 1">⌕</button></div></div>
+      <div v-loading="state.loading" class="asset-table-shell receive-return-table-shell">
+        <div class="asset-table-actions receive-return-table-actions"><button v-if="can('asset:item:advancedSearch')" class="link" type="button" @click="openAdvancedSearch">高级搜索</button><button class="list-settings-button" type="button" title="列表设置" aria-label="列表设置" @click="openAdvancedColumns">⚙</button></div>
+        <div class="asset-table-scroll receive-return-table-scroll">
+          <table v-if="receiveReturnTab === 'handover'" v-resizable-columns="'assets:handover:custom-v1'" class="asset-list-table receive-return-table handover-custom-table" :style="{ minWidth: `${handoverTableMinWidth}px` }">
+            <thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选交接单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th v-for="column in handoverDisplayedColumns" :key="column.key" :data-column-key="column.key" :style="{ width: `${column.width}px` }">{{ column.label }}</th></tr></thead>
+            <tbody>
+              <tr v-for="item in displayedRows" :key="operationId(item, 'JJ')">
+                <td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'JJ')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td>
+                <td v-for="column in handoverDisplayedColumns" :key="column.key">
+                  <span v-if="column.key === 'status'" class="receive-return-status-pill" :class="assetStatusClass(item.status)">{{ item.status || '-' }}</span>
+                  <button v-else-if="column.key === 'order'" class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, 'JJ') }}</button>
+                  <template v-else-if="column.key === 'assetImage'"><img v-if="item.image" class="handover-table-image" :src="String(item.image)" :alt="item.name"><span v-else>-</span></template>
+                  <template v-else-if="column.key === 'signatureImage'"><button v-if="item.signatureImage" class="link receive-return-action-link" type="button" @click="detail = item">查看</button><span v-else>-</span></template>
+                  <template v-else-if="column.key === 'actions'"><button class="link receive-return-action-link" type="button" @click="detail = item">查看</button><button v-if="item.operationStatus === '待签字' && can('asset:receive_return:cancel')" class="link receive-return-action-link" type="button" @click="terminateReceipt(item)">终止</button></template>
+                  <template v-else>{{ handoverCellValue(item, column.key) }}</template>
+                </td>
+              </tr>
+              <tr v-if="!displayedRows.length" class="empty-row"><td :colspan="handoverDisplayedColumns.length + 1">{{ query ? '没有匹配的交接记录。' : '暂无交接记录。' }}</td></tr>
+            </tbody>
+          </table>
+          <table v-else v-resizable-columns="`assets:receive-return:${receiveReturnTab}`" class="asset-list-table receive-return-table" style="min-width: 1040px"><thead><tr><th class="receive-return-select-cell"><input type="checkbox" aria-label="全选领用退库单" :checked="allPageSelected" :disabled="!displayedRows.length" @change="togglePageSelection(($event.target as HTMLInputElement).checked)"></th><th>{{ receiveReturnTab === 'employee' ? '申领状态' : receiveReturnTab === 'return' ? '退库状态' : '领用状态' }}</th><th>{{ receiveReturnTab === 'employee' ? '申领单号' : receiveReturnTab === 'return' ? '退库单号' : '领用单号' }}</th><th>{{ receiveReturnTab === 'employee' ? '申领日期' : receiveReturnTab === 'return' ? '退库日期' : '领用日期' }}</th><th>经办人</th><th>{{ receiveReturnTab === 'employee' ? '申领人' : '领用人' }}</th><th>工号</th><th>{{ receiveReturnTab === 'employee' ? '申领后位置' : receiveReturnTab === 'return' ? '退库后位置' : '领用后位置' }}</th><th>所属公司</th><th>资产编码</th><th>操作</th></tr></thead><tbody>
+            <tr v-for="item in displayedRows" :key="operationId(item, 'FLOW')"><td class="receive-return-select-cell"><input type="checkbox" :aria-label="`选择${operationId(item, 'FLOW')}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td><td><span class="receive-return-status-pill" :class="assetStatusClass(item.status)">{{ item.status || '-' }}</span></td><td><button class="link receive-return-order-link" type="button" @click="detail = item">{{ operationId(item, receiveReturnTab === 'return' ? 'TK' : 'LY') }}</button></td><td>{{ operationDate(item) }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.owner || '-' }}</td><td>{{ item.employeeCode || '-' }}</td><td>{{ item.location || '-' }}</td><td>{{ item.company || item.ownerCompany || '-' }}</td><td>{{ item.id }}</td><td><button class="link receive-return-action-link" type="button" @click="detail = item">查看</button><button v-if="item.operationStatus === '待签字' && can('asset:receive_return:cancel')" class="link receive-return-action-link" type="button" @click="terminateReceipt(item)">终止</button></td></tr>
+            <tr v-if="!displayedRows.length" class="empty-row"><td colspan="11">{{ query ? '没有匹配的领用退库记录。' : '暂无领用退库记录。' }}</td></tr>
+          </tbody></table>
+        </div>
+      </div>
     </template>
 
     <template v-else>
@@ -1220,6 +1364,18 @@ onMounted(() => void Promise.all([load(), loadAuthorizedAdministrators()]))
             <div class="custom-column-toolbar"><label><input type="checkbox" :checked="allListColumnsSelected" @change="setAllListColumns(($event.target as HTMLInputElement).checked)"> 全选</label><span>({{ listVisibleColumns.length }}/{{ listColumnKeys.length }})</span><button type="button" @click="resetListSettings">重置</button></div>
             <div class="custom-column-list"><label v-for="item in listColumns" :key="item.key"><input type="checkbox" :checked="listVisibleColumns.includes(item.key)" @change="toggleListColumn(item.key, ($event.target as HTMLInputElement).checked)"> {{ item.label }}</label></div>
             <div class="list-setting-section compact-setting"><h3>表格密度</h3><div class="density-options"><button v-for="item in ([['compact','紧凑'],['standard','标准'],['roomy','宽松']] as const)" :key="item[0]" type="button" :class="{ active: listDensity === item[0] }" @click="listDensity = item[0]">{{ item[1] }}</button></div></div>
+          </div>
+          <div v-else-if="mode === 'handover'" class="custom-column-panel handover-custom-column-panel">
+            <section class="handover-column-section" data-column-group="document">
+              <div class="handover-column-section-title"><h3>单据字段</h3><button type="button" @click="resetHandoverColumnGroup(handoverDocumentColumns)">重置</button></div>
+              <div class="custom-column-toolbar"><label><input type="checkbox" aria-label="全选单据字段" :checked="handoverDocumentVisibleCount === handoverDocumentColumns.length" :indeterminate.prop="handoverDocumentVisibleCount > 0 && handoverDocumentVisibleCount < handoverDocumentColumns.length" @change="setHandoverColumnGroup(handoverDocumentColumns, ($event.target as HTMLInputElement).checked)"> 全选</label><span>({{ handoverDocumentVisibleCount }}/{{ handoverDocumentColumns.length }})</span></div>
+              <div class="custom-column-list"><label v-for="item in handoverDocumentColumns" :key="item.key"><input type="checkbox" :checked="handoverVisibleColumns.includes(item.key)" :disabled="item.required" @change="toggleHandoverColumn(item.key, ($event.target as HTMLInputElement).checked)"> {{ item.label }}</label></div>
+            </section>
+            <section class="handover-column-section" data-column-group="asset">
+              <div class="handover-column-section-title"><h3>资产明细</h3><button type="button" @click="resetHandoverColumnGroup(handoverAssetColumns)">重置</button></div>
+              <div class="custom-column-toolbar"><label><input type="checkbox" aria-label="全选资产明细" :checked="handoverAssetVisibleCount === handoverAssetColumns.length" :indeterminate.prop="handoverAssetVisibleCount > 0 && handoverAssetVisibleCount < handoverAssetColumns.length" @change="setHandoverColumnGroup(handoverAssetColumns, ($event.target as HTMLInputElement).checked)"> 全选</label><span>({{ handoverAssetVisibleCount }}/{{ handoverAssetColumns.length }})</span></div>
+              <div class="custom-column-list"><label v-for="item in handoverAssetColumns" :key="item.key"><input type="checkbox" :checked="handoverVisibleColumns.includes(item.key)" @change="toggleHandoverColumn(item.key, ($event.target as HTMLInputElement).checked)"> {{ item.label }}</label></div>
+            </section>
           </div>
           <div v-else class="custom-column-panel">
             <p class="advanced-search-hint">当前列设置只覆盖本业务单据字段，不影响资产列表。</p>
@@ -1385,7 +1541,7 @@ onMounted(() => void Promise.all([load(), loadAuthorizedAdministrators()]))
             <el-form-item v-if="actionForm.action === 'handover'" class="field" :style="{ order: 3 }" label="接收部门："><el-select v-model="actionForm.department" :disabled="actionForm.handoverType === 'personal' && !actionForm.personSubject" filterable allow-create placement="bottom-start" placeholder=""><el-option v-for="item in formDepartments" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item class="field" :style="actionForm.action === 'return' ? { order: 1 } : actionForm.action === 'handover' ? { order: 5 } : undefined" :label="actionForm.action === 'return' ? '退库日期' : actionForm.action === 'borrow-return' ? '归还日期：' : actionForm.action === 'borrow' ? '借用日期：' : actionForm.action === 'handover' ? '交接日期：' : '领用日期'" required><el-date-picker v-model="actionForm.date" value-format="YYYY-MM-DD" /></el-form-item>
             <el-form-item v-if="actionForm.action === 'borrow'" class="field" label="预计归还日期："><el-date-picker v-model="actionForm.expectedReturnDate" value-format="YYYY-MM-DD" /></el-form-item>
-            <el-form-item class="field" :style="actionForm.action === 'return' || actionForm.action === 'handover' ? { order: 4 } : undefined" :label="actionForm.action === 'return' ? '退库后位置' : actionForm.action === 'borrow-return' ? '归还后位置：' : actionForm.action === 'borrow' ? '借用后位置：' : actionForm.action === 'handover' ? '接收位置：' : '领用后位置'" required><el-select v-model="actionForm.location" filterable placement="bottom-start"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+            <el-form-item class="field" :style="actionForm.action === 'return' || actionForm.action === 'handover' ? { order: 4 } : undefined" :label="actionForm.action === 'return' ? '退库后位置' : actionForm.action === 'borrow-return' ? '归还后位置：' : actionForm.action === 'borrow' ? '借用后位置：' : actionForm.action === 'handover' ? '接收位置：' : '领用后位置'" required><el-tree-select v-model="actionForm.location" :data="managedLocationTree" node-key="value" filterable check-strictly :automatic-dropdown="false" :render-after-expand="false" :default-expand-all="false" :default-expanded-keys="[]" placement="bottom-start" :placeholder="actionLocationPlaceholder" /></el-form-item>
             <el-form-item class="field" :style="actionForm.action === 'return' ? { order: 5 } : actionForm.action === 'handover' ? { order: 6 } : undefined" :label="actionForm.action === 'borrow' || actionForm.action === 'borrow-return' || actionForm.action === 'handover' ? '经办人：' : '经办人'" required><el-input v-model="actionForm.operator" :readonly="actionForm.action !== 'return'" /></el-form-item>
             <el-form-item class="field full" :style="actionForm.action === 'return' ? { order: 6 } : actionForm.action === 'handover' ? { order: 7 } : undefined" :label="actionForm.action === 'return' ? '退库备注' : actionForm.action === 'borrow-return' ? '归还备注：' : actionForm.action === 'borrow' ? '借用备注：' : actionForm.action === 'handover' ? '交接备注：' : '领用备注'"><el-input v-model="actionForm.note" type="textarea" :rows="2" placeholder="请输入" /></el-form-item>
           </div>

@@ -32,7 +32,6 @@ class BusinessDataSubjectScopeTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.update("DELETE FROM business_snapshot");
         jdbc.update("DELETE FROM approval_request_record");
         insertRequest("REQ-OWNED", "李雷", "user-1");
         insertRequest("REQ-LEGACY-NAME", "李雷", "");
