@@ -4,7 +4,7 @@ import type { AssetRecord } from '../../assets/types/assets'
 import type { ApprovalRecord } from '../../approvals/types/approval'
 import type { DashboardMetric } from '../types/dashboard'
 
-const state = reactive({ assets: [] as AssetRecord[], requests: [] as ApprovalRecord[], loading: false, errorMessage: '' })
+const state = reactive({ assets: [] as AssetRecord[], disposedCount: 0, requests: [] as ApprovalRecord[], loading: false, errorMessage: '' })
 
 const load = async (): Promise<void> => {
   state.loading = true
@@ -12,6 +12,7 @@ const load = async (): Promise<void> => {
   try {
     const payload = await fetchDashboardData()
     state.assets = payload.assets
+    state.disposedCount = payload.disposedCount
     state.requests = payload.requests as ApprovalRecord[]
   } catch (error) {
     state.errorMessage = error instanceof Error ? error.message : '首页数据加载失败'
@@ -31,5 +32,12 @@ export const useDashboard = () => {
     ]
   })
   onMounted(() => void load())
-  return { state: readonly(state), assets: computed(() => state.assets), requests: computed(() => state.requests), metrics, load }
+  return {
+    state: readonly(state),
+    assets: computed(() => state.assets),
+    disposedCount: computed(() => state.disposedCount),
+    requests: computed(() => state.requests),
+    metrics,
+    load
+  }
 }

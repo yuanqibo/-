@@ -22,7 +22,7 @@ type DashboardTooltip = {
   color: string
 }
 
-const { state, assets, requests, load } = useDashboard()
+const { state, assets, disposedCount, requests, load } = useDashboard()
 const { user } = usePortalSession()
 const { isEmployeeTerminal } = useTerminalMode()
 const distributionMode = ref<DistributionMode>('organization')
@@ -108,22 +108,23 @@ const openEmployeeRequest = (action: 'return' | 'handover', item: AssetRecord): 
 const statusRows = computed(() => {
   const receiveCount = assets.value.filter((item) => item.status === '领用').length
   const borrowCount = assets.value.filter((item) => item.status === '借用中').length
-  const disposedCount = assets.value.filter((item) => ['报废', '已处置'].includes(item.status)).length
-  const idleCount = Math.max(assets.value.length - receiveCount - borrowCount - disposedCount, 0)
+  const idleCount = Math.max(assets.value.length - receiveCount - borrowCount, 0)
   return [
     { key: 'receive', label: '领用', count: receiveCount, color: '#7c5cf6' },
     { key: 'idle', label: '空闲', count: idleCount, color: '#20a7dc' },
-    { key: 'disposed', label: '已处置', count: disposedCount, color: '#f45f63' },
+    { key: 'disposed', label: '已处置', count: disposedCount.value, color: '#f45f63' },
     { key: 'borrow', label: '借用', count: borrowCount, color: '#f59e0b' }
   ]
 })
+
+const statusTotal = computed(() => assets.value.length + disposedCount.value)
 
 const statusSegments = computed(() => {
   const circumference = 213.6
   let offset = 0
   return statusRows.value.map((row) => {
-    const dash = assets.value.length ? row.count / assets.value.length * circumference : 0
-    const segment = { ...row, dash, offset: -offset, percent: assets.value.length ? Math.round(row.count / assets.value.length * 100) : 0 }
+    const dash = statusTotal.value ? row.count / statusTotal.value * circumference : 0
+    const segment = { ...row, dash, offset: -offset, percent: statusTotal.value ? Math.round(row.count / statusTotal.value * 100) : 0 }
     offset += dash
     return segment
   })
@@ -230,7 +231,7 @@ const exactMetricLabel = (value: number, mode: CategoryMetricMode = 'count'): st
           <div class="donut-layout">
             <div class="dashboard-donut">
               <svg class="donut-svg" viewBox="0 0 100 100" aria-hidden="true"><circle class="donut-ring donut-ring-base" cx="50" cy="50" r="34" /><circle v-for="segment in statusSegments.filter((item) => item.count > 0)" :key="segment.key" class="donut-ring donut-ring-segment" :class="`donut-ring-${segment.key}`" cx="50" cy="50" r="34" :style="{ '--segment-color': segment.color, '--segment-dash': segment.dash, '--segment-offset': segment.offset }" @mouseenter="showDashboardTooltip($event, segment.label, '', `${segment.count}(${segment.percent}%)`, segment.color, true)" @mousemove="positionDashboardTooltip" @mouseleave="hideDashboardTooltip" /></svg>
-              <div><span>全部</span><strong>{{ assets.length }}</strong></div>
+              <div><span>全部</span><strong>{{ statusTotal }}</strong></div>
             </div>
             <div class="chart-legend"><div v-for="segment in statusSegments" :key="segment.key"><i class="legend-dot" :style="{ '--legend-color': segment.color }"></i><span>{{ segment.label }}</span><strong>{{ segment.count }}</strong><em>{{ segment.percent }}%</em></div></div>
           </div>

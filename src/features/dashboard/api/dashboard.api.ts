@@ -1,6 +1,10 @@
-import { fetchAssets, fetchBusinessData } from '../../assets/api/assets.api'
+import { fetchAssetCatalog, fetchBusinessData } from '../../assets/api/assets.api'
 
 export const fetchDashboardData = async () => {
-  const [assets, business] = await Promise.all([fetchAssets(), fetchBusinessData()])
-  return { assets, requests: business.values?.requests || [] }
+  const [catalog, business] = await Promise.all([fetchAssetCatalog(), fetchBusinessData()])
+  return {
+    assets: catalog.items,
+    disposedCount: catalog.disposedCount,
+    requests: business.values?.requests || []
+  }
 }

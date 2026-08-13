@@ -1190,6 +1190,26 @@ test.describe('登录后门户质量回归', () => {
     await expectPortalSelectOpensBelow(page, page.locator('.dashboard-card-filters .el-select').first())
   })
 
+  test('首页总数排除已处置资产且状态占比保留处置记录', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '仪表盘状态口径在桌面项目执行')
+    await openApp(page, '/', {
+      assets: [
+        { id: 'AST-ACTIVE-1', name: '领用设备', status: '领用', category: 'IT设备', owner: '张三', price: 5000 },
+        { id: 'AST-ACTIVE-2', name: '空闲设备', status: '空闲', category: 'IT设备', owner: '未分配', price: 3000 }
+      ],
+      disposedCount: 1
+    })
+
+    const totalCard = page.locator('.stat-card').filter({ hasText: '资产总数' })
+    await expect(totalCard.locator('.stat-value')).toHaveText('2')
+
+    const statusCard = page.locator('.dashboard-status-card')
+    await expect(statusCard.locator('.dashboard-donut strong')).toHaveText('3')
+    const disposedLegend = statusCard.locator('.chart-legend > div').filter({ hasText: '已处置' })
+    await expect(disposedLegend.locator('strong')).toHaveText('1')
+    await expect(statusCard.locator('.donut-ring-disposed')).toHaveCount(1)
+  })
+
   test('审批列表为空时首页待处理单据不显示审批中', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '首页统计卡片在桌面项目执行')
     await openApp(page, '/', { approvals: [] })

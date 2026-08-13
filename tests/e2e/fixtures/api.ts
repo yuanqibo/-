@@ -3,6 +3,7 @@ import type { Page, Request } from '@playwright/test'
 export type ApiMockOptions = {
   approvals?: Array<Record<string, unknown>>
   assets?: Array<Record<string, unknown>>
+  disposedCount?: number
   categoryTree?: Array<Record<string, unknown>>
   locationTree?: Array<Record<string, unknown>>
   failAssets?: boolean
@@ -132,7 +133,9 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
     if (url.pathname === '/api/auth/ecp/me' && method === 'GET') {
       return fulfill({ user: { roleCode: 'super_admin', permissionCodes: [], featureCodes: [] } })
     }
-    if (url.pathname === '/api/assets' && method === 'GET') return options.failAssets ? fulfill({ error: '资产服务暂不可用' }, 503) : fulfill({ items: currentAssets })
+    if (url.pathname === '/api/assets' && method === 'GET') return options.failAssets
+      ? fulfill({ error: '资产服务暂不可用' }, 503)
+      : fulfill({ items: currentAssets, disposedCount: options.disposedCount || 0 })
     if (url.pathname === '/api/asset-operations' && method === 'GET') return fulfill({ items: assetOperations, total: assetOperations.length, page: 1, size: 500 })
     if (url.pathname === '/api/assets' && method === 'POST') return fulfill({ item: { ...assets[0], ...(body as { item?: object })?.item, id: 'AST-NEW' } }, 201)
     if (url.pathname === '/api/assets/import') return fulfill({ items: [] }, 201)

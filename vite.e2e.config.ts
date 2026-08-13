@@ -23,7 +23,7 @@ const browserQaApi = (): Plugin => {
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         const path = String(request.url || '').split('?')[0]
-        if (path === '/api/assets' && request.method === 'GET') return json(response, { items: assets })
+        if (path === '/api/assets' && request.method === 'GET') return json(response, { items: assets, disposedCount: 1 })
         if (path === '/api/asset-operations') return json(response, { items: [], total: 0 })
         if (path === '/api/business-data') return json(response, { values: { requests: [], stocktakes: [] }, versions: {} })
         if (path === '/api/store') return json(response, { values: { assetCategoryTree: [], assetLocationTree: [] } })

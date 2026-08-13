@@ -1,6 +1,7 @@
 import { apiRequest } from '../../../shared/api/http'
 import type { AssetCommand, AssetDraft, AssetOperationRecord, AssetRecord, BusinessRecord, DirectoryPerson, PortalStoreValues } from '../types/assets'
 
+export type AssetCatalogResponse = { items: AssetRecord[]; disposedCount: number }
 type AssetListResponse = { items: AssetRecord[] }
 type BusinessDataResponse = {
   values?: Record<string, BusinessRecord[]>
@@ -32,8 +33,15 @@ export const invalidateAssetDataCache = (): void => {
   invalidateReads('assets', 'operations', 'business')
 }
 
-export const fetchAssets = async (): Promise<AssetRecord[]> =>
-  cachedRead('assets', async () => (await apiRequest<AssetListResponse>('/api/assets')).items || [])
+export const fetchAssetCatalog = (): Promise<AssetCatalogResponse> => cachedRead('assets', async () => {
+  const payload = await apiRequest<Partial<AssetCatalogResponse>>('/api/assets')
+  return {
+    items: payload.items || [],
+    disposedCount: Math.max(0, Number(payload.disposedCount || 0))
+  }
+})
+
+export const fetchAssets = async (): Promise<AssetRecord[]> => (await fetchAssetCatalog()).items
 
 export const fetchAssetOperations = (): Promise<AssetOperationRecord[]> => cachedRead('operations', async () => {
   const records: AssetOperationRecord[] = []

@@ -58,6 +58,10 @@ public class AssetService {
         return repository.findActive();
     }
 
+    public long disposedCount() {
+        return repository.countByStatus("已处置");
+    }
+
     public List<JsonNode> listFor(RequestIdentityService.Identity identity) {
         if (identity.manager()) return list();
         boolean canCreateRequest = identity.hasPermission("asset:request:create");

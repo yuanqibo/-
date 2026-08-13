@@ -78,7 +78,8 @@ class AssetControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items.length()").value(1))
             .andExpect(jsonPath("$.items[0].id").value("PC-ACTIVE"))
-            .andExpect(jsonPath("$.items[?(@.id == 'PC-DISPOSED')]").isEmpty());
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-DISPOSED')]").isEmpty())
+            .andExpect(jsonPath("$.disposedCount").value(1));
     }
 
     @Test

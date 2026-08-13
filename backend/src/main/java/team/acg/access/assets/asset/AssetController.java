@@ -35,7 +35,12 @@ public class AssetController {
     @RequirePermission(permissions = "asset:item:view")
     public Map<String, Object> list(HttpServletRequest request) {
         var identity = identityService.current(request);
-        return Map.of("items", identity.map(service::listFor).orElseGet(service::list));
+        long disposedCount = identity
+            .map(value -> value.manager() ? service.disposedCount() : 0L)
+            .orElseGet(service::disposedCount);
+        return Map.of(
+            "items", identity.map(service::listFor).orElseGet(service::list),
+            "disposedCount", disposedCount);
     }
 
     @PostMapping

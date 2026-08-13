@@ -72,6 +72,12 @@ public class AssetRepository {
             (rs, row) -> read(rs.getString(1)), "已处置");
     }
 
+    public long countByStatus(String status) {
+        Long count = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM asset_record WHERE status = ?", Long.class, status);
+        return count == null ? 0 : count;
+    }
+
     public Map<String, AssetRecord> findAllRecords() {
         Map<String, AssetRecord> records = new LinkedHashMap<>();
         jdbc.query("SELECT asset_id, document, version FROM asset_record ORDER BY updated_at DESC, asset_id",

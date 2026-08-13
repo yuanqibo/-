@@ -6,6 +6,7 @@ vi.mock('../../../src/shared/api/http', () => ({ apiRequest }))
 import {
   copyAsset,
   createAsset,
+  fetchAssetCatalog,
   fetchAssets,
   runAssetCommand,
   searchDirectoryPeople,
@@ -26,9 +27,9 @@ describe('assets feature API', () => {
   })
 
   it('reuses recent asset reads and invalidates them after a write', async () => {
-    apiRequest.mockResolvedValueOnce({ items: [{ id: 'AST-1' }] })
+    apiRequest.mockResolvedValueOnce({ items: [{ id: 'AST-1' }], disposedCount: 2 })
     await fetchAssets()
-    await fetchAssets()
+    await expect(fetchAssetCatalog()).resolves.toEqual({ items: [{ id: 'AST-1' }], disposedCount: 2 })
     expect(apiRequest).toHaveBeenCalledTimes(1)
 
     apiRequest.mockResolvedValueOnce({ item: { id: 'AST-2' } })
