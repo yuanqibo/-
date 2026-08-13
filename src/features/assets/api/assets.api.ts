@@ -28,6 +28,10 @@ const invalidateReads = (...keys: string[]): void => {
   keys.forEach((key) => readCache.delete(key))
 }
 
+export const invalidateAssetDataCache = (): void => {
+  invalidateReads('assets', 'operations', 'business')
+}
+
 export const fetchAssets = async (): Promise<AssetRecord[]> =>
   cachedRead('assets', async () => (await apiRequest<AssetListResponse>('/api/assets')).items || [])
 
@@ -45,25 +49,25 @@ export const fetchAssetOperations = (): Promise<AssetOperationRecord[]> => cache
 
 export const createAsset = async (item: AssetDraft): Promise<AssetRecord> => {
   const created = (await apiRequest<{ item: AssetRecord }>('/api/assets', { method: 'POST', body: { item } })).item
-  invalidateReads('assets', 'operations')
+  invalidateAssetDataCache()
   return created
 }
 
 export const copyAsset = async (sourceAssetId: string, item: AssetDraft): Promise<AssetRecord> => {
   const copied = (await apiRequest<{ item: AssetRecord }>('/api/assets', { method: 'POST', body: { sourceAssetId, item } })).item
-  invalidateReads('assets', 'operations')
+  invalidateAssetDataCache()
   return copied
 }
 
 export const importAssets = async (items: AssetDraft[]): Promise<AssetRecord[]> => {
   const imported = (await apiRequest<{ items: AssetRecord[] }>('/api/assets/import', { method: 'POST', body: { items } })).items || []
-  invalidateReads('assets', 'operations')
+  invalidateAssetDataCache()
   return imported
 }
 
 export const replaceAssets = async (items: AssetDraft[]): Promise<AssetRecord[]> => {
   const replaced = (await apiRequest<{ items: AssetRecord[] }>('/api/assets/replace', { method: 'POST', body: { items } })).items || []
-  invalidateReads('assets', 'operations', 'business')
+  invalidateAssetDataCache()
   return replaced
 }
 
@@ -72,7 +76,7 @@ export const runAssetCommand = async (action: AssetCommand, assetIds: string[], 
     method: 'POST',
     body: { assetIds, fields }
   })).items || []
-  invalidateReads('assets', 'operations', 'business')
+  invalidateAssetDataCache()
   return updated
 }
 

@@ -8929,7 +8929,21 @@ td .link {
 }
 
 .disposal-link:hover { text-decoration: underline; }
-.disposal-row-actions { overflow: visible !important; }
+.disposal-table th.disposal-actions-header,
+.disposal-table td.disposal-row-actions {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  overflow: visible !important;
+  background: #ffffff;
+  box-shadow: -8px 0 14px rgba(15, 23, 42, 0.08);
+}
+
+.disposal-table th.disposal-actions-header {
+  z-index: 5;
+  background: #f7f9fc;
+}
+
 .disposal-row-actions .el-button { height: auto; padding: 0 4px; font-size: 13px; }
 .disposal-row-actions .el-button + .el-button { margin-left: 4px; }
 

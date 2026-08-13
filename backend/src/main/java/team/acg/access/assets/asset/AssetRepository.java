@@ -66,6 +66,12 @@ public class AssetRepository {
         return new ArrayList<>(findAllRecords().values().stream().map(AssetRecord::document).toList());
     }
 
+    public List<JsonNode> findActive() {
+        return jdbc.query(
+            "SELECT document FROM asset_record WHERE status <> ? ORDER BY updated_at DESC, asset_id",
+            (rs, row) -> read(rs.getString(1)), "已处置");
+    }
+
     public Map<String, AssetRecord> findAllRecords() {
         Map<String, AssetRecord> records = new LinkedHashMap<>();
         jdbc.query("SELECT asset_id, document, version FROM asset_record ORDER BY updated_at DESC, asset_id",

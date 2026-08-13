@@ -62,6 +62,26 @@ class AssetControllerTest {
     }
 
     @Test
+    void excludesDisposedAssetsFromTheAssetCatalogAndItsTotal() throws Exception {
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-ACTIVE","name":"在册电脑","category":"电脑","location":"总部"}}
+            """))
+            .andExpect(status().isOk());
+
+        var disposed = mapper.createObjectNode()
+            .put("id", "PC-DISPOSED").put("name", "已处置电脑").put("category", "电脑")
+            .put("location", "总部").put("owner", "未分配").put("status", "已处置");
+        jdbc.update("INSERT INTO asset_record (asset_id, status, document, version, updated_at) VALUES (?, ?, ?, ?, ?)",
+            "PC-DISPOSED", "已处置", disposed.toString(), 1L, java.sql.Timestamp.from(java.time.Instant.now()));
+
+        mvc.perform(get("/api/assets"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].id").value("PC-ACTIVE"))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-DISPOSED')]").isEmpty());
+    }
+
+    @Test
     void replacesOnlyTheAssetCatalogAndNormalizesImportedStatuses() throws Exception {
         mvc.perform(post("/api/assets/import").contentType(MediaType.APPLICATION_JSON).content("""
             {"items":[

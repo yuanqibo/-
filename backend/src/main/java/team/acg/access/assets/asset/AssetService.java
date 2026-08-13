@@ -55,13 +55,13 @@ public class AssetService {
     }
 
     public List<JsonNode> list() {
-        return repository.findAll();
+        return repository.findActive();
     }
 
     public List<JsonNode> listFor(RequestIdentityService.Identity identity) {
         if (identity.manager()) return list();
         boolean canCreateRequest = identity.hasPermission("asset:request:create");
-        return repository.findAll().stream().filter(asset -> {
+        return list().stream().filter(asset -> {
             String ownerSubject = asset.path("ownerSubject").asText();
             boolean owned = (!identity.subject().isBlank() && identity.subject().equals(ownerSubject))
                 || (!identity.directorySubject().isBlank() && identity.directorySubject().equals(ownerSubject));

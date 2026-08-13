@@ -21,7 +21,7 @@ class AssetServiceScopeTest {
 
     @Test
     void employeeOnlySeesOwnedAssets() throws Exception {
-        when(repository.findAll()).thenReturn(List.of(
+        when(repository.findActive()).thenReturn(List.of(
             mapper.readTree("{\"id\":\"A-1\",\"owner\":\"李雷\",\"ownerSubject\":\"user-1\",\"department\":\"销售部\"}"),
             mapper.readTree("{\"id\":\"A-2\",\"owner\":\"韩梅梅\",\"department\":\"研发部\"}"),
             mapper.readTree("{\"id\":\"A-3\",\"owner\":\"韩梅梅\",\"department\":\"销售部\"}"),
@@ -36,7 +36,7 @@ class AssetServiceScopeTest {
 
     @Test
     void managerSeesAllAssets() throws Exception {
-        when(repository.findAll()).thenReturn(List.of(
+        when(repository.findActive()).thenReturn(List.of(
             mapper.readTree("{\"id\":\"A-1\"}"), mapper.readTree("{\"id\":\"A-2\"}")));
 
         var identity = new RequestIdentityService.Identity(
@@ -48,7 +48,7 @@ class AssetServiceScopeTest {
 
     @Test
     void employeeWithRequestPermissionSeesOwnAndAvailableAssetsButNotOtherAssignedAssets() throws Exception {
-        when(repository.findAll()).thenReturn(List.of(
+        when(repository.findActive()).thenReturn(List.of(
             mapper.readTree("{\"id\":\"A-1\",\"owner\":\"李雷\",\"ownerSubject\":\"user-1\",\"status\":\"领用\"}"),
             mapper.readTree("{\"id\":\"A-2\",\"owner\":\"未分配\",\"ownerSubject\":\"\",\"status\":\"空闲\"}"),
             mapper.readTree("{\"id\":\"A-3\",\"owner\":\"韩梅梅\",\"ownerSubject\":\"user-2\",\"status\":\"领用\"}")));

@@ -214,7 +214,7 @@ onBeforeUnmount(stopColumnResize)
         <div class="disposal-table-content" :style="{ width: `${disposalTableWidth}px`, minWidth: `${disposalTableWidth}px` }">
           <table class="disposal-table">
             <colgroup><col v-for="column in disposalColumns" :key="column.key" :style="{ width: `${column.width}px` }"></colgroup>
-            <thead><tr><th v-for="column in disposalColumns" :key="column.key"><span>{{ column.label }}</span><button class="disposal-column-resizer" type="button" role="separator" :aria-label="`调整${column.label}列宽`" aria-orientation="vertical" :aria-valuemin="column.minWidth" :aria-valuenow="column.width" @pointerdown.stop.prevent="startColumnResize($event, column)" @keydown="resizeColumnByKeyboard($event, column)" @dblclick.stop="column.width = column.defaultWidth"></button></th></tr></thead>
+            <thead><tr><th v-for="column in disposalColumns" :key="column.key" :class="{ 'disposal-actions-header': column.key === 'actions' }"><span>{{ column.label }}</span><button class="disposal-column-resizer" type="button" role="separator" :aria-label="`调整${column.label}列宽`" aria-orientation="vertical" :aria-valuemin="column.minWidth" :aria-valuenow="column.width" @pointerdown.stop.prevent="startColumnResize($event, column)" @keydown="resizeColumnByKeyboard($event, column)" @dblclick.stop="column.width = column.defaultWidth"></button></th></tr></thead>
             <tbody>
               <tr v-for="item in filteredRows" :key="item.id">
                 <td><span class="disposal-status" :class="statusClass(item.status)">{{ item.status }}</span></td>

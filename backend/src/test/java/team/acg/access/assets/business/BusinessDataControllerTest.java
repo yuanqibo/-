@@ -206,6 +206,16 @@ class BusinessDataControllerTest {
             .andExpect(jsonPath("$.items[0].status").value("部分取消"))
             .andExpect(jsonPath("$.items[0].assets[1].status").value("已处置"));
         assertThat(assetStatus("D-OTHER-2")).isEqualTo("已处置");
+
+        mvc.perform(get("/api/assets"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].id").value("D-LX-1"))
+            .andExpect(jsonPath("$.items[?(@.id == 'D-OTHER-2')]").isEmpty());
+        mvc.perform(get("/api/asset-disposals"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].assets[1].assetId").value("D-OTHER-2"))
+            .andExpect(jsonPath("$.items[0].assets[1].status").value("已处置"));
     }
 
     @Test
