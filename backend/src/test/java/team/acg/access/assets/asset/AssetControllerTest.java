@@ -123,6 +123,60 @@ class AssetControllerTest {
     }
 
     @Test
+    void replacementRemovesDisposedAssetsMissingFromTheNewCatalog() throws Exception {
+        var disposed = mapper.createObjectNode()
+            .put("id", "PC-DISPOSED").put("name", "已处置电脑").put("category", "电脑")
+            .put("location", "总部").put("owner", "未分配").put("status", "已处置");
+        jdbc.update("INSERT INTO asset_record (asset_id, status, document, version, updated_at) VALUES (?, ?, ?, ?, ?)",
+            "PC-DISPOSED", "已处置", disposed.toString(), 1L, java.sql.Timestamp.from(java.time.Instant.now()));
+
+        mvc.perform(post("/api/assets/replace").contentType(MediaType.APPLICATION_JSON).content("""
+            {"items":[
+              {"id":"PC-ACTIVE","name":"在册电脑","category":"电脑","status":"空闲","owner":"未分配"}
+            ]}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.count").value(1))
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].id").value("PC-ACTIVE"));
+
+        mvc.perform(get("/api/assets"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].id").value("PC-ACTIVE"))
+            .andExpect(jsonPath("$.disposedCount").value(0));
+
+        org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject(
+            "SELECT COUNT(*) FROM asset_record WHERE asset_id = ?", Integer.class, "PC-DISPOSED"))
+            .isZero();
+    }
+
+    @Test
+    void replacementReactivatesDisposedCodesWithoutStaleWorkflowFields() throws Exception {
+        var disposed = mapper.createObjectNode()
+            .put("id", "PC-DISPOSED").put("name", "已处置电脑").put("category", "电脑")
+            .put("location", "总部").put("owner", "未分配").put("status", "已处置")
+            .put("disposalPreviousStatus", "空闲").put("disposalId", "DSP-OLD")
+            .put("disposalStartedAt", "2026-08-01").put("disposedAt", "2026-08-02");
+        jdbc.update("INSERT INTO asset_record (asset_id, status, document, version, updated_at) VALUES (?, ?, ?, ?, ?)",
+            "PC-DISPOSED", "已处置", disposed.toString(), 1L, java.sql.Timestamp.from(java.time.Instant.now()));
+
+        mvc.perform(post("/api/assets/replace").contentType(MediaType.APPLICATION_JSON).content("""
+            {"items":[
+              {"id":"PC-DISPOSED","name":"重新入册电脑","category":"电脑","status":"空闲","owner":"未分配"}
+            ]}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("空闲"))
+            .andExpect(jsonPath("$.items[0].name").value("重新入册电脑"));
+
+        String persisted = jdbc.queryForObject(
+            "SELECT document FROM asset_record WHERE asset_id = ?", String.class, "PC-DISPOSED");
+        org.assertj.core.api.Assertions.assertThat(persisted)
+            .doesNotContain("disposalPreviousStatus", "disposalId", "disposalStartedAt", "disposedAt");
+    }
+
+    @Test
     void executesLifecycleCommandsWithServerControlledStatusAndHistory() throws Exception {
         mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
             {"item":{"id":"PC-CMD","name":"命令电脑","category":"电脑","location":"总部"}}

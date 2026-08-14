@@ -209,7 +209,9 @@ public class AssetService {
                 lifecycle.add(mapper.createArrayNode().add(today).add("资产清单替换").add("通过完整资产清单导入"));
                 asset.set("lifecycle", lifecycle);
             }
-            asset.put("status", normalizeReplacementStatus(requiredText(draft, "status", 32)));
+            String status = normalizeReplacementStatus(requiredText(draft, "status", 32));
+            asset.put("status", status);
+            clearStaleWorkflowFields(asset, status);
             normalizeUnassignedUsage(asset);
             replacement.add(asset);
         }
@@ -880,6 +882,18 @@ public class AssetService {
         asset.put("owner", "未分配");
         CURRENT_USAGE_FIELDS.forEach(field -> asset.put(field, ""));
         clearReceiptSnapshot(asset);
+    }
+
+    private void clearStaleWorkflowFields(ObjectNode asset, String status) {
+        if (!"维修中".equals(status)) {
+            asset.remove(List.of("repairPreviousStatus", "repairStartedAt"));
+        }
+        if (!Set.of("处置中", "已处置").contains(status)) {
+            asset.remove(List.of("disposalPreviousStatus", "disposalId", "disposalStartedAt", "disposedAt"));
+        }
+        if (!Set.of("领用待签字", "借用待签字", "交接待签字").contains(status)) {
+            clearReceiptSnapshot(asset);
+        }
     }
 
     private void snapshotReceipt(ObjectNode asset) {

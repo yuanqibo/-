@@ -998,6 +998,10 @@ const dropImportFile = (event: DragEvent): void => {
 }
 const submitImport = async (): Promise<void> => {
   if (!validImportRows.value.length) { ElMessage.warning('没有可导入的数据'); return }
+  if (importMode.value === 'replace' && invalidImportCount.value) {
+    ElMessage.warning('导入文件仍有错误，请修正后重新上传')
+    return
+  }
   submitting.value = true
   try {
     if (importMode.value === 'replace') {
@@ -1566,7 +1570,7 @@ onMounted(() => void Promise.all([load(), loadAuthorizedAdministrators()]))
         <div class="asset-import-note"><p>{{ importMode === 'asset' ? '导入前会校验资产名称、分类、位置和金额，错误行不会提交。' : importMode === 'update' ? '按资产编码更新已填写字段，空白字段保持原值。' : importMode === 'replace' ? '以文件中的资产编码集合全量替换当前资产；文件未提供的位置、金额等系统字段按编码保留。' : '按资产编码、ECP 人员和领用日期批量领用资产。' }}</p><ol><li>最大数据行数不超过5000行；</li><li>请根据错误文件的错误说明，修改原文件错误后导入；</li><li>请勿在模板中添加批注导入。</li></ol></div>
         <el-table v-if="importRows.length" :data="importRows" max-height="220"><el-table-column prop="rowNumber" label="行号" width="70" /><el-table-column label="资产编码" min-width="130"><template #default="scope">{{ scope.row.draft?.id || '-' }}</template></el-table-column><el-table-column label="资产名称" min-width="150"><template #default="scope">{{ scope.row.draft?.name || '-' }}</template></el-table-column><el-table-column label="校验结果" min-width="220"><template #default="scope"><el-tag v-if="!scope.row.errors.length" type="success">可导入</el-tag><span v-else class="standard-import-error">{{ scope.row.errors.join('；') }}</span></template></el-table-column></el-table>
       </div>
-      <template #footer><el-button @click="importOpen = false">取消</el-button><el-button type="primary" :disabled="!validImportRows.length" :loading="submitting" @click="submitImport">确定</el-button></template>
+      <template #footer><el-button @click="importOpen = false">取消</el-button><el-button type="primary" :disabled="!validImportRows.length || (importMode === 'replace' && invalidImportCount > 0)" :loading="submitting" @click="submitImport">确定</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="printOpen" :title="labelPrintTitle" width="min(760px, calc(100vw - 48px))" append-to-body class="standard-print-dialog asset-label-print-dialog">
