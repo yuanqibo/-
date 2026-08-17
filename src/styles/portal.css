@@ -4515,8 +4515,8 @@ button.asset-code-rule-field-name {
 }
 
 .system-menu-shell {
-  width: 180px;
-  max-width: 180px;
+  width: 170px;
+  max-width: 170px;
   min-height: 0;
   height: 100%;
   padding: 0;
@@ -4535,7 +4535,7 @@ button.asset-code-rule-field-name {
   height: calc(100% + 36px);
   min-height: 0;
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-columns: 170px minmax(0, 1fr);
   margin: -18px;
   background: #f8fafc;
   overflow: hidden;
@@ -15062,8 +15062,8 @@ body.is-resizing-column * {
   }
 
   .system-menu-shell {
-    width: min(180px, 100%);
-    max-width: min(180px, 100%);
+    width: min(170px, 100%);
+    max-width: min(170px, 100%);
     min-height: calc(100vh - 28px);
   }
 
