@@ -13,7 +13,7 @@ import type { ApprovalDecision, ApprovalRecord } from '../types/approval'
 import AssetRequestDialog from './AssetRequestDialog.vue'
 
 const { state, rows, load, decide } = useApprovals()
-const { assets, store, load: loadAssets } = useAssets()
+const { assets, store, loadAssets, loadStore } = useAssets()
 const { user } = usePortalSession()
 const { isEmployeeTerminal } = useTerminalMode()
 const route = useRoute()
@@ -170,8 +170,7 @@ const focusManagerRequestFromRoute = (): void => {
   query.value = requestId
 }
 onMounted(() => {
-  void load()
-  void loadAssets(true)
+  void Promise.all([load(), loadAssets(), loadStore()])
   openRequestFromRoute()
   focusManagerRequestFromRoute()
 })
@@ -179,7 +178,7 @@ onActivated(() => {
   void load()
   openRequestFromRoute()
   focusManagerRequestFromRoute()
-  void loadAssets(true)
+  void Promise.all([loadAssets(), loadStore()])
 })
 watch(() => route.fullPath, () => {
   openRequestFromRoute()

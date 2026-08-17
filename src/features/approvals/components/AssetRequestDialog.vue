@@ -24,7 +24,7 @@ const emit = defineEmits<{
   submitted: [item: ApprovalRecord]
 }>()
 
-const { assets, store, load: loadAssets } = useAssets()
+const { assets, store, loadAssets, loadStore } = useAssets()
 const { create } = useApprovals()
 const { user } = usePortalSession()
 const submitting = ref(false)
@@ -208,7 +208,7 @@ const prepare = async (): Promise<void> => {
   receiverQuery.value = ''
   requestConfirmed.value = false
   requestSignatureImage.value = ''
-  await Promise.all([loadAssets(true), loadRequestOperators()])
+  await Promise.all([loadAssets(), loadStore(), loadRequestOperators()])
   if (!requestEnabled.value) {
     ElMessage.warning('该员工自助功能已关闭')
     close()
@@ -339,7 +339,7 @@ const submit = async (): Promise<void> => {
       reason: form.reason,
       details
     })
-    await loadAssets(true)
+    await loadAssets()
     close()
     emit('submitted', item)
     const successMessage = isSelfReceive.value

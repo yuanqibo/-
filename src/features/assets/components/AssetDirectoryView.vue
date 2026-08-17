@@ -1,19 +1,21 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type TableInstance } from 'element-plus'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { searchDirectoryPeople } from '../api/assets.api'
 import { buildManagedCatalogTree, flattenManagedCatalog, managedCatalogNames, type ManagedCatalogOption, type ManagedCatalogTreeOption } from '../composables/managedCatalog'
-import { parseAssetWorkbook, type AssetImportMode } from '../composables/parseAssetWorkbook'
+import type { AssetImportMode } from '../composables/parseAssetWorkbook'
 import { useAssets } from '../composables/useAssets'
 import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, AssetRecord, DirectoryPerson } from '../types/assets'
 import { hasPortalPermission } from '../../../authz/permission-aliases'
-import AssetLabelPrintPreview from './AssetLabelPrintPreview.vue'
-import AssetOrderPrintPreview, { type AssetOrderPrintKind } from './AssetOrderPrintPreview.vue'
-import AssetDisposalCreateDrawer from '../../disposals/components/AssetDisposalCreateDrawer.vue'
-import { fetchRequestOperators, type RequestOperator } from '../../approvals/api/approvals.api'
+import type { AssetOrderPrintKind } from './AssetOrderPrintPreview.vue'
+import type { RequestOperator } from '../../approvals/api/approvals.api'
+
+const AssetLabelPrintPreview = defineAsyncComponent(() => import('./AssetLabelPrintPreview.vue'))
+const AssetOrderPrintPreview = defineAsyncComponent(() => import('./AssetOrderPrintPreview.vue'))
+const AssetDisposalCreateDrawer = defineAsyncComponent(() => import('../../disposals/components/AssetDisposalCreateDrawer.vue'))
 
 type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return' | 'handover'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
@@ -66,7 +68,7 @@ type ManagedOption = ManagedCatalogOption
 
 const props = withDefaults(defineProps<{ mode?: Mode }>(), { mode: 'list' })
 const router = useRouter()
-const { state, assets, operations, business, store, load, create, copy, importMany, replaceAll, command } = useAssets()
+const { state, assets, operations, business, store, load, loadAssets, loadStore, create, copy, importMany, replaceAll, command } = useAssets()
 const { user } = usePortalSession()
 const { isEmployeeTerminal } = useTerminalMode()
 const query = ref('')
@@ -93,6 +95,7 @@ const orderPrintRows = ref<AssetRecord[]>([])
 const labelPrintRows = ref<AssetRecord[]>([])
 const authorizedAdministrators = ref<RequestOperator[]>([])
 const authorizedAdministratorsLoading = ref(false)
+let authorizedAdministratorsPending: Promise<void> | null = null
 const submitting = ref(false)
 const parsing = ref(false)
 const createFormRef = ref<FormInstance>()
@@ -711,17 +714,25 @@ const emptyDraft = (): AssetDraft => ({
   purchaseMethod: '', condition: '', usageMonths: '', orderNo: '', unit: '台', rent: undefined, note: ''
 })
 const loadAuthorizedAdministrators = async (): Promise<void> => {
-  authorizedAdministratorsLoading.value = true
-  try {
-    authorizedAdministrators.value = await fetchRequestOperators()
-  } catch (error) {
-    authorizedAdministrators.value = []
-    console.error('[asset-portal] Unable to load ECP asset administrators', error)
-  } finally {
-    authorizedAdministratorsLoading.value = false
-  }
+  if (authorizedAdministrators.value.length) return
+  if (authorizedAdministratorsPending) return authorizedAdministratorsPending
+  authorizedAdministratorsPending = (async () => {
+    authorizedAdministratorsLoading.value = true
+    try {
+      const { fetchRequestOperators } = await import('../../approvals/api/approvals.api')
+      authorizedAdministrators.value = await fetchRequestOperators()
+    } catch (error) {
+      authorizedAdministrators.value = []
+      console.error('[asset-portal] Unable to load ECP asset administrators', error)
+    } finally {
+      authorizedAdministratorsLoading.value = false
+      authorizedAdministratorsPending = null
+    }
+  })()
+  return authorizedAdministratorsPending
 }
 const openCreate = (source?: AssetRecord): void => {
+  void loadAuthorizedAdministrators()
   copySourceId.value = source?.id || ''
   Object.assign(createDraft, source ? {
     ...emptyDraft(), ...source, id: '', name: `${source.name} - 副本`, owner: source.owner === '未分配' ? '' : source.owner,
@@ -883,6 +894,7 @@ const editForm = reactive<EditForm>(emptyEditForm())
 const editSource = computed(() => assets.value.find((item) => item.id === editIds.value[0]))
 const openEdit = (items: AssetRecord[], batch = false): void => {
   if (!items.length) { ElMessage.warning('请先选择资产'); return }
+  void loadAuthorizedAdministrators()
   editAction.value = batch ? 'batch-edit' : 'edit'
   editIds.value = items.map((item) => item.id)
   const source = items[0]
@@ -982,7 +994,10 @@ const formatImportFileSize = (size: number): string => size < 1024 * 1024 ? `${M
 const handleImportFile = async (file?: File): Promise<void> => {
   if (!file) return
   parsing.value = true; importFileName.value = file.name; importFileSize.value = formatImportFileSize(file.size); importRows.value = []
-  try { importRows.value = await validateImportRows(await parseAssetWorkbook(file, importMode.value)) }
+  try {
+    const { parseAssetWorkbook } = await import('../composables/parseAssetWorkbook')
+    importRows.value = await validateImportRows(await parseAssetWorkbook(file, importMode.value))
+  }
   catch (error) { ElMessage.error(error instanceof Error ? error.message : '工作簿解析失败') }
   finally { parsing.value = false }
 }
@@ -1070,6 +1085,7 @@ const printSettings = computed(() => store.value.assetLabelPrintSettingsV2 || {}
 const printTemplates = computed(() => store.value.assetLabelCustomTemplatesV1 || [])
 const openPrint = (rows: AssetRecord[] = selected.value): void => {
   if (!rows.length) { ElMessage.warning('请选择打印资产'); return }
+  void loadStore()
   labelPrintRows.value = [...rows]
   printOpen.value = true
 }
@@ -1128,7 +1144,10 @@ const disposeSelected = (): void => {
   disposalOpen.value = true
 }
 const handleAssetDisposalCreated = (): void => { selected.value = [] }
-onMounted(() => void Promise.all([load(), loadAuthorizedAdministrators()]))
+onMounted(() => {
+  if (props.mode === 'list') void loadAssets()
+  else void load()
+})
 </script>
 
 <template>

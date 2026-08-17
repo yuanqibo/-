@@ -25,6 +25,10 @@ type AssetState = {
   loading: boolean
   initialized: boolean
   errorMessage: string
+  assetsLoaded: boolean
+  operationsLoaded: boolean
+  businessLoaded: boolean
+  storeLoaded: boolean
 }
 
 const state = reactive<AssetState>({
@@ -34,34 +38,113 @@ const state = reactive<AssetState>({
   store: {},
   loading: false,
   initialized: false,
-  errorMessage: ''
+  errorMessage: '',
+  assetsLoaded: false,
+  operationsLoaded: false,
+  businessLoaded: false,
+  storeLoaded: false
 })
 
-let pending: Promise<void> | null = null
+let pendingRequests = 0
+let assetsPending: Promise<void> | null = null
+let operationsPending: Promise<void> | null = null
+let businessPending: Promise<void> | null = null
+let storePending: Promise<void> | null = null
+
+const syncInitialized = (): void => {
+  state.initialized = state.assetsLoaded && state.operationsLoaded && state.businessLoaded && state.storeLoaded
+}
+
+const beginRequest = (): void => {
+  pendingRequests += 1
+  state.loading = pendingRequests > 0
+}
+
+const endRequest = (): void => {
+  pendingRequests = Math.max(0, pendingRequests - 1)
+  state.loading = pendingRequests > 0
+}
+
+const loadAssets = async (force = false): Promise<void> => {
+  if (state.assetsLoaded && !force) return
+  if (assetsPending && !force) return assetsPending
+  assetsPending = (async () => {
+    beginRequest()
+    state.errorMessage = ''
+    try {
+      state.assets = await fetchAssets()
+      state.assetsLoaded = true
+      syncInitialized()
+    } catch (error) {
+      state.errorMessage = error instanceof Error ? error.message : '资产数据加载失败'
+    } finally {
+      assetsPending = null
+      endRequest()
+    }
+  })()
+  return assetsPending
+}
+
+const loadOperations = async (force = false): Promise<void> => {
+  if (state.operationsLoaded && !force) return
+  if (operationsPending && !force) return operationsPending
+  operationsPending = (async () => {
+    beginRequest()
+    try {
+      state.operations = await fetchAssetOperations()
+      state.operationsLoaded = true
+      syncInitialized()
+    } catch {
+      state.operations = []
+    } finally {
+      operationsPending = null
+      endRequest()
+    }
+  })()
+  return operationsPending
+}
+
+const loadBusiness = async (force = false): Promise<void> => {
+  if (state.businessLoaded && !force) return
+  if (businessPending && !force) return businessPending
+  businessPending = (async () => {
+    beginRequest()
+    try {
+      const business = await fetchBusinessData()
+      state.business = business.values || {}
+      state.businessLoaded = true
+      syncInitialized()
+    } catch {
+      state.business = state.business || {}
+    } finally {
+      businessPending = null
+      endRequest()
+    }
+  })()
+  return businessPending
+}
+
+const loadStore = async (force = false): Promise<void> => {
+  if (state.storeLoaded && !force) return
+  if (storePending && !force) return storePending
+  storePending = (async () => {
+    beginRequest()
+    try {
+      state.store = await fetchPortalStore()
+      state.storeLoaded = true
+      syncInitialized()
+    } catch {
+      state.store = state.store || {}
+    } finally {
+      storePending = null
+      endRequest()
+    }
+  })()
+  return storePending
+}
 
 const load = async (force = false): Promise<void> => {
-  if (state.initialized && !force) return
-  if (pending && !force) return pending
-  state.loading = true
-  state.errorMessage = ''
-  pending = Promise.allSettled([fetchAssets(), fetchAssetOperations(), fetchBusinessData(), fetchPortalStore()])
-    .then(([assets, operations, business, store]) => {
-      if (assets.status === 'fulfilled') state.assets = assets.value
-      else throw assets.reason
-      if (operations.status === 'fulfilled') state.operations = operations.value
-      else state.operations = []
-      if (business.status === 'fulfilled') state.business = business.value.values || {}
-      if (store.status === 'fulfilled') state.store = store.value
-      state.initialized = true
-    })
-    .catch((error) => {
-      state.errorMessage = error instanceof Error ? error.message : '资产数据加载失败'
-    })
-    .finally(() => {
-      state.loading = false
-      pending = null
-    })
-  return pending
+  await Promise.all([loadAssets(force), loadOperations(force), loadBusiness(force), loadStore(force)])
 }
 
 const replaceAssets = (items: AssetRecord[]): void => {
@@ -145,6 +228,10 @@ export const useAssets = () => ({
   business: computed(() => state.business),
   store: computed(() => state.store),
   load,
+  loadAssets,
+  loadOperations,
+  loadBusiness,
+  loadStore,
   create,
   copy,
   importMany,

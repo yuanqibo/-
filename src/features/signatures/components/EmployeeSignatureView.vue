@@ -7,7 +7,7 @@ import type { AssetOperationRecord } from '../../assets/types/assets'
 
 type SignatureTab = '待签字' | '已签字' | '已打回'
 
-const { state, operations, load, command } = useAssets()
+const { state, operations, loadOperations, command } = useAssets()
 const tab = ref<SignatureTab>('待签字')
 const selectedId = ref('')
 const detail = ref<AssetOperationRecord | null>(null)
@@ -87,7 +87,7 @@ const submitReject = async (): Promise<void> => {
   } finally { submitting.value = false }
 }
 
-onMounted(() => { void load(true) })
+onMounted(() => { void loadOperations() })
 </script>
 
 <template>
