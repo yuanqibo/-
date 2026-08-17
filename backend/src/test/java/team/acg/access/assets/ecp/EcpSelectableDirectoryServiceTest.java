@@ -77,6 +77,28 @@ class EcpSelectableDirectoryServiceTest {
     }
 
     @Test
+    void mapsAlternateEmployeeAndLeaderFieldsReturnedByEcp() throws Exception {
+        EcpPage<EcpUserProfile> page = EcpSelectableDirectoryService.parsePage(mapper.readTree("""
+            {
+              "nodes": [{
+                "nodeType": "ACCOUNT",
+                "accountUnionId": "user-3",
+                "name": "张三",
+                "employeeNumber": "E003",
+                "positionName": "采购专员",
+                "departmentName": "采购部",
+                "leaderName": "李经理"
+              }]
+            }
+            """), 1, 20);
+
+        EcpUserProfile profile = page.items().get(0);
+        assertThat(profile.employeeNo()).isEqualTo("E003");
+        assertThat(profile.jobTitle()).isEqualTo("采购专员");
+        assertThat(profile.departments().get(0).leader().name()).isEqualTo("李经理");
+    }
+
+    @Test
     void mapsSelectableDepartmentTreeToCompaniesAndDepartments() throws Exception {
         EcpSelectableDirectoryService.ParsedOrganization organization =
             EcpSelectableDirectoryService.parseOrganization(mapper.readTree("""
@@ -90,7 +112,11 @@ class EcpSelectableDirectoryServiceTest {
                       "accountSetUnionId": "account-set-1",
                       "orgNodeUnionId": "department-1",
                       "name": "IT与信息安全部",
-                      "fullPath": "飞书/杭州艾柯塞斯品牌管理有限公司/IT与信息安全部"
+                      "fullPath": "飞书/杭州艾柯塞斯品牌管理有限公司/IT与信息安全部",
+                      "leader": {
+                        "accountUnionId": "leader-1",
+                        "name": "李经理"
+                      }
                     }]
                   }]
                 }
@@ -104,6 +130,7 @@ class EcpSelectableDirectoryServiceTest {
         assertThat(organization.departments()).extracting(EcpDepartmentProfile::unionId,
             EcpDepartmentProfile::parentUnionId, EcpDepartmentProfile::companyUnionId)
             .containsExactly(org.assertj.core.groups.Tuple.tuple("department-1", "company-1", "company-1"));
+        assertThat(organization.departments().get(0).leader().name()).isEqualTo("李经理");
     }
 
     @Test

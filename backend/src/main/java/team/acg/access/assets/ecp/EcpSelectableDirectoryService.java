@@ -249,9 +249,11 @@ public class EcpSelectableDirectoryService {
 
         List<EcpUserProfile.DepartmentSummary> departments = profile.departments();
         if (department != null) {
+            EcpDepartmentProfile.LeaderSummary leader = department.leader();
             departments = List.of(new EcpUserProfile.DepartmentSummary(
                 department.unionId(), department.externalId(), department.name(), department.nodeType(),
-                department.path(), null));
+                department.path(), leader == null ? null : new EcpUserProfile.LeaderSummary(
+                    leader.unionId(), leader.externalId(), leader.name())));
         } else if (root != null && orgNodeUnionId.equals(root.companyUnionId())) {
             departments = List.of();
         }
@@ -325,7 +327,8 @@ public class EcpSelectableDirectoryService {
             departments.add(new EcpDepartmentProfile(
                 "", unionId, first(node, "externalId"), accountSetUnionId, name,
                 first(first(node, "nodeType"), "DEPARTMENT"), path, first(node, "status"),
-                first(node, "sourceType"), parentUnionId, root.companyUnionId(), "", root.companyName(), null));
+                first(node, "sourceType"), parentUnionId, root.companyUnionId(), "", root.companyName(),
+                leader(node)));
             appendDepartments(node.path("children"), unionId, root, departments);
         });
     }
@@ -412,13 +415,46 @@ public class EcpSelectableDirectoryService {
 
         String departmentUnionId = first(node, "departmentUnionId", "primaryDepartmentUnionId", "orgNodeUnionId", "orgNodeId");
         EcpUserProfile.DepartmentSummary department = departmentName.isEmpty() && departmentUnionId.isEmpty() ? null
-            : new EcpUserProfile.DepartmentSummary(departmentUnionId, "", departmentName, "DEPARTMENT", path, null);
+            : new EcpUserProfile.DepartmentSummary(departmentUnionId, "", departmentName, "DEPARTMENT", path,
+                userDepartmentLeader(node));
         List<EcpUserProfile.DepartmentSummary> departments = department == null ? List.of() : List.of(department);
 
         return new EcpUserProfile(
             first(node, "tenantId"), subject, first(node, "externalId"), accountSetUnionId, name,
-            first(node, "email"), first(node, "phone"), first(node, "status"), first(node, "employeeNo"),
-            first(node, "jobTitle"), departmentUnionId, departmentName, path, company, departments);
+            first(node, "email"), first(node, "phone"), first(node, "status"), employeeNo(node),
+            jobTitle(node), departmentUnionId, departmentName, path, company, departments);
+    }
+
+    private static String employeeNo(JsonNode node) {
+        return first(node,
+            "employeeNo", "employeeNumber", "employeeCode", "staffNo", "staffNumber",
+            "jobNumber", "workNo", "employee_no", "employee_number", "employee_code",
+            "staff_no", "staff_number", "job_number", "work_no");
+    }
+
+    private static String jobTitle(JsonNode node) {
+        return first(node,
+            "jobTitle", "positionName", "position", "postName", "post", "title",
+            "job_title", "position_name", "post_name");
+    }
+
+    private static EcpDepartmentProfile.LeaderSummary leader(JsonNode node) {
+        String name = first(node,
+            "leaderName", "departmentLeaderName", "managerName", "ownerName",
+            "responsibleName", "principalName");
+        JsonNode leader = firstObject(node, "leader", "departmentLeader", "manager", "owner", "responsible", "principal");
+        if (name.isEmpty() && leader != null) name = first(leader, "name", "subjectLabel", "displayName");
+        if (name.isEmpty()) return null;
+        return new EcpDepartmentProfile.LeaderSummary(
+            leader == null ? "" : first(leader, "unionId", "accountUnionId", "subjectAccountId", "accountId"),
+            leader == null ? "" : first(leader, "externalId"),
+            name);
+    }
+
+    private static EcpUserProfile.LeaderSummary userDepartmentLeader(JsonNode node) {
+        EcpDepartmentProfile.LeaderSummary leader = leader(node);
+        return leader == null ? null : new EcpUserProfile.LeaderSummary(
+            leader.unionId(), leader.externalId(), leader.name());
     }
 
     private static List<String> pathParts(String path, String name) {
@@ -473,6 +509,14 @@ public class EcpSelectableDirectoryService {
             if (!value.isEmpty() && !"null".equalsIgnoreCase(value)) return value;
         }
         return "";
+    }
+
+    private static JsonNode firstObject(JsonNode node, String... fields) {
+        for (String field : fields) {
+            JsonNode value = node.path(field);
+            if (value.isObject()) return value;
+        }
+        return null;
     }
 
     private static String first(String... values) {
