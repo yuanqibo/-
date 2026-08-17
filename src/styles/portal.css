@@ -769,7 +769,9 @@ button {
 
 .asset-subnav {
   height: 100%;
-  padding: 18px 10px 18px;
+  width: fit-content;
+  min-width: 0;
+  padding: 18px 8px 18px;
   overflow-y: auto;
 }
 
@@ -777,7 +779,7 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 2px 0 6px;
+  padding: 0 2px 0 4px;
 }
 
 .asset-subnav-accent {
@@ -799,7 +801,7 @@ button {
 
 .asset-subnav-rule {
   height: 1px;
-  margin: 14px 0 12px 6px;
+  margin: 14px 0 12px 4px;
   background: #eeeeee;
 }
 
@@ -817,7 +819,7 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 10px 0 12px;
+  padding: 0 8px 0 10px;
   color: #7a7a7a;
   background: transparent;
   text-align: left;
@@ -936,7 +938,7 @@ button {
   display: grid;
   gap: 6px;
   overflow: hidden;
-  padding: 0 0 0 22px;
+  padding: 0 0 0 18px;
   transition: padding-top 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -4513,7 +4515,8 @@ button.asset-code-rule-field-name {
 }
 
 .system-menu-shell {
-  width: 188px;
+  width: fit-content;
+  max-width: 220px;
   min-height: 0;
   height: 100%;
   padding: 0;
@@ -4532,7 +4535,7 @@ button.asset-code-rule-field-name {
   height: calc(100% + 36px);
   min-height: 0;
   display: grid;
-  grid-template-columns: 188px minmax(0, 1fr);
+  grid-template-columns: fit-content(220px) minmax(0, 1fr);
   margin: -18px;
   background: #f8fafc;
   overflow: hidden;
@@ -15059,7 +15062,8 @@ body.is-resizing-column * {
   }
 
   .system-menu-shell {
-    width: min(188px, 100%);
+    width: fit-content;
+    max-width: min(220px, 100%);
     min-height: calc(100vh - 28px);
   }
 
