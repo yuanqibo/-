@@ -62,7 +62,7 @@ button {
   height: 100vh;
   min-height: 0;
   display: grid;
-  grid-template-columns: 92px 1fr;
+  grid-template-columns: 84px 1fr;
   overflow: hidden;
 }
 
@@ -72,7 +72,7 @@ button {
 }
 
 .has-secondary-nav:not(.auth-view) .app-shell {
-  grid-template-columns: 92px 220px 1fr;
+  grid-template-columns: 84px 188px 1fr;
 }
 
 .sidebar {
@@ -153,7 +153,7 @@ button {
 
 .nav {
   flex: 1 1 auto;
-  padding: 0 0 18px;
+  padding: 0 0 14px;
   overflow: visible;
   position: relative;
 }
@@ -595,11 +595,11 @@ button {
 .nav-item {
   width: 100%;
   display: grid;
-  grid-template-rows: 36px 16px;
+  grid-template-rows: 32px 14px;
   justify-items: center;
   align-content: center;
-  row-gap: 7px;
-  min-height: 90px;
+  row-gap: 4px;
+  min-height: 78px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -648,8 +648,8 @@ button {
 .nav-icon {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   color: currentColor;
   font-size: 0;
   line-height: 1;
@@ -658,8 +658,8 @@ button {
 
 .nav-icon svg {
   display: block;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   overflow: visible;
 }
 
@@ -668,15 +668,15 @@ button {
 .nav-icon .nav-approval-icon,
 .nav-icon .nav-application-icon,
 .nav-icon .nav-system-icon {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
 }
 
 .nav-label {
   display: block;
   width: 100%;
-  font-size: 12px;
-  line-height: 1.2;
+  font-size: 11px;
+  line-height: 1.15;
   letter-spacing: 0;
   color: currentColor;
   text-align: center;
@@ -769,20 +769,20 @@ button {
 
 .asset-subnav {
   height: 100%;
-  padding: 22px 14px 24px;
+  padding: 18px 10px 18px;
   overflow-y: auto;
 }
 
 .asset-subnav-heading {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 4px 0 8px;
+  gap: 10px;
+  padding: 0 2px 0 6px;
 }
 
 .asset-subnav-accent {
-  width: 5px;
-  height: 30px;
+  width: 4px;
+  height: 24px;
   border-radius: 999px;
   background: #1296db;
   box-shadow: 0 4px 12px rgba(18, 150, 219, 0.28);
@@ -791,7 +791,7 @@ button {
 .asset-subnav-heading h2 {
   margin: 0;
   color: #333333;
-  font-size: 21px;
+  font-size: 18px;
   line-height: 1.2;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -799,29 +799,29 @@ button {
 
 .asset-subnav-rule {
   height: 1px;
-  margin: 18px 0 16px 8px;
+  margin: 14px 0 12px 6px;
   background: #eeeeee;
 }
 
 .asset-subnav-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .asset-subnav-item {
   width: 100%;
-  min-height: 56px;
+  min-height: 48px;
   border: 0;
   border-radius: 6px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 14px 0 18px;
+  gap: 10px;
+  padding: 0 10px 0 12px;
   color: #7a7a7a;
   background: transparent;
   text-align: left;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 400;
   letter-spacing: 0.01em;
   transition:
@@ -843,8 +843,8 @@ button {
 }
 
 .asset-subnav-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   flex: 0 0 auto;
   border-radius: 999px;
   background: #bfbfbf;
@@ -861,8 +861,8 @@ button {
 }
 
 .asset-subnav-caret {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   margin-left: auto;
   display: grid;
   place-items: center;
@@ -874,7 +874,7 @@ button {
 
 .asset-subnav-caret::before {
   content: "▾";
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .asset-subnav-item:hover .asset-subnav-caret {
@@ -934,9 +934,9 @@ button {
 .asset-subnav-children-inner {
   min-height: 0;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   overflow: hidden;
-  padding: 0 0 0 30px;
+  padding: 0 0 0 22px;
   transition: padding-top 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -949,19 +949,19 @@ button {
 }
 
 .asset-subnav-group.open .asset-subnav-children-inner {
-  padding-top: 8px;
+  padding-top: 6px;
 }
 
 .asset-subnav-child {
   width: 100%;
-  min-height: 56px;
+  min-height: 44px;
   border: 0;
   border-radius: 6px;
-  padding: 0 14px;
+  padding: 0 10px;
   color: #6f6f6f;
   background: transparent;
   text-align: left;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 400;
   letter-spacing: 0.01em;
   transition:
@@ -1004,13 +1004,13 @@ button {
 }
 
 .asset-subnav-child:hover {
-  transform: translateX(4px);
+  transform: translateX(3px);
 }
 
 .asset-subnav-group.open .asset-subnav-child:hover {
   color: #1296db;
   background: #f2faff;
-  transform: translateX(5px);
+  transform: translateX(4px);
 }
 
 .asset-subnav-child.active {
@@ -4513,7 +4513,7 @@ button.asset-code-rule-field-name {
 }
 
 .system-menu-shell {
-  width: 220px;
+  width: 188px;
   min-height: 0;
   height: 100%;
   padding: 0;
@@ -4532,7 +4532,7 @@ button.asset-code-rule-field-name {
   height: calc(100% + 36px);
   min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 188px minmax(0, 1fr);
   margin: -18px;
   background: #f8fafc;
   overflow: hidden;
@@ -15059,7 +15059,7 @@ body.is-resizing-column * {
   }
 
   .system-menu-shell {
-    width: min(220px, 100%);
+    width: min(188px, 100%);
     min-height: calc(100vh - 28px);
   }
 
