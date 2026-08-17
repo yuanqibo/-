@@ -1051,13 +1051,8 @@ button {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
-  gap: 12px;
-  margin: 0;
-  padding: 12px;
-  border: 1px solid #dce4ef;
-  border-radius: 4px;
-  background: #ffffff;
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+  gap: 18px;
+  margin-top: 0;
   overflow: hidden;
 }
 
@@ -1602,12 +1597,10 @@ button {
   grid-template-columns: 250px minmax(0, 1fr);
   gap: 0;
   margin: 0;
-  padding: 12px;
-  border: 1px solid #dce4ef;
-  border-radius: 4px;
+  border-radius: 8px;
   overflow: hidden;
   background: #ffffff;
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
 }
 
 .asset-category-tree-panel,
@@ -1811,11 +1804,11 @@ button {
   height: 100%;
   min-height: 0;
   margin: 0;
-  padding: 12px;
-  border: 1px solid #dce4ef;
-  border-radius: 4px;
+  padding: 18px 22px 24px;
+  border-radius: 8px;
+  border: 1px solid #e4eaf3;
   background: #ffffff;
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
   overflow: auto;
 }
 
@@ -2203,16 +2196,10 @@ button.asset-code-rule-field-name {
   height: 100%;
   min-height: 0;
   margin: 0;
-  padding: 12px;
-  border: 1px solid #dce4ef;
-  border-radius: 4px;
   display: grid;
   grid-template-columns: minmax(280px, 0.72fr) minmax(480px, 1.28fr);
-  gap: 12px;
-  align-items: stretch;
-  background: #ffffff;
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
-  overflow: hidden;
+  gap: 24px;
+  align-items: start;
 }
 
 .asset-label-template-left,
@@ -8694,11 +8681,7 @@ button.self-service-category-chip.more:hover {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 12px;
-  border: 1px solid #dce4ef;
-  border-radius: 4px;
-  background: #ffffff;
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+  padding: 14px;
 }
 
 .stocktake-panel > .table-wrap {
@@ -8771,15 +8754,12 @@ td .link {
   width: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 12px;
-  border: 1px solid #dce4ef;
-  border-radius: 4px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   overflow: hidden;
   background: #ffffff;
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
 }
 
 .disposal-toolbar {
@@ -9481,7 +9461,7 @@ td .link {
 
 .asset-inbound-ledger {
   min-height: 0;
-  margin: 10px;
+  margin: 0;
   padding: 12px;
   border: 1px solid #dce4ef;
   border-radius: 4px;
@@ -9926,7 +9906,7 @@ td .link {
 
 .receive-return-ledger {
   min-height: 0;
-  margin: 10px;
+  margin: 0;
   padding: 12px;
   border: 1px solid #dce4ef;
   border-radius: 4px;
