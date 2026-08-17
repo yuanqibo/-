@@ -5,10 +5,7 @@ import type { App as VueApp } from 'vue'
 import type { Router } from 'vue-router'
 import type { AuthzPermissionSnapshot, EcpAuthConfigSourceMode } from '@acg/ecp-sdk'
 import { formatPermissionDisplayName } from './authz/permission-display'
-import {
-  primeEmployeeSelfServiceSession,
-  withEmployeeSelfServiceSnapshot
-} from './core/auth/employee-self-service-access'
+import { withEmployeeSelfServiceSnapshot } from './core/auth/employee-self-service-access'
 
 export type { AuthzSessionContext } from '@acg/ecp-sdk'
 
@@ -129,6 +126,31 @@ export const ecp = createEcpSdk({
 
 let ecpReadyPromise: Promise<void> = Promise.resolve()
 
+const runEcpDoctor = async (): Promise<void> => {
+  const localDoctorReport = await ecp.auth?.doctor.run({ bundleAppCodeMismatchLevel: 'fail' }) ?? null
+  if (localDoctorReport?.ok) return
+
+  const failures = localDoctorReport?.checks
+    .filter((check) => check.status === 'FAIL')
+    .map((check) => `${check.code}: ${check.message}`)
+    .join('; ')
+  throw new Error(`ECP local doctor failed${failures ? `: ${failures}` : ''}`)
+}
+
+const scheduleEcpDoctor = (): void => {
+  const start = (): void => {
+    void runEcpDoctor().catch((error) => {
+      console.error('[asset-portal] ECP doctor failed', error)
+    })
+  }
+  const requestIdle = window.requestIdleCallback
+  if (typeof requestIdle === 'function') {
+    requestIdle(start, { timeout: 5_000 })
+    return
+  }
+  globalThis.setTimeout(start, 1_500)
+}
+
 export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
   if (!localAuthzValidationReport.ok) {
     const failures = localAuthzValidationReport.errors
@@ -141,17 +163,8 @@ export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
       router,
       locale: 'zh-CN'
     })
-    .then(async () => {
-      const session = await ecp.auth?.session.load()
-      if (session) primeEmployeeSelfServiceSession(session)
-      const localDoctorReport = await ecp.auth?.doctor.run({ bundleAppCodeMismatchLevel: 'fail' }) ?? null
-      if (!localDoctorReport?.ok) {
-        const failures = localDoctorReport?.checks
-          .filter((check) => check.status === 'FAIL')
-          .map((check) => `${check.code}: ${check.message}`)
-          .join('; ')
-        throw new Error(`ECP local doctor failed${failures ? `: ${failures}` : ''}`)
-      }
+    .then(() => {
+      scheduleEcpDoctor()
     })
     .catch((error) => {
       console.error('[asset-portal] ECP setup failed', error)

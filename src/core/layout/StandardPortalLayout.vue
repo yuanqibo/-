@@ -34,6 +34,7 @@ const layoutActive = ref(true)
 const approvalNotificationOpen = ref(false)
 const routePreloads = new Map<string, Promise<void>>()
 let approvalRefreshTimer: ReturnType<typeof setInterval> | null = null
+let menuPreloadHandle: number | null = null
 
 const pendingStatuses = new Set(['审批中', '待审批', '待执行'])
 const canReviewApprovals = computed(() => !isEmployeeTerminal.value
@@ -97,6 +98,48 @@ const preloadMenuRoute = (item: PortalMenuItem): void => { void preloadPath(rout
 const primaryTarget = (item: PortalMenuItem): PortalMenuItem =>
   item.id === 'settings' ? systemMenus.value[0] || item : item
 const preloadPrimaryMenuRoute = (item: PortalMenuItem): void => preloadMenuRoute(primaryTarget(item))
+const deferRoutePreload = (callback: () => void): number => {
+  const requestIdle = window.requestIdleCallback
+  if (typeof requestIdle === 'function') return requestIdle(callback, { timeout: 1_200 })
+  return window.setTimeout(callback, 300)
+}
+const cancelRoutePreload = (handle: number): void => {
+  const cancelIdle = window.cancelIdleCallback
+  if (typeof cancelIdle === 'function') {
+    cancelIdle(handle)
+    return
+  }
+  window.clearTimeout(handle)
+}
+const isPreloadablePath = (path: string): boolean =>
+  Boolean(path) && path !== route.path && path !== '/workspace' && !path.startsWith('/workspace/')
+const collectSectionPreloadPaths = (): string[] => {
+  const items = [
+    ...primaryMenus.value.map(primaryTarget),
+    ...(resolvedSection.value === 'assets'
+      ? [
+          assetRootMenu.value,
+          ...assetMenus.value,
+          ...assetMenus.value.flatMap((item) => assetChildren(item.id))
+        ]
+      : []),
+    ...(resolvedSection.value === 'system' ? systemMenus.value : [])
+  ].filter((item): item is PortalMenuItem => Boolean(item))
+  return Array.from(new Set(items.map(routePathForMenu).filter(isPreloadablePath)))
+}
+const scheduleMenuRoutePreloads = (): void => {
+  if (menuPreloadHandle !== null) {
+    cancelRoutePreload(menuPreloadHandle)
+    menuPreloadHandle = null
+  }
+  if (!ready.value) return
+  const paths = collectSectionPreloadPaths().slice(0, 12)
+  if (!paths.length) return
+  menuPreloadHandle = deferRoutePreload(() => {
+    menuPreloadHandle = null
+    paths.forEach((path) => { void preloadPath(path) })
+  })
+}
 const rememberSubnavScroll = (force = false): void => {
   if (subnavScrollState.navigationPending && !force) return
   if (assetSubnav.value) subnavScrollState.asset = assetSubnav.value.scrollTop
@@ -115,6 +158,7 @@ const navigate = (item: PortalMenuItem): void => {
   if (target === route.path) return
   rememberSubnavScroll(true)
   subnavScrollState.navigationPending = true
+  void preloadPath(target)
   void router.push(target).finally(async () => {
     await restoreSubnavScroll()
     subnavScrollState.navigationPending = false
@@ -194,6 +238,10 @@ watch([() => route.path, assetMenus], () => {
 
 watch([() => route.path, openAssetGroups], () => { void restoreSubnavScroll() }, { flush: 'post' })
 
+watch([ready, resolvedSection, primaryMenus, assetMenus, systemMenus, () => route.path], () => {
+  scheduleMenuRoutePreloads()
+}, { flush: 'post', immediate: true })
+
 watch([ready, isEmployeeTerminal, () => route.path], ([sessionReady, employee, path]) => {
   if (sessionReady && employee && !employeePortalPaths.has(path)) void router.replace('/')
 }, { immediate: true })
@@ -247,6 +295,10 @@ onBeforeUnmount(() => { if (layoutActive.value) rememberSubnavScroll() })
 
 onUnmounted(() => {
   stopApprovalRefresh()
+  if (menuPreloadHandle !== null) {
+    cancelRoutePreload(menuPreloadHandle)
+    menuPreloadHandle = null
+  }
   if (!layoutActive.value) return
   document.body.classList.remove('standard-vue-route')
   document.body.classList.remove('employee-terminal-view')

@@ -5,6 +5,13 @@ export default defineConfig({
   plugins: [vue()],
   build: {
     outDir: 'frontend-dist',
+    modulePreload: {
+      resolveDependencies(_url, dependencies, context) {
+        if (context.hostType !== 'html') return dependencies
+        return dependencies.filter((dependency) =>
+          !/(^|\/)(asset-workbook|pinyin|element)-[A-Za-z0-9_-]+\.js$/.test(dependency))
+      }
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -15,7 +22,6 @@ export default defineConfig({
           // ECP packages have cross-package imports; keeping them together avoids
           // circular chunk initialization failures in production builds.
           if (['ecp-auth-vue', 'ecp-auth', 'ecp-core', 'ecp-ui', 'ecp-sdk'].some((dependency) => id.includes(`/@acg/${dependency}/`))) return 'ecp'
-          if (['jszip', 'lie', 'pako', 'readable-stream', 'setimmediate', 'core-util-is', 'inherits', 'safe-buffer', 'string_decoder', 'util-deprecate'].some((dependency) => id.includes(`/node_modules/${dependency}/`))) return 'asset-workbook'
           if (id.includes('/element-plus/') || id.includes('/@element-plus/')) return 'element-plus'
           if (id.includes('/vue/') || id.includes('/vue-router/')) return 'vue-runtime'
           if (id.includes('/pinyin-pro/')) return 'pinyin'
