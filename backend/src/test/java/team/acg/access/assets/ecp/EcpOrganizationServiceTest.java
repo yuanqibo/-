@@ -56,14 +56,15 @@ class EcpOrganizationServiceTest {
         EcpClient client = mock(EcpClient.class);
         EcpSelectableDirectoryService selectableDirectory = mock(EcpSelectableDirectoryService.class);
         EcpCompanyProfile company = new EcpCompanyProfile(
-            "", "company-1", "", "account-set-1", "示例公司", "ACTIVE", "", "company-1");
+            "", "company-1", "", "", "示例公司", "ACTIVE", "", "company-1");
         EcpDepartmentProfile department = new EcpDepartmentProfile(
-            "", "department-1", "", "account-set-1", "行政管理", "DEPARTMENT",
-            "示例公司/行政管理", "ACTIVE", "", "company-1", "company-1", "", "示例公司", null);
+            "", "department-1", "", "", "行政管理", "DEPARTMENT",
+            "示例公司/行政管理", "ACTIVE", "", "company-1", "company-1", "", "示例公司",
+            new EcpDepartmentProfile.LeaderSummary("user-1", "", "任吉财"));
         EcpUserProfile user = new EcpUserProfile(
-            "", "user-1", "", "account-set-1", "任吉财", "", "", "ACTIVE", "A001", "",
+            "", "user-1", "", "", "任吉财", "", "", "ACTIVE", "A001", "",
             "department-1", "行政管理", "示例公司/行政管理",
-            new EcpUserProfile.CompanySummary("company-1", "", "示例公司", "account-set-1"),
+            new EcpUserProfile.CompanySummary("company-1", "", "示例公司", ""),
             List.of(new EcpUserProfile.DepartmentSummary(
                 "department-1", "", "行政管理", "DEPARTMENT", "示例公司/行政管理", null)));
         when(selectableDirectory.snapshot("Bearer session-token"))
@@ -76,6 +77,7 @@ class EcpOrganizationServiceTest {
         EcpOrganizationService.OrganizationConsole result = service.load("tenant-1", "Bearer session-token");
 
         assertThat(result.users()).extracting(EcpOrganizationService.UserView::name).containsExactly("任吉财");
+        assertThat(result.users().get(0).leaderDepartmentNames()).containsExactly("行政管理");
         assertThat(result.roots()).singleElement().satisfies(root -> {
             assertThat(root.name()).isEqualTo("示例公司");
             assertThat(root.memberSubjects()).containsExactly("user-1");

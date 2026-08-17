@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.idanchuang.ecp.api.common.model.directory.EcpCompanyProfile;
 import com.idanchuang.ecp.api.common.model.directory.EcpDepartmentProfile;
 import com.idanchuang.ecp.api.common.model.directory.EcpUserProfile;
+import com.idanchuang.ecp.sdk.client.EcpClient;
 import com.idanchuang.ecp.sdk.client.model.EcpPage;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
@@ -41,23 +43,35 @@ public class EcpSelectableDirectoryService {
     private static final int MAX_PAGES = 100;
     private static final int MAX_ORGANIZATION_NODES = 2_000;
     private static final long CACHE_TTL_MILLIS = Duration.ofMinutes(2).toMillis();
+    private static final long PROFILE_CACHE_TTL_MILLIS = Duration.ofMinutes(5).toMillis();
+    private static final long PROFILE_HYDRATION_BACKOFF_MILLIS = Duration.ofMinutes(1).toMillis();
 
-    private final HttpClient client;
+    private final EcpClient directoryClient;
+    private final HttpClient httpClient;
     private final ObjectMapper mapper;
     private final String baseUrl;
     private final String appCode;
     private final Map<String, CachedSnapshot> snapshots = new ConcurrentHashMap<>();
+    private final Map<String, CachedProfile> profileDetails = new ConcurrentHashMap<>();
+    private volatile long profileHydrationDisabledUntilMillis;
 
-    public EcpSelectableDirectoryService(ObjectMapper mapper,
+    @Autowired
+    public EcpSelectableDirectoryService(EcpClient directoryClient,
+                                         ObjectMapper mapper,
                                          @Value("${asset-portal.ecp-api-base-url}") String baseUrl,
                                          @Value("${ecp.sdk.app-code}") String appCode) {
+        this.directoryClient = directoryClient;
         this.mapper = mapper;
         this.baseUrl = baseUrl.replaceAll("/$", "");
         this.appCode = appCode;
-        this.client = HttpClient.newBuilder()
+        this.httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NEVER)
             .build();
+    }
+
+    EcpSelectableDirectoryService(ObjectMapper mapper, String baseUrl, String appCode) {
+        this(null, mapper, baseUrl, appCode);
     }
 
     public EcpPage<EcpUserProfile> page(String query, int page, int size, String authorization) {
@@ -74,7 +88,7 @@ public class EcpSelectableDirectoryService {
             .queryParam("q", normalizedQuery)
             .queryParam("page", page - 1)
             .queryParam("pageSize", size);
-        return parsePage(send(uri.build().encode().toUri(), bearer), page, size);
+        return hydratePage(parsePage(send(uri.build().encode().toUri(), bearer), page, size));
     }
 
     public DirectorySnapshot snapshot(String authorization) {
@@ -220,9 +234,58 @@ public class EcpSelectableDirectoryService {
         for (JsonNode node : nodes) {
             EcpUserProfile profile = profile(node);
             if (profile == null) continue;
-            EcpUserProfile enriched = enrich(profile, node, root, departmentsById, companiesById);
+            EcpUserProfile enriched = enrich(hydrate(profile), node, root, departmentsById, companiesById);
             users.putIfAbsent(enriched.unionId(), enriched);
         }
+    }
+
+    private EcpPage<EcpUserProfile> hydratePage(EcpPage<EcpUserProfile> page) {
+        return new EcpPage<>(page.items().stream().map(this::hydrate).toList(),
+            page.current(), page.size(), page.total());
+    }
+
+    private EcpUserProfile hydrate(EcpUserProfile profile) {
+        if (directoryClient == null) return profile;
+        String unionId = text(profile.unionId());
+        if (unionId.isEmpty()) return profile;
+        long now = System.currentTimeMillis();
+        CachedProfile cached = profileDetails.get(unionId);
+        if (cached != null && cached.expiresAtMillis() > now) return merge(cached.profile(), profile);
+        if (profileHydrationDisabledUntilMillis > now) return profile;
+        try {
+            EcpUserProfile detail = directoryClient.directory().users().getByUnionId(unionId);
+            EcpUserProfile merged = merge(detail, profile);
+            profileDetails.put(unionId, new CachedProfile(merged, now + PROFILE_CACHE_TTL_MILLIS));
+            return merged;
+        } catch (RuntimeException error) {
+            profileHydrationDisabledUntilMillis = now + PROFILE_HYDRATION_BACKOFF_MILLIS;
+            return profile;
+        }
+    }
+
+    private static EcpUserProfile merge(EcpUserProfile primary, EcpUserProfile fallback) {
+        if (primary == null) return fallback;
+        if (fallback == null) return primary;
+        EcpUserProfile.CompanySummary company = primary.company() == null ? fallback.company() : primary.company();
+        List<EcpUserProfile.DepartmentSummary> departments = primary.departments() == null || primary.departments().isEmpty()
+            ? fallback.departments()
+            : primary.departments();
+        return new EcpUserProfile(
+            first(primary.tenantId(), fallback.tenantId()),
+            first(primary.unionId(), fallback.unionId()),
+            first(primary.externalId(), fallback.externalId()),
+            first(primary.accountSetUnionId(), fallback.accountSetUnionId()),
+            first(primary.name(), fallback.name()),
+            first(primary.email(), fallback.email()),
+            first(primary.phone(), fallback.phone()),
+            first(primary.status(), fallback.status()),
+            first(primary.employeeNo(), fallback.employeeNo()),
+            first(primary.jobTitle(), fallback.jobTitle()),
+            first(primary.orgNodeUnionId(), fallback.orgNodeUnionId()),
+            first(primary.orgNodeName(), fallback.orgNodeName()),
+            first(primary.orgNodePath(), fallback.orgNodePath()),
+            company,
+            departments == null ? List.of() : departments);
     }
 
     private static List<EcpUserProfile> usersForRoot(List<JsonNode> nodes) {
@@ -355,7 +418,7 @@ public class EcpSelectableDirectoryService {
             .GET()
             .build();
         try {
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 401) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "ECP session is invalid");
             }
@@ -540,6 +603,8 @@ public class EcpSelectableDirectoryService {
                                      List<DirectoryRoot> roots) {}
 
     private record CachedSnapshot(DirectorySnapshot snapshot, long expiresAtMillis) {}
+
+    private record CachedProfile(EcpUserProfile profile, long expiresAtMillis) {}
 
     static record DirectoryRoot(String accountSetUnionId, String orgNodeUnionId,
                                 String companyUnionId, String companyName, String path) {

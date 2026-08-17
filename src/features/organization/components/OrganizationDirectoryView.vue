@@ -65,6 +65,11 @@ const statusClass = (status: string | null): string => {
   return 'gray'
 }
 
+const leaderDepartments = (value: string[] | null | undefined): string => {
+  const names = [...new Set((Array.isArray(value) ? value : []).map((item) => String(item || '').trim()).filter(Boolean))]
+  return names.join('、') || '--'
+}
+
 const formatJsonPreview = (payload: unknown): string => {
   if (payload == null || payload === '') return 'ECP 已返回成功。'
   const value = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2)
@@ -204,7 +209,7 @@ onMounted(() => void load())
                   <td :title="member.employeeNo || '-'">{{ member.employeeNo || '-' }}</td>
                   <td :title="member.email || '-'">{{ member.email || '-' }}</td>
                   <td :title="member.department || '-'">{{ member.department || '-' }}</td>
-                  <td :title="member.departments?.[0]?.leaderName || '--'">{{ member.departments?.[0]?.leaderName || '--' }}</td>
+                  <td :title="leaderDepartments(member.leaderDepartmentNames)">{{ leaderDepartments(member.leaderDepartmentNames) }}</td>
                   <td><span class="tag" :class="statusClass(member.status)">{{ member.status || 'enabled' }}</span></td>
                   <td :title="member.jobTitle || '-'">{{ member.jobTitle || '-' }}</td>
                   <td><button class="link" type="button" @click="openMemberDetail(member)">详情</button></td>

@@ -19,6 +19,7 @@ const member: OrganizationMember = {
   companyUnionId: 'company-1',
   companyName: '示例公司',
   departments: [{ unionId: 'dep-1', externalId: null, name: '研发部', nodeType: 'department', path: '/', leaderName: '李经理' }],
+  leaderDepartmentNames: ['平台组'],
   company: '示例公司',
   department: '研发部',
   accountSetName: '飞书账号集',
@@ -38,6 +39,7 @@ describe('OrganizationMemberDrawer', () => {
     expect(wrapper.get('[role="dialog"]').attributes('aria-label')).toBe('成员详情')
     expect(wrapper.text()).toContain('张三')
     expect(wrapper.text()).toContain('zhangsan@example.com')
+    expect(wrapper.text()).toContain('平台组')
     await wrapper.get('button[aria-label="关闭"]').trigger('click')
     expect(wrapper.emitted('update:modelValue')).toEqual([[false]])
     wrapper.unmount()

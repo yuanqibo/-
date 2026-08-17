@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import com.idanchuang.ecp.api.common.model.directory.EcpDepartmentProfile;
 import com.idanchuang.ecp.api.common.model.directory.EcpUserProfile;
+import com.idanchuang.ecp.sdk.client.EcpClient;
 import com.idanchuang.ecp.sdk.client.model.EcpPage;
+import com.idanchuang.ecp.sdk.client.operation.DirectoryOperations;
+import com.idanchuang.ecp.sdk.client.operation.UsersOperations;
 import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
@@ -13,6 +16,9 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class EcpSelectableDirectoryServiceTest {
     private final ObjectMapper mapper = new ObjectMapper();
@@ -202,6 +208,45 @@ class EcpSelectableDirectoryServiceTest {
 
             assertThat(matches).extracting(EcpUserProfile::unionId).containsExactly("user-1");
             assertThat(accountQuery.get()).contains("q=%E9%9F%A9%E6%A2%85%E6%A2%85");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void hydratesSelectableAccountsWithDirectoryUserProfile() throws Exception {
+        EcpClient client = mock(EcpClient.class);
+        DirectoryOperations directory = mock(DirectoryOperations.class);
+        UsersOperations users = mock(UsersOperations.class);
+        when(client.directory()).thenReturn(directory);
+        when(directory.users()).thenReturn(users);
+        when(users.getByUnionId("user-1")).thenReturn(new EcpUserProfile(
+            "", "user-1", "", "account-set-1", "任吉财", "ren@example.com", "", "ACTIVE",
+            "EMP-001", "信息安全主管", "department-1", "行政管理", "示例公司/行政管理",
+            new EcpUserProfile.CompanySummary("company-1", "", "示例公司", "account-set-1"),
+            List.of(new EcpUserProfile.DepartmentSummary("department-1", "", "行政管理", "DEPARTMENT",
+                "示例公司/行政管理", null))));
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/applications/WLY5YG/selectable-accounts", exchange -> respond(exchange, """
+            {"nodes":[{
+              "nodeType":"ACCOUNT",
+              "accountUnionId":"user-1",
+              "name":"任吉财"
+            }],"total":1}
+            """));
+        server.start();
+        try {
+            EcpSelectableDirectoryService service = new EcpSelectableDirectoryService(
+                client, mapper, "http://127.0.0.1:" + server.getAddress().getPort(), "WLY5YG");
+
+            EcpPage<EcpUserProfile> page = service.page("任", 1, 20, "Bearer session-token");
+
+            assertThat(page.items()).singleElement().satisfies(profile -> {
+                assertThat(profile.employeeNo()).isEqualTo("EMP-001");
+                assertThat(profile.jobTitle()).isEqualTo("信息安全主管");
+                assertThat(profile.email()).isEqualTo("ren@example.com");
+            });
+            verify(users).getByUnionId("user-1");
         } finally {
             server.stop(0);
         }

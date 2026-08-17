@@ -181,6 +181,7 @@ export function useOrganizationDirectory() {
       const member: OrganizationMember = {
         ...user,
         departments: Array.isArray(user.departments) ? user.departments : [],
+        leaderDepartmentNames: Array.isArray(user.leaderDepartmentNames) ? user.leaderDepartmentNames : [],
         company: String(user.companyName || '').trim(),
         department: String(user.departments?.[0]?.name || '').trim(),
         accountSetName: String(accountSet?.name || '').trim(),

@@ -1,12 +1,14 @@
 package team.acg.access.assets.ecp;
 
 import com.idanchuang.ecp.api.common.model.accountset.AccountSetResponse;
+import com.idanchuang.ecp.api.common.model.organization.OrganizationAccount;
 import com.idanchuang.ecp.api.common.model.directory.EcpCompanyProfile;
 import com.idanchuang.ecp.api.common.model.directory.EcpDepartmentProfile;
 import com.idanchuang.ecp.api.common.model.directory.EcpUserProfile;
 import com.idanchuang.ecp.sdk.client.EcpClient;
 import com.idanchuang.ecp.sdk.client.EcpTransportClient;
 import com.idanchuang.ecp.sdk.client.model.EcpPage;
+import com.idanchuang.ecp.sdk.client.operation.AccountsOperations;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
@@ -106,6 +108,11 @@ public class EcpOrganizationService {
             users = fallback.users();
         }
         List<AccountSetView> accountSets = loadAccountSets(tenantId, authorization, companies, users, warnings);
+        Map<String, OrganizationAccount> organizationAccounts = loadOrganizationAccounts(accountSets, warnings);
+        users = users.stream()
+            .map(user -> mergeOrganizationAccount(user, organizationAccounts.get(text(user.unionId()))))
+            .toList();
+        Map<String, List<String>> leaderDepartmentNames = leaderDepartmentNames(departments, users, organizationAccounts);
         OrganizationBuilder builder = new OrganizationBuilder();
         companies.forEach(builder::addCompany);
         departments.forEach(builder::addDepartment);
@@ -113,7 +120,8 @@ public class EcpOrganizationService {
         return new OrganizationConsole(
             accountSets,
             builder.roots(),
-            users.stream().map(UserView::from).toList(),
+            users.stream().map(user -> UserView.from(user,
+                leaderDepartmentNames.getOrDefault(subject(user), List.of()))).toList(),
             new OrganizationCapabilities(
                 true,
                 true,
@@ -149,6 +157,114 @@ public class EcpOrganizationService {
             }
         }
         return deriveAccountSets(companies, users);
+    }
+
+    private Map<String, OrganizationAccount> loadOrganizationAccounts(List<AccountSetView> accountSets, List<String> warnings) {
+        Map<String, OrganizationAccount> accounts = new LinkedHashMap<>();
+        boolean warned = false;
+        for (AccountSetView accountSet : accountSets) {
+            String accountSetUnionId = text(accountSet.unionId());
+            if (accountSetUnionId.isEmpty()) continue;
+            try {
+                AccountsOperations operations = new AccountsOperations(client, accountSetUnionId);
+                for (int page = 1; page <= MAX_PAGES; page++) {
+                    EcpPage<OrganizationAccount> result = operations.list(null, true, null, null, page, PAGE_SIZE);
+                    for (OrganizationAccount account : result.items()) {
+                        if (account == null || text(account.unionId()).isEmpty()) continue;
+                        accounts.putIfAbsent(text(account.unionId()), account);
+                    }
+                    if (!result.hasNext()) break;
+                }
+            } catch (RuntimeException error) {
+                if (!warned) {
+                    warnings.add("ECP 账号详情读取失败，工号/岗位/负责部门可能不完整：" + readable(error));
+                    warned = true;
+                }
+            }
+        }
+        return accounts;
+    }
+
+    private static EcpUserProfile mergeOrganizationAccount(EcpUserProfile profile, OrganizationAccount account) {
+        if (profile == null || account == null) return profile;
+        EcpUserProfile.CompanySummary company = profile.company();
+        List<EcpUserProfile.DepartmentSummary> departments = profile.departments();
+        if ((departments == null || departments.isEmpty())
+            && (!text(account.orgNodeUnionId()).isEmpty() || !text(account.departmentName()).isEmpty())) {
+            departments = List.of(new EcpUserProfile.DepartmentSummary(
+                text(account.orgNodeUnionId()), "", text(account.departmentName()), "DEPARTMENT",
+                text(profile.orgNodePath()), null));
+        }
+        return new EcpUserProfile(
+            first(profile.tenantId(), account.tenantId()),
+            first(profile.unionId(), account.unionId()),
+            profile.externalId(),
+            first(profile.accountSetUnionId(), account.accountSetUnionId()),
+            first(profile.name(), account.name()),
+            first(profile.email(), account.email()),
+            first(profile.phone(), account.phone()),
+            first(profile.status(), account.status()),
+            first(profile.employeeNo(), account.employeeNo()),
+            first(profile.jobTitle(), account.jobTitle()),
+            first(profile.orgNodeUnionId(), account.orgNodeUnionId()),
+            first(profile.orgNodeName(), account.departmentName()),
+            profile.orgNodePath(),
+            company,
+            departments == null ? List.of() : departments);
+    }
+
+    private static Map<String, List<String>> leaderDepartmentNames(List<EcpDepartmentProfile> departments,
+                                                                   List<EcpUserProfile> users,
+                                                                   Map<String, OrganizationAccount> organizationAccounts) {
+        Map<String, LinkedHashSet<String>> values = new LinkedHashMap<>();
+        users.forEach(user -> {
+            OrganizationAccount account = organizationAccounts.get(text(user.unionId()));
+            if (account == null) return;
+            addAll(values.computeIfAbsent(subject(user), ignored -> new LinkedHashSet<>()),
+                account.leaderDepartmentNames());
+        });
+
+        Map<String, String> usersByLeaderKey = userLeaderKeys(users);
+        for (EcpDepartmentProfile department : departments) {
+            if (department == null || department.leader() == null || text(department.name()).isEmpty()) continue;
+            String ownerSubject = first(
+                usersByLeaderKey.get("union:" + text(department.leader().unionId())),
+                usersByLeaderKey.get("external:" + text(department.leader().externalId())),
+                usersByLeaderKey.get("name:" + text(department.leader().name())));
+            if (!ownerSubject.isEmpty()) {
+                values.computeIfAbsent(ownerSubject, ignored -> new LinkedHashSet<>()).add(text(department.name()));
+            }
+        }
+        Map<String, List<String>> result = new LinkedHashMap<>();
+        values.forEach((key, value) -> result.put(key, List.copyOf(value)));
+        return result;
+    }
+
+    private static Map<String, String> userLeaderKeys(List<EcpUserProfile> users) {
+        Map<String, String> keys = new LinkedHashMap<>();
+        Map<String, Integer> nameCounts = new LinkedHashMap<>();
+        users.forEach(user -> {
+            String name = text(user.name());
+            if (!name.isEmpty()) nameCounts.merge(name, 1, Integer::sum);
+        });
+        users.forEach(user -> {
+            String subject = subject(user);
+            if (subject.isEmpty()) return;
+            putKey(keys, "union:" + text(user.unionId()), subject);
+            putKey(keys, "external:" + text(user.externalId()), subject);
+            String name = text(user.name());
+            if (!name.isEmpty() && nameCounts.getOrDefault(name, 0) == 1) putKey(keys, "name:" + name, subject);
+        });
+        return keys;
+    }
+
+    private static void putKey(Map<String, String> values, String key, String value) {
+        if (!key.endsWith(":")) values.putIfAbsent(key, value);
+    }
+
+    private static void addAll(Set<String> values, List<String> items) {
+        if (items == null) return;
+        items.stream().map(EcpOrganizationService::text).filter(item -> !item.isEmpty()).forEach(values::add);
     }
 
     private List<AccountSetView> loadAccountSetsWithSession(String authorization) {
@@ -260,6 +376,10 @@ public class EcpOrganizationService {
         return "";
     }
 
+    private static String subject(EcpUserProfile profile) {
+        return first(profile.unionId(), profile.externalId());
+    }
+
     private static String text(String value) {
         return value == null ? "" : value.trim();
     }
@@ -343,8 +463,9 @@ public class EcpOrganizationService {
 
     public record UserView(String subject, String unionId, String externalId, String accountSetUnionId,
                            String name, String email, String phone, String employeeNo, String jobTitle,
-                           String status, String companyUnionId, String companyName, List<UserDepartmentView> departments) {
-        static UserView from(EcpUserProfile profile) {
+                           String status, String companyUnionId, String companyName,
+                           List<UserDepartmentView> departments, List<String> leaderDepartmentNames) {
+        static UserView from(EcpUserProfile profile, List<String> leaderDepartmentNames) {
             EcpUserProfile.CompanySummary company = profile.company();
             return new UserView(
                 first(profile.unionId(), profile.externalId()),
@@ -359,7 +480,8 @@ public class EcpOrganizationService {
                 profile.status(),
                 company == null ? "" : company.unionId(),
                 company == null ? "" : company.name(),
-                profile.departments() == null ? List.of() : profile.departments().stream().map(UserDepartmentView::from).toList());
+                profile.departments() == null ? List.of() : profile.departments().stream().map(UserDepartmentView::from).toList(),
+                leaderDepartmentNames == null ? List.of() : List.copyOf(leaderDepartmentNames));
         }
     }
 

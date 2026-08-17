@@ -56,6 +56,7 @@ export type OrganizationUser = {
   companyUnionId: string | null
   companyName: string | null
   departments: OrganizationUserDepartment[]
+  leaderDepartmentNames: string[]
 }
 
 export type OrganizationCapabilities = {

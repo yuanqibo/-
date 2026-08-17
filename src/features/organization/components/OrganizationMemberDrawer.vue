@@ -45,14 +45,14 @@ const fields = computed<DetailField[]>(() => {
   const member = props.member
   if (!member) return []
   const departments = member.departments.map((department) => department.name).filter(Boolean).join('、') || member.department
-  const departmentLeaders = [...new Set(member.departments.map((department) => department.leaderName).filter(Boolean))].join('、')
+  const leaderDepartments = [...new Set(member.leaderDepartmentNames.map((department) => String(department || '').trim()).filter(Boolean))].join('、')
   return [
     { label: 'external_id', value: text(member.externalId || member.subject), wide: true },
     { label: 'union_id', value: text(member.unionId || member.subject), wide: true },
     { label: '岗位', value: text(member.jobTitle) },
     { label: '账号状态', value: statusLabel(member.status) },
     { label: '部门', value: text(departments), wide: true },
-    { label: '负责部门', value: text(departmentLeaders) },
+    { label: '负责部门', value: text(leaderDepartments) },
     { label: '所属公司', value: text(member.company) },
     { label: '邮箱', value: text(member.email), wide: true },
     { label: '手机', value: text(member.phone) },
