@@ -2,12 +2,15 @@ import { createEcpSdk } from '@acg/ecp-sdk'
 import { initAuthzSdk } from '@acg/ecp-auth'
 import { createBundleFromGlob, validateAuthzBundle } from '@acg/ecp-auth-vue'
 import type { App as VueApp } from 'vue'
-import type { Router } from 'vue-router'
+import type { Component } from 'vue'
+import type { Router, RouteRecordRaw } from 'vue-router'
 import type { AuthzPermissionSnapshot, EcpAuthConfigSourceMode } from '@acg/ecp-sdk'
 import { formatPermissionDisplayName } from './authz/permission-display'
 import { withEmployeeSelfServiceSnapshot } from './core/auth/employee-self-service-access'
 
 export type { AuthzSessionContext } from '@acg/ecp-sdk'
+
+const portalPageFiles = import.meta.glob('/src/views/**/*.vue')
 
 const authzBundle = createBundleFromGlob({
   ...import.meta.glob('../authz/*.{yaml,yml,json}', {
@@ -15,10 +18,41 @@ const authzBundle = createBundleFromGlob({
     import: 'default',
     query: '?raw'
   }),
-  ...import.meta.glob('/src/views/**/*.vue')
+  ...portalPageFiles
 })
 
 export const localAuthzValidationReport = validateAuthzBundle(authzBundle)
+
+const toPortalPageImporter = (file: string): (() => Promise<Component>) | null => {
+  const normalized = file.startsWith('/') ? file : `/${file}`
+  const importer = portalPageFiles[normalized] || portalPageFiles[normalized.replace(/^\//, '')]
+  return typeof importer === 'function' ? importer as () => Promise<Component> : null
+}
+
+export const installPortalRoutes = (router: Router): void => {
+  authzBundle.menu?.menus?.forEach((item) => {
+    const path = String(item.path || '').trim()
+    const name = String(item.pageKey || '').trim()
+    const file = String(item.file || '').trim()
+    if (!path || !name || !file || router.hasRoute(name)) return
+
+    const component = toPortalPageImporter(file)
+    if (!component) return
+
+    const record: RouteRecordRaw = {
+      path,
+      name,
+      component,
+      meta: {
+        title: item.title,
+        permissionMode: item.permissionMode,
+        permissionCodes: item.permissionCodes,
+        featureCodes: item.featureCodes
+      }
+    }
+    router.addRoute('app-shell', record)
+  })
+}
 
 type PermissionBearingContext = {
   permissionCodes: string[]
@@ -102,10 +136,9 @@ export const ecp = createEcpSdk({
       // initializes the same session after the UI is mounted; server APIs still
       // enforce authorization for every business request.
       permission: false,
-      menu: {
-        parentRouteName: 'app-shell',
-        sync: true
-      },
+      // Portal routes are registered locally as lazy Vue Router components.
+      // The SDK's menu sync eagerly imports every page before first paint.
+      menu: false,
       workspace: {
         parentRouteName: 'system-workspace-shell',
         mountPath: '/workspace',

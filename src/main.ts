@@ -49,7 +49,7 @@ import './styles/app.css'
 import './styles/portal.css'
 import App from './App.vue'
 import { router } from './router'
-import { configureEcp } from './ecp'
+import { configureEcp, installPortalRoutes } from './ecp'
 import { resizableColumns } from './shared/directives/resizable-columns'
 
 const app = createApp(App)
@@ -115,6 +115,7 @@ const bootstrap = (): void => {
   document.addEventListener('click', closeExpandedSelectOnSecondClick, true)
   elementComponents.forEach((component) => app.use(component))
   app.use(ElLoading)
+  installPortalRoutes(router)
   app.use(router)
   app.mount('#app')
 
