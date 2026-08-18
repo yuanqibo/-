@@ -31,6 +31,7 @@ public class AssetService {
         "领用待签字", "借用待签字", "交接待签字", "处置中", "已处置", "已报废");
     private static final Set<String> UNASSIGNED = Set.of("空闲", "闲置", "上架", "待验收");
     private static final Set<String> ASSIGNABLE = Set.of("空闲");
+    private static final Set<String> PENDING_SIGNATURE_STATUSES = Set.of("领用待签字", "借用待签字", "交接待签字");
     private static final Set<String> CURRENT_USAGE_FIELDS = Set.of(
         "ownerSubject", "company", "companyUnionId", "department", "departmentUnionId",
         "employeeCode", "phone", "email", "receiveDate", "borrowDate", "expectedReturnDate",
@@ -211,6 +212,7 @@ public class AssetService {
             }
             String status = normalizeReplacementStatus(requiredText(draft, "status", 32));
             asset.put("status", status);
+            rejectWorkflowChangesDuringPendingSignature(previous, asset);
             clearStaleWorkflowFields(asset, status);
             normalizeUnassignedUsage(asset);
             replacement.add(asset);
@@ -454,10 +456,11 @@ public class AssetService {
                 clearReceiptSnapshot(asset);
             }
             case "handover-cancel" -> {
-                requireStatus(asset, Set.of("交接待签字"));
-                restoreReceiptSnapshot(asset);
-                lifecycle(asset, fields, "取消交接", requiredField(fields, "operator") + " 取消交接单");
-                clearReceiptSnapshot(asset);
+                cancelPendingHandover(asset, fields, false);
+            }
+            case "handover-reject" -> {
+                requiredField(fields, "reason");
+                cancelPendingHandover(asset, fields, true);
             }
             case "receipt-sign" -> completeReceipt(asset, fields);
             case "receipt-reject" -> rejectReceipt(asset, fields, false);
@@ -658,10 +661,18 @@ public class AssetService {
                         operation.put("signedAt", date(commandFields.path("date").asText()));
                         operation.put("signerSubject", commandFields.path("operatorSubject").asText());
                     });
-                case "handover-cancel" -> operationRepository.updateLatest(
-                    assetId, "HANDOVER", Set.of("待签字"), operation -> {
+                case "handover-cancel" -> updatePendingHandoverOperation(
+                    assetId, commandFields, operation -> {
                         operation.put("status", "已取消");
                         operation.put("cancelledAt", date(commandFields.path("date").asText()));
+                        operation.put("cancelledBy", commandFields.path("operator").asText());
+                    });
+                case "handover-reject" -> updatePendingHandoverOperation(
+                    assetId, commandFields, operation -> {
+                        operation.put("status", "已打回");
+                        operation.put("rejectedAt", date(commandFields.path("date").asText()));
+                        operation.put("rejectedBy", commandFields.path("operator").asText());
+                        operation.put("rejectionReason", commandFields.path("reason").asText());
                     });
                 case "receipt-sign" -> updateReceiptOperation(assetId, previous.path("status").asText(), Set.of("待签字"), operation -> {
                     operation.put("status", "BORROW".equals(operation.path("type").asText()) ? "待归还" : "已签字");
@@ -747,6 +758,16 @@ public class AssetService {
         operationRepository.updateLatest(assetId, receiptType(pendingStatus), statuses, mutation);
     }
 
+    private void updatePendingHandoverOperation(String assetId, JsonNode fields,
+                                                java.util.function.Consumer<ObjectNode> mutation) {
+        String operationId = fields.path("operationId").asText("").trim();
+        if (operationId.isBlank()) {
+            operationRepository.updateLatest(assetId, "HANDOVER", Set.of("待签字"), mutation);
+        } else {
+            operationRepository.update(operationId, assetId, "HANDOVER", Set.of("待签字"), mutation);
+        }
+    }
+
     private String receiptType(String status) {
         return switch (status) {
             case "领用待签字" -> "RECEIVE";
@@ -780,6 +801,60 @@ public class AssetService {
                 ? requiredField(fields, "operator") + " 终止待签收单"
                 : requiredField(fields, "operator") + " 打回待签收单");
         clearReceiptSnapshot(asset);
+    }
+
+    private void cancelPendingHandover(ObjectNode asset, JsonNode fields, boolean rejectedByReceiver) {
+        ObjectNode operation = pendingHandoverOperation(asset, fields);
+        if (rejectedByReceiver) {
+            String receiverSubject = operation.path("partySubject").asText("").trim();
+            String operatorSubject = fields.path("operatorSubject").asText("").trim();
+            if (receiverSubject.isBlank() || operatorSubject.isBlank() || !receiverSubject.equals(operatorSubject)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Only the designated handover receiver can reject this handover");
+            }
+        }
+        if (!isCurrentPendingHandover(asset, operation)) return;
+
+        restoreReceiptSnapshot(asset);
+        lifecycle(asset, fields, rejectedByReceiver ? "交接打回" : "取消交接",
+            rejectedByReceiver
+                ? requiredField(fields, "operator") + " 打回交接单"
+                : requiredField(fields, "operator") + " 取消交接单");
+        clearReceiptSnapshot(asset);
+    }
+
+    private ObjectNode pendingHandoverOperation(ObjectNode asset, JsonNode fields) {
+        String operationId = fields.path("operationId").asText("").trim();
+        ObjectNode operation = operationId.isBlank()
+            ? operationRepository.findLatest(asset.path("id").asText(), "HANDOVER", Set.of("待签字"))
+            : operationRepository.find(operationId);
+        if (!asset.path("id").asText().equals(operation.path("assetId").asText())
+            || !"HANDOVER".equals(operation.path("type").asText())
+            || !"待签字".equals(operation.path("status").asText())) {
+            throw new IllegalStateException("Asset handover is no longer waiting for signature");
+        }
+        return operation;
+    }
+
+    private boolean isCurrentPendingHandover(ObjectNode asset, ObjectNode operation) {
+        return "交接待签字".equals(asset.path("status").asText())
+            && asset.path("ownerSubject").asText("").equals(operation.path("partySubject").asText(""))
+            && asset.has("handoverPreviousStatus")
+            && asset.has("handoverPreviousOwner")
+            && asset.has("handoverPreviousOwnerSubject");
+    }
+
+    private void rejectWorkflowChangesDuringPendingSignature(JsonNode previous, ObjectNode replacement) {
+        if (previous == null || !PENDING_SIGNATURE_STATUSES.contains(previous.path("status").asText())) return;
+        Set<String> protectedFields = Set.of("owner", "ownerSubject", "company", "companyUnionId", "department",
+            "departmentUnionId", "location", "status", "receiveDate", "borrowDate", "expectedReturnDate",
+            "handoverDate", "handoverType");
+        boolean changed = protectedFields.stream()
+            .anyMatch(field -> !previous.path(field).asText("").equals(replacement.path(field).asText("")));
+        if (changed) {
+            throw new IllegalArgumentException("Asset is waiting for employee signature and cannot be changed by catalog replacement: "
+                + previous.path("id").asText());
+        }
     }
 
     private void requireDesignatedRecipient(ObjectNode asset, JsonNode fields) {

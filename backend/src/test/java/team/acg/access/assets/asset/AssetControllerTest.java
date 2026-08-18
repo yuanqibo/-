@@ -321,6 +321,7 @@ class AssetControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].status").value("交接待签字"))
             .andExpect(jsonPath("$.items[0].owner").value("新责任人"));
+        String firstHandoverId = operationId("PC-HANDOVER", "HANDOVER");
 
         mvc.perform(get("/api/asset-operations").param("type", "HANDOVER"))
             .andExpect(status().isOk())
@@ -332,8 +333,8 @@ class AssetControllerTest {
             .andExpect(jsonPath("$.items[0].assetOwnerCompany").value("资产所属公司"));
 
         mvc.perform(post("/api/assets/commands/handover-cancel").contentType(MediaType.APPLICATION_JSON).content("""
-            {"assetIds":["PC-HANDOVER"],"fields":{"operator":"管理员","date":"2026-07-11"}}
-            """))
+            {"assetIds":["PC-HANDOVER"],"fields":{"operationId":"%s","operator":"管理员","date":"2026-07-11"}}
+            """.formatted(firstHandoverId)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].status").value("领用"))
             .andExpect(jsonPath("$.items[0].owner").value("原责任人"))
@@ -357,6 +358,88 @@ class AssetControllerTest {
             .andExpect(jsonPath("$.items[0].status").value("领用"))
             .andExpect(jsonPath("$.items[0].owner").value("新责任人"))
             .andExpect(jsonPath("$.items[0].handoverPreviousOwner").doesNotExist());
+    }
+
+    @Test
+    void handoverReceiverCanRejectOnlyTheirOwnPendingHandover() throws Exception {
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-HANDOVER-REJECT","name":"交接资产","category":"电脑","location":"总部",
+              "owner":"原责任人","ownerSubject":"user-old"}}
+            """))
+            .andExpect(status().isOk());
+        mvc.perform(post("/api/assets/commands/handover").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-HANDOVER-REJECT"],"fields":{"receiver":"新责任人","receiverSubject":"user-new",
+              "location":"总部","handoverType":"员工交接","date":"2026-07-10"}}
+            """))
+            .andExpect(status().isOk());
+        String handoverId = operationId("PC-HANDOVER-REJECT", "HANDOVER");
+
+        mvc.perform(post("/api/assets/commands/handover-reject").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-HANDOVER-REJECT"],"fields":{"operationId":"%s","operator":"其他员工",
+              "operatorSubject":"user-other","reason":"非本人资产","date":"2026-07-11"}}
+            """.formatted(handoverId)))
+            .andExpect(status().isForbidden());
+
+        mvc.perform(post("/api/assets/commands/handover-reject").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-HANDOVER-REJECT"],"fields":{"operationId":"%s","operator":"新责任人",
+              "operatorSubject":"user-new","reason":"设备信息不符","date":"2026-07-11"}}
+            """.formatted(handoverId)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("领用"))
+            .andExpect(jsonPath("$.items[0].owner").value("原责任人"));
+
+        Integer rejected = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM asset_operation_record WHERE operation_id = ? AND operation_status = ?",
+            Integer.class, handoverId, "已打回");
+        org.assertj.core.api.Assertions.assertThat(rejected).isEqualTo(1);
+    }
+
+    @Test
+    void cancellingAStaleHandoverClosesOnlyTheOrderAndCatalogReplacementCannotCreateAnother() throws Exception {
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-HANDOVER-STALE","name":"交接资产","category":"电脑","location":"总部",
+              "owner":"原责任人","ownerSubject":"user-old"}}
+            """))
+            .andExpect(status().isOk());
+        mvc.perform(post("/api/assets/commands/handover").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-HANDOVER-STALE"],"fields":{"receiver":"新责任人","receiverSubject":"user-new",
+              "location":"总部","handoverType":"员工交接","date":"2026-07-10"}}
+            """))
+            .andExpect(status().isOk());
+
+        mvc.perform(post("/api/assets/replace").contentType(MediaType.APPLICATION_JSON).content("""
+            {"items":[{"id":"PC-HANDOVER-STALE","name":"交接资产","category":"电脑","location":"总部",
+              "status":"空闲","owner":"未分配"}]}
+            """))
+            .andExpect(status().isBadRequest());
+
+        String handoverId = operationId("PC-HANDOVER-STALE", "HANDOVER");
+        String document = jdbc.queryForObject("SELECT document FROM asset_record WHERE asset_id = ?", String.class, "PC-HANDOVER-STALE");
+        var staleAsset = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(document);
+        staleAsset.put("status", "空闲");
+        staleAsset.put("owner", "未分配");
+        staleAsset.put("ownerSubject", "");
+        staleAsset.remove("handoverPreviousStatus");
+        staleAsset.remove("handoverPreviousOwner");
+        staleAsset.remove("handoverPreviousOwnerSubject");
+        jdbc.update("UPDATE asset_record SET status = ?, document = ? WHERE asset_id = ?", "空闲", staleAsset.toString(), "PC-HANDOVER-STALE");
+
+        mvc.perform(post("/api/assets/commands/handover-cancel").contentType(MediaType.APPLICATION_JSON).content("""
+            {"assetIds":["PC-HANDOVER-STALE"],"fields":{"operationId":"%s","operator":"管理员","date":"2026-07-11"}}
+            """.formatted(handoverId)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].status").value("空闲"))
+            .andExpect(jsonPath("$.items[0].owner").value("未分配"));
+
+        Integer cancelled = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM asset_operation_record WHERE operation_id = ? AND operation_status = ?",
+            Integer.class, handoverId, "已取消");
+        org.assertj.core.api.Assertions.assertThat(cancelled).isEqualTo(1);
+    }
+
+    private String operationId(String assetId, String type) {
+        return jdbc.queryForObject("SELECT operation_id FROM asset_operation_record WHERE asset_id = ? AND operation_type = ? "
+            + "ORDER BY created_at DESC, operation_id DESC LIMIT 1", String.class, assetId, type);
     }
 
     @Test

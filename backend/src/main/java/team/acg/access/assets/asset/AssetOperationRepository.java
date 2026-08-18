@@ -66,6 +66,28 @@ public class AssetOperationRepository {
         return count != null && count > 0;
     }
 
+    public ObjectNode find(String operationId) {
+        List<ObjectNode> records = jdbc.query(
+            "SELECT document FROM asset_operation_record WHERE operation_id = ?",
+            (rs, row) -> read(rs.getString(1)), operationId);
+        if (records.isEmpty()) {
+            throw new IllegalArgumentException("Asset operation was not found: " + operationId);
+        }
+        return records.get(0);
+    }
+
+    public ObjectNode findLatest(String assetId, String type, Set<String> statuses) {
+        List<ObjectNode> records = jdbc.query(
+            "SELECT document FROM asset_operation_record WHERE asset_id = ? AND operation_type = ? "
+                + "ORDER BY created_at DESC, operation_id DESC",
+            (rs, row) -> read(rs.getString(1)), assetId, type);
+        return records.stream()
+            .filter(record -> statuses.contains(record.path("status").asText()))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException(
+                "Matching asset operation was not found: " + assetId + "/" + type));
+    }
+
     public List<ObjectNode> findPage(Set<String> types, Set<String> subjects, int page, int size) {
         if (types == null || types.isEmpty()) return List.of();
         List<String> normalizedTypes = types.stream().sorted().toList();
@@ -118,6 +140,28 @@ public class AssetOperationRepository {
             updated.path("status").asText(), updated.toString(), Timestamp.from(now),
             updated.path("id").asText(), record.version());
         if (changed != 1) throw new AssetVersionConflictException("Asset operation was modified concurrently: " + updated.path("id").asText());
+        return updated;
+    }
+
+    public ObjectNode update(String operationId, String assetId, String type, Set<String> statuses,
+                             Consumer<ObjectNode> mutation) {
+        List<OperationRecord> records = jdbc.query(
+            "SELECT document, version FROM asset_operation_record WHERE operation_id = ? FOR UPDATE",
+            (rs, row) -> new OperationRecord(read(rs.getString(1)), rs.getLong(2)), operationId);
+        OperationRecord record = records.stream().findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("Asset operation was not found: " + operationId));
+        ObjectNode document = record.document();
+        if (!assetId.equals(document.path("assetId").asText()) || !type.equals(document.path("type").asText())
+            || !statuses.contains(document.path("status").asText())) {
+            throw new IllegalStateException("Asset operation is no longer pending: " + operationId);
+        }
+        ObjectNode updated = document.deepCopy();
+        mutation.accept(updated);
+        Instant now = Instant.now();
+        int changed = jdbc.update("UPDATE asset_operation_record SET operation_status = ?, document = ?, "
+                + "version = version + 1, updated_at = ? WHERE operation_id = ? AND version = ?",
+            updated.path("status").asText(), updated.toString(), Timestamp.from(now), operationId, record.version());
+        if (changed != 1) throw new AssetVersionConflictException("Asset operation was modified concurrently: " + operationId);
         return updated;
     }
 

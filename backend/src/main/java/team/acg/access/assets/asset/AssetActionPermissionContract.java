@@ -13,6 +13,7 @@ final class AssetActionPermissionContract {
         Map.entry("handover", Set.of("asset:receive_return:handover", "asset:item:handover")),
         Map.entry("handover-sign", Set.of("asset:receive_return:sign")),
         Map.entry("handover-cancel", Set.of("asset:receive_return:cancel")),
+        Map.entry("handover-reject", Set.of("asset:receive_return:sign")),
         Map.entry("receipt-sign", Set.of("asset:receive_return:sign")),
         Map.entry("receipt-reject", Set.of("asset:receive_return:sign")),
         Map.entry("receipt-cancel", Set.of("asset:receive_return:cancel")),

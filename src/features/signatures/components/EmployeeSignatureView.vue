@@ -30,6 +30,7 @@ const statusGroup = (item: AssetOperationRecord): SignatureTab => {
 const statusLabel = (item: AssetOperationRecord): string => item.status === '已终止' ? '已终止' : statusGroup(item)
 const rows = computed(() => receiptRows.value.filter((item) => statusGroup(item) === tab.value))
 const selected = computed(() => receiptRows.value.find((item) => item.id === selectedId.value) || null)
+const rejectLabel = computed(() => selected.value?.type === 'HANDOVER' ? '撤回交接' : '打回')
 const tabCount = (value: SignatureTab): number => receiptRows.value.filter((item) => statusGroup(item) === value).length
 const typeLabel = (type: AssetOperationRecord['type']): string => {
   if (type === 'RECEIVE') return '资产领用'
@@ -77,7 +78,11 @@ const submitReject = async (): Promise<void> => {
   if (!rejectionReason.value.trim()) { ElMessage.warning('请填写打回原因'); return }
   submitting.value = true
   try {
-    await command('receipt-reject', [item.assetId], { reason: rejectionReason.value.trim(), date: new Date().toISOString().slice(0, 10) })
+    await command(item.type === 'HANDOVER' ? 'handover-reject' : 'receipt-reject', [item.assetId], {
+      reason: rejectionReason.value.trim(),
+      date: new Date().toISOString().slice(0, 10),
+      operationId: item.id
+    })
     rejectOpen.value = false
     selectedId.value = ''
     tab.value = '已打回'
@@ -99,7 +104,7 @@ onMounted(() => { void loadOperations() })
     </div>
     <div v-if="tab === '待签字'" class="employee-signature-actions">
       <el-button type="primary" :disabled="!selected" @click="openSign">签字</el-button>
-      <el-button :disabled="!selected" @click="openReject">打回</el-button>
+      <el-button :disabled="!selected" @click="openReject">{{ rejectLabel }}</el-button>
     </div>
     <div v-loading="state.loading" class="employee-signature-table-wrap">
       <table class="employee-signature-table">
@@ -121,8 +126,8 @@ onMounted(() => { void loadOperations() })
       <SignaturePad v-model="signatureImage" :height="300" />
       <template #footer><el-button @click="signOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitSign">确定</el-button></template>
     </el-dialog>
-    <el-dialog v-model="rejectOpen" title="打回签收单" width="min(560px, 92vw)" append-to-body destroy-on-close>
-      <el-form label-position="top"><el-form-item label="打回原因" required><el-input v-model="rejectionReason" type="textarea" :rows="4" maxlength="500" show-word-limit placeholder="请说明设备问题或非本人领用等原因" /></el-form-item></el-form>
+    <el-dialog v-model="rejectOpen" :title="selected?.type === 'HANDOVER' ? '撤回交接单' : '打回签收单'" width="min(560px, 92vw)" append-to-body destroy-on-close>
+      <el-form label-position="top"><el-form-item :label="selected?.type === 'HANDOVER' ? '撤回原因' : '打回原因'" required><el-input v-model="rejectionReason" type="textarea" :rows="4" maxlength="500" show-word-limit placeholder="请说明设备问题或非本人领用等原因" /></el-form-item></el-form>
       <template #footer><el-button @click="rejectOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitReject">确定</el-button></template>
     </el-dialog>
     <el-drawer :model-value="Boolean(detail)" title="签收单详情" size="min(620px, 92vw)" append-to-body @close="detail = null">

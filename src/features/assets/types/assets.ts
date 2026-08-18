@@ -127,6 +127,7 @@ export type AssetCommand =
   | 'handover'
   | 'handover-sign'
   | 'handover-cancel'
+  | 'handover-reject'
   | 'receipt-sign'
   | 'receipt-reject'
   | 'receipt-cancel'
