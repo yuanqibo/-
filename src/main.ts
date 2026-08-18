@@ -111,29 +111,23 @@ const elementComponents = [
   ElTabs, ElTag, ElTimeline, ElTimelineItem, ElTooltip, ElTree, ElTreeSelect
 ]
 
-const bootstrap = async (): Promise<void> => {
+const bootstrap = (): void => {
   document.addEventListener('click', closeExpandedSelectOnSecondClick, true)
   elementComponents.forEach((component) => app.use(component))
   app.use(ElLoading)
-  await configureEcp(app, router)
   app.use(router)
   app.mount('#app')
+
+  // ECP setup may wait on the host's session bridge. Mount the shell first so an
+  // embedded WebView always has a rendered page while that integration finishes.
+  void configureEcp(app, router)
+    .then(async () => {
+      const current = `${window.location.pathname}${window.location.search}${window.location.hash}`
+      await router.replace(current || '/')
+    })
+    .catch((error) => {
+      console.error('[asset-portal] ECP setup failed', error)
+    })
 }
 
-void bootstrap().catch((error) => {
-  console.error('[asset-portal] application bootstrap failed', error)
-  const root = document.getElementById('app')
-  if (!root) return
-  root.replaceChildren()
-  const message = document.createElement('div')
-  message.setAttribute('role', 'alert')
-  message.textContent = '系统启动失败，请稍后重试'
-  Object.assign(message.style, {
-    display: 'grid',
-    minHeight: '100vh',
-    placeItems: 'center',
-    color: '#b42318',
-    fontSize: '16px'
-  })
-  root.append(message)
-})
+bootstrap()

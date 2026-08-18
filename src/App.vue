@@ -1,25 +1,26 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { CACHEABLE_PORTAL_PAGE_NAMES } from './core/routing/standard-routes'
 import { router } from './router'
 
 const routerReady = ref(false)
 void router.isReady().then(() => { routerReady.value = true })
+const routeComponentReady = computed(() => routerReady.value && router.currentRoute.value.matched.length > 0)
 
 const reload = (): void => window.location.reload()
 </script>
 
 <template>
   <RouterView v-slot="{ Component }">
-    <KeepAlive :include="CACHEABLE_PORTAL_PAGE_NAMES" :max="24">
+    <KeepAlive v-if="Component" :include="CACHEABLE_PORTAL_PAGE_NAMES" :max="24">
       <component :is="Component" />
     </KeepAlive>
+    <main v-else class="portal-bootstrap" aria-busy="true" aria-live="polite">
+      <div class="portal-bootstrap__indicator" aria-hidden="true" />
+      <p>{{ routeComponentReady ? '正在打开页面' : '正在连接资产管理平台' }}</p>
+      <button type="button" @click="reload">重新加载</button>
+    </main>
   </RouterView>
-  <main v-if="!routerReady" class="portal-bootstrap" aria-busy="true" aria-live="polite">
-    <div class="portal-bootstrap__indicator" aria-hidden="true" />
-    <p>正在连接资产管理平台</p>
-    <button type="button" @click="reload">重新加载</button>
-  </main>
 </template>
 
 <style>
