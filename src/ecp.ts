@@ -96,10 +96,12 @@ export const ecp = createEcpSdk({
         loginPath: '/login',
         loginDefaultReturnTo: '/'
       },
-      permission: {
-        noPermissionPath: '/no-permission',
-        loadPermissionSnapshot: ({ appCode }) => loadPortalPermissionSnapshot(appCode)
-      },
+      // Do not install the SDK permission guard during bootstrap. It preloads the
+      // ECP session before Vue mounts, which can leave embedded WebViews blank
+      // indefinitely when the host delays the session bridge. Portal-session
+      // initializes the same session after the UI is mounted; server APIs still
+      // enforce authorization for every business request.
+      permission: false,
       menu: {
         parentRouteName: 'app-shell',
         sync: true
