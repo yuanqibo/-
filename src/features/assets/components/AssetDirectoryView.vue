@@ -10,6 +10,7 @@ import type { AssetImportMode } from '../composables/parseAssetWorkbook'
 import { useAssets } from '../composables/useAssets'
 import type { AssetCommand, AssetDraft, AssetImportRow, AssetOperationRecord, AssetRecord, DirectoryPerson } from '../types/assets'
 import { hasPortalPermission } from '../../../authz/permission-aliases'
+import { matchesPinyinSearch } from '../../../shared/search/pinyin-search'
 import type { AssetOrderPrintKind } from './AssetOrderPrintPreview.vue'
 import type { RequestOperator } from '../../approvals/api/approvals.api'
 
@@ -377,9 +378,8 @@ const receiveAdvanced = reactive(defaultReceiveAdvanced())
 const receiveAdvancedDraft = reactive(defaultReceiveAdvanced())
 const borrowAdvanced = reactive(defaultBorrowAdvanced())
 const borrowAdvancedDraft = reactive(defaultBorrowAdvanced())
-const searchable = (item: AssetRecord): string => [item.id, item.name, item.assetTag, item.owner, item.department, item.location, item.model, item.sn]
-  .map((value) => String(value || '').toLowerCase()).join(' ')
-const contains = (value: unknown, expected: string): boolean => !expected || String(value || '').toLowerCase().includes(expected.trim().toLowerCase())
+const searchable = (item: AssetRecord): unknown[] => [item.id, item.name, item.assetTag, item.owner, item.department, item.location, item.model, item.sn]
+const contains = (value: unknown, expected: string): boolean => matchesPinyinSearch([value], expected)
 const equals = (value: unknown, expected: string): boolean => !expected || String(value || '').trim() === expected.trim()
 const dateInRange = (value: unknown, range: DateRange): boolean => {
   if (!range) return true
@@ -388,7 +388,7 @@ const dateInRange = (value: unknown, range: DateRange): boolean => {
 }
 
 const filteredAssets = computed(() => {
-  const keyword = query.value.trim().toLowerCase()
+  const keyword = query.value
   return assets.value.filter((item) => {
     const modeMatch = isReceiveFlowMode.value
       ? ['闲置', '空闲', '领用', '领用中'].includes(item.status)
@@ -396,7 +396,7 @@ const filteredAssets = computed(() => {
         ? ['闲置', '空闲', '借用中'].includes(item.status)
         : true
     return modeMatch
-      && (!keyword || searchable(item).includes(keyword))
+      && matchesPinyinSearch(searchable(item), keyword)
       && (status.value === '全部' || item.status === status.value)
       && (category.value === '全部' || item.category === category.value)
       && equals(item.status, assetAdvanced.status) && equals(item.category, assetAdvanced.category)
@@ -462,8 +462,7 @@ const operationAsset = (record: AssetOperationRecord): AssetRecord => {
 }
 const operationRows = (type: AssetOperationRecord['type']): AssetRecord[] => operations.value.filter((record) => record.type === type).map(operationAsset)
 const matchesFlowQuery = (item: AssetRecord): boolean => {
-  const keyword = query.value.trim().toLowerCase()
-  return !keyword || searchable(item).includes(keyword) || String(item.operationId || '').toLowerCase().includes(keyword)
+  return matchesPinyinSearch([...searchable(item), item.operationId], query.value)
 }
 const matchesInboundFilters = (item: AssetRecord): boolean => matchesFlowQuery(item)
   && equals(item.operationStatus, inboundAdvanced.status)

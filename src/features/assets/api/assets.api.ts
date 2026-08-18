@@ -1,4 +1,5 @@
 import { apiRequest } from '../../../shared/api/http'
+import { matchesPinyinSearch } from '../../../shared/search/pinyin-search'
 import type { AssetCommand, AssetDraft, AssetOperationRecord, AssetRecord, BusinessRecord, DirectoryPerson, PortalStoreValues } from '../types/assets'
 
 export type AssetCatalogResponse = { items: AssetRecord[]; disposedCount: number }
@@ -147,10 +148,16 @@ const personFromPayload = (item: Record<string, unknown>): DirectoryPerson => {
 }
 
 export const searchDirectoryPeople = async (keyword: string): Promise<DirectoryPerson[]> => {
-  const query = new URLSearchParams({ page: '1', size: '100', query: keyword })
-  const payload = await apiRequest<DirectoryResponse>(`/api/ecp/directory/users?${query}`)
-  const normalized = keyword.trim().toLowerCase()
-  return (payload.items || []).map(personFromPayload).filter((item) => item.subject && item.name && (
-    !normalized || [item.name, item.account, item.email, item.department].some((value) => value.toLowerCase().includes(normalized))
-  ))
+  const load = async (queryValue: string): Promise<DirectoryPerson[]> => {
+    const query = new URLSearchParams({ page: '1', size: '100', query: queryValue })
+    const payload = await apiRequest<DirectoryResponse>(`/api/ecp/directory/users?${query}`)
+    return (payload.items || []).map(personFromPayload).filter((item) => item.subject && item.name && (
+      matchesPinyinSearch([item.name, item.account, item.email, item.department], keyword)
+    ))
+  }
+
+  const matched = await load(keyword)
+  const compactKeyword = keyword.trim().replace(/\s+/g, '')
+  const isPinyinLookup = /^[a-z]+$/i.test(compactKeyword) && compactKeyword.length >= 2
+  return matched.length || !isPinyinLookup ? matched : load('')
 }

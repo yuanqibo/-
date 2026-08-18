@@ -6,6 +6,7 @@ import { usePortalSession } from '../../../core/auth/portal-session'
 import AssetQrGraphic from './AssetQrGraphic.vue'
 import { buildCatalogWorkbook, mergeCatalogRows, parseCatalogWorkbook } from '../composables/catalogWorkbook'
 import { useAssets } from '../composables/useAssets'
+import { matchesPinyinSearch } from '../../../shared/search/pinyin-search'
 import type { CatalogNode } from '../types/assets'
 
 const route = useRoute()
@@ -139,9 +140,8 @@ const flattenCatalog = (nodes: CatalogNode[], parent: CatalogNode | null = null,
   ]
 })
 const catalogRows = computed(() => {
-  const keyword = catalogQuery.value.trim().toLowerCase()
   const rows = flattenCatalog(catalog.value)
-  return keyword ? rows.filter((row) => [row.name, row.code, row.parentName].some((value) => String(value || '').toLowerCase().includes(keyword))) : rows
+  return rows.filter((row) => matchesPinyinSearch([row.name, row.code, row.parentName], catalogQuery.value))
 })
 const ruleFieldDefinitions = [
   { key: 'companyCode', label: '公司编码', width: 4 }, { key: 'purchaseDate', label: '购置/起租日期', width: 8 },

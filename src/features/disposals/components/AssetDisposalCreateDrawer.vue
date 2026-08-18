@@ -7,6 +7,7 @@ import { useAssets } from '../../assets/composables/useAssets'
 import type { AssetRecord } from '../../assets/types/assets'
 import { useDisposals } from '../composables/useDisposals'
 import type { DisposalDraft, DisposalRecord } from '../types/disposal'
+import { matchesPinyinSearch } from '../../../shared/search/pinyin-search'
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
@@ -43,10 +44,8 @@ const form = reactive<DisposalDraft>({
 const availableAssets = computed(() => assets.value.filter((asset) => asset.status === '空闲'))
 const selectedAssets = computed(() => availableAssets.value.filter((asset) => selectedAssetIds.value.includes(asset.id)))
 const pickerAssets = computed(() => {
-  const keyword = pickerQuery.value.trim().toLowerCase()
-  if (!keyword) return availableAssets.value
-  return availableAssets.value.filter((asset) => [asset.id, asset.name, asset.category, asset.brand, asset.model, asset.sn, asset.supplier, asset.location]
-    .some((value) => String(value || '').toLowerCase().includes(keyword)))
+  return availableAssets.value.filter((asset) => matchesPinyinSearch(
+    [asset.id, asset.name, asset.category, asset.brand, asset.model, asset.sn, asset.supplier, asset.location], pickerQuery.value))
 })
 const allPickerAssetsSelected = computed(() => pickerAssets.value.length > 0
   && pickerAssets.value.every((asset) => pickerAssetIds.value.includes(asset.id)))

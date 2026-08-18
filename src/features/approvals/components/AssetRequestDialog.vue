@@ -10,6 +10,7 @@ import type { ApprovalRecord } from '../types/approval'
 import type { AssetRecord, CatalogNode, DirectoryPerson } from '../../assets/types/assets'
 import { fetchRequestOperators, type RequestOperator } from '../api/approvals.api'
 import { useApprovals } from '../composables/useApprovals'
+import { matchesPinyinSearch } from '../../../shared/search/pinyin-search'
 
 type ReceiverSuggestion = DirectoryPerson & { value: string }
 type DeviceRequestItem = { name: string; specification: string; quantity: number }
@@ -151,11 +152,9 @@ const requestAssets = computed(() => assets.value.filter((item) => {
   return item.status === '空闲'
 }))
 const filteredRequestAssets = computed(() => {
-  const keyword = assetQuery.value.trim().toLowerCase()
   return requestAssets.value.filter((item) => {
     const categoryMatch = !isAvailableSelfService.value || !selectedCategory.value || item.category === selectedCategory.value
-    const keywordMatch = !keyword || [item.id, item.name, item.brand, item.model, item.sn, item.assetTag]
-      .some((value) => String(value || '').toLowerCase().includes(keyword))
+    const keywordMatch = matchesPinyinSearch([item.id, item.name, item.brand, item.model, item.sn, item.assetTag], assetQuery.value)
     return categoryMatch && keywordMatch
   })
 })

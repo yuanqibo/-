@@ -77,4 +77,15 @@ describe('assets feature API', () => {
     expect(requestUrl.searchParams.get('query')).toBe('研发')
     expect(requestUrl.searchParams.has('q')).toBe(false)
   })
+
+  it('falls back to local pinyin filtering when the directory does not index pinyin', async () => {
+    apiRequest.mockResolvedValueOnce({ items: [] }).mockResolvedValueOnce({ items: [
+      { directorySubject: 'sub-yqb', displayName: '袁其博', employeeNo: 'A002' }
+    ] })
+
+    await expect(searchDirectoryPeople('yqb')).resolves.toEqual([{
+      subject: 'sub-yqb', name: '袁其博', account: 'A002', email: '', department: '', company: ''
+    }])
+    expect(new URL(String(apiRequest.mock.calls[1][0]), 'http://localhost').searchParams.get('query')).toBe('')
+  })
 })

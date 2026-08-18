@@ -8,6 +8,7 @@ import { useAssets } from '../../assets/composables/useAssets'
 import { useDisposals } from '../composables/useDisposals'
 import type { DisposalRecord } from '../types/disposal'
 import AssetDisposalCreateDrawer from './AssetDisposalCreateDrawer.vue'
+import { matchesPinyinSearch } from '../../../shared/search/pinyin-search'
 
 const route = useRoute()
 const router = useRouter()
@@ -77,9 +78,8 @@ const resizeColumnByKeyboard = (event: KeyboardEvent, column: DisposalColumn): v
 
 const today = (): string => new Date().toISOString().slice(0, 10)
 const filteredRows = computed(() => {
-  const keyword = query.value.trim().toLowerCase()
-  return items.value.filter((item) => !keyword || [item.id, item.status, item.disposalType, item.company, item.operator, item.description]
-    .some((value) => String(value || '').toLowerCase().includes(keyword)))
+  return items.value.filter((item) => matchesPinyinSearch(
+    [item.id, item.status, item.disposalType, item.company, item.operator, item.description], query.value))
 })
 const detailCurrent = computed(() => items.value.find((item) => item.id === detailId.value) || null)
 const cancellableLines = computed(() => detailCurrent.value?.assets.filter((line) => line.status !== '已取消') || [])
