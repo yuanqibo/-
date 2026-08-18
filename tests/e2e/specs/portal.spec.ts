@@ -635,6 +635,25 @@ test.describe('登录后门户质量回归', () => {
     await expect(page.getByText('资产总数', { exact: true })).toBeVisible()
   })
 
+  test('从员工签字页切回管理端会回到管理首页', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '端模式导航在桌面项目执行')
+    await openApp(page, '/')
+
+    await page.getByRole('button', { name: '测试管理员', exact: true }).click()
+    await page.getByRole('menuitem', { name: '切换员工端', exact: true }).click()
+    await page.getByRole('button', { name: '签字', exact: true }).click()
+    await expect(page).toHaveURL('/signatures')
+    await expect(page.getByRole('heading', { name: '签字', exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: '测试管理员', exact: true }).click()
+    await page.getByRole('menuitem', { name: '切换管理端', exact: true }).click()
+    await expect(page).toHaveURL('/')
+    await expect(page.locator('body')).not.toHaveClass(/employee-terminal-view/)
+    await expect(page.getByRole('button', { name: '资产', exact: true })).toBeVisible()
+    await expect(page.getByText('资产总数', { exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '签字', exact: true })).toHaveCount(0)
+  })
+
   test('员工首页资产编码打开数据库资产详情', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '员工资产详情完整字段在桌面项目执行')
     await page.addInitScript(() => localStorage.setItem('assetPortalTerminalMode', 'employee'))

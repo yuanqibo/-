@@ -209,7 +209,9 @@ const handleAccountCommand = (command: string | number | object): void => {
 }
 const switchTerminal = (mode: PortalTerminalMode): void => {
   if (!setTerminalMode(mode)) return
-  if (mode === 'employee' && !employeePortalPaths.has(route.path)) void router.push('/')
+  // A terminal switch must also leave employee-only routes. Otherwise a cached
+  // signature page remains visible after returning to the management terminal.
+  if (route.path !== '/') void router.replace('/')
 }
 const reload = (): void => window.location.reload()
 const avatarText = computed(() => String(user.value?.name || user.value?.account || '用').trim().slice(0, 1))
