@@ -41,7 +41,6 @@ public class AssetCatalogReplacementService {
         approvalCallbacks.deleteAll();
         businessData.deleteAll();
         assetRepository.deleteAuditHistory();
-        assetService.backfillMissingOperationHistory();
         return assets;
     }
 }

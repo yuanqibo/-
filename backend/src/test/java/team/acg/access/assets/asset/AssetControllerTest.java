@@ -123,7 +123,7 @@ class AssetControllerTest {
     }
 
     @Test
-    void fullCatalogReplacementResetsOldBusinessHistoryAndCreatesNewBaseline() throws Exception {
+    void fullCatalogReplacementResetsOldBusinessHistoryWithoutCreatingSyntheticOperations() throws Exception {
         mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
             {"item":{"id":"PC-OLD","name":"旧资产","category":"电脑","location":"总部"}}
             """))
@@ -148,7 +148,7 @@ class AssetControllerTest {
             .andExpect(jsonPath("$.items[0].id").value("PC-NEW"));
 
         org.assertj.core.api.Assertions.assertThat(count("asset_record")).isEqualTo(1);
-        org.assertj.core.api.Assertions.assertThat(count("asset_operation_record")).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(count("asset_operation_record")).isZero();
         org.assertj.core.api.Assertions.assertThat(count("approval_request_record")).isZero();
         org.assertj.core.api.Assertions.assertThat(count("asset_stocktake_record")).isZero();
         org.assertj.core.api.Assertions.assertThat(count("asset_audit_log")).isZero();
