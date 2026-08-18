@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import AppRouteLayout from './components/AppRouteLayout.vue'
-import SystemWorkspaceRouteLayout from './components/SystemWorkspaceRouteLayout.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -11,7 +10,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: '/__ecp_workspace_layout',
         name: 'system-workspace-shell',
-        component: SystemWorkspaceRouteLayout,
+        component: () => import('./components/SystemWorkspaceRouteLayout.vue'),
         children: []
       }
     ]

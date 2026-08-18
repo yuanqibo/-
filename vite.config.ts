@@ -16,6 +16,10 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Vite injects this helper into the entry module for dynamic imports.
+          // It must stay separate from the ECP chunk or importing the helper
+          // makes the browser fetch the whole SDK before Vue can mount.
+          if (id.includes('vite/preload-helper')) return 'vite-preload'
           if (!id.includes('node_modules')) return undefined
           // The ECP workspace web component is a prebundled, lazy-only artifact.
           // Keep it outside the eager SDK chunk so normal portal routes never download it.

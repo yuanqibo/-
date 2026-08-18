@@ -7,7 +7,7 @@ describe('ECP local integration', () => {
 
   it('passes the real SDK local doctor with strict app-code matching', async () => {
     vi.stubEnv('VITE_ECP_AUTH_CONFIG_SOURCE_MODE', 'local')
-    const { ecp, localAuthzValidationReport } = await import('../../src/ecp')
+    const { ecp, installPortalRoutes, localAuthzValidationReport } = await import('../../src/ecp')
     const RouteOutlet = defineComponent({ setup: () => () => h(RouterView) })
     const router = createRouter({
       history: createMemoryHistory(),
@@ -24,6 +24,7 @@ describe('ECP local integration', () => {
       }]
     })
     const app = createApp(defineComponent({ setup: () => () => h(RouterView) }))
+    installPortalRoutes(router)
     await ecp.setup({ app, router, locale: 'zh-CN' })
     const report = await ecp.auth?.doctor.run({ bundleAppCodeMismatchLevel: 'fail' })
 
@@ -35,6 +36,9 @@ describe('ECP local integration', () => {
       expect(router.resolve(path).matched.some((route) => route.path === path)).toBe(true)
     }
     expect(router.resolve('/workspace').matched.map((route) => route.name)).toContain('system-workspace-shell')
+    const homeRoute = router.getRoutes().find((route) => route.name === 'asset.portal.home')
+    expect(homeRoute?.path).toBe('/')
+    expect(typeof homeRoute?.components?.default).toBe('function')
     expect(router.getRoutes().some((route) => route.path === '/system/member-authorization')).toBe(false)
   }, 15_000)
 })

@@ -49,7 +49,6 @@ import './styles/app.css'
 import './styles/portal.css'
 import App from './App.vue'
 import { router } from './router'
-import { configureEcp, installPortalRoutes } from './ecp'
 import { resizableColumns } from './shared/directives/resizable-columns'
 
 const app = createApp(App)
@@ -115,14 +114,16 @@ const bootstrap = (): void => {
   document.addEventListener('click', closeExpandedSelectOnSecondClick, true)
   elementComponents.forEach((component) => app.use(component))
   app.use(ElLoading)
-  installPortalRoutes(router)
   app.use(router)
   app.mount('#app')
 
-  // ECP setup may wait on the host's session bridge. Mount the shell first so an
-  // embedded WebView always has a rendered page while that integration finishes.
-  void configureEcp(app, router)
-    .then(async () => {
+  // Keep the ECP SDK out of the initial module graph. Its optional workspace
+  // dependency is large and can take far longer than an embedded WebView's
+  // startup watchdog allows. The mounted shell remains responsive meanwhile.
+  void import('./ecp')
+    .then(async ({ configureEcp, installPortalRoutes }) => {
+      await configureEcp(app, router)
+      installPortalRoutes(router)
       const current = `${window.location.pathname}${window.location.search}${window.location.hash}`
       await router.replace(current || '/')
     })
