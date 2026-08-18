@@ -66,6 +66,10 @@ public class AssetOperationRepository {
         return count != null && count > 0;
     }
 
+    public int deleteAll() {
+        return jdbc.update("DELETE FROM asset_operation_record");
+    }
+
     public ObjectNode find(String operationId) {
         List<ObjectNode> records = jdbc.query(
             "SELECT document FROM asset_operation_record WHERE operation_id = ?",

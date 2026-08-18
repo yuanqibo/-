@@ -123,6 +123,40 @@ class AssetControllerTest {
     }
 
     @Test
+    void fullCatalogReplacementResetsOldBusinessHistoryAndCreatesNewBaseline() throws Exception {
+        mvc.perform(post("/api/assets").contentType(MediaType.APPLICATION_JSON).content("""
+            {"item":{"id":"PC-OLD","name":"旧资产","category":"电脑","location":"总部"}}
+            """))
+            .andExpect(status().isOk());
+        java.sql.Timestamp now = java.sql.Timestamp.from(java.time.Instant.now());
+        jdbc.update("INSERT INTO approval_request_record (request_id, request_type, request_status, applicant_subject, "
+                + "applicant_directory_subject, approval_no, biz_no, document, version, created_at, updated_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "REQ-OLD", "资产领用", "已同意", "user-old", "user-old", "", "REQ-OLD",
+            "{\"id\":\"REQ-OLD\",\"type\":\"资产领用\",\"status\":\"已同意\"}", 1L, now, now);
+        jdbc.update("INSERT INTO asset_stocktake_record (record_id, document, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            "STOCK-OLD", "{\"id\":\"STOCK-OLD\"}", 1L, now, now);
+
+        mvc.perform(post("/api/assets/replace").contentType(MediaType.APPLICATION_JSON).content("""
+            {"resetHistory":true,"items":[
+              {"id":"PC-NEW","name":"新资产","category":"电脑","location":"总部","status":"空闲","owner":"未分配"}
+            ]}
+            """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.historyReset").value(true))
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].id").value("PC-NEW"));
+
+        org.assertj.core.api.Assertions.assertThat(count("asset_record")).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(count("asset_operation_record")).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(count("approval_request_record")).isZero();
+        org.assertj.core.api.Assertions.assertThat(count("asset_stocktake_record")).isZero();
+        org.assertj.core.api.Assertions.assertThat(count("asset_audit_log")).isZero();
+        Integer oldOperations = jdbc.queryForObject("SELECT COUNT(*) FROM asset_operation_record WHERE asset_id = ?", Integer.class, "PC-OLD");
+        org.assertj.core.api.Assertions.assertThat(oldOperations).isZero();
+    }
+
+    @Test
     void replacementRemovesDisposedAssetsMissingFromTheNewCatalog() throws Exception {
         var disposed = mapper.createObjectNode()
             .put("id", "PC-DISPOSED").put("name", "已处置电脑").put("category", "电脑")
@@ -440,6 +474,11 @@ class AssetControllerTest {
     private String operationId(String assetId, String type) {
         return jdbc.queryForObject("SELECT operation_id FROM asset_operation_record WHERE asset_id = ? AND operation_type = ? "
             + "ORDER BY created_at DESC, operation_id DESC LIMIT 1", String.class, assetId, type);
+    }
+
+    private int count(String table) {
+        Integer value = jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class);
+        return value == null ? 0 : value;
     }
 
     @Test

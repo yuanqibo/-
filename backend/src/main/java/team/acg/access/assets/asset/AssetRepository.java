@@ -130,6 +130,10 @@ public class AssetRepository {
             java.util.UUID.randomUUID().toString(), assetId, action, beforeStatus, afterStatus, Timestamp.from(now));
     }
 
+    public int deleteAuditHistory() {
+        return jdbc.update("DELETE FROM asset_audit_log");
+    }
+
     private JsonNode read(String value) {
         try {
             return mapper.readTree(value);

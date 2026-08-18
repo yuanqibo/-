@@ -21,6 +21,7 @@ class AssetControllerIdentityTest {
     @Test
     void injectsTheDirectorySubjectForHandoverSignature() {
         AssetService service = mock(AssetService.class);
+        AssetCatalogReplacementService replacements = mock(AssetCatalogReplacementService.class);
         RequestIdentityService identities = mock(RequestIdentityService.class);
         AssetPartyResolver parties = mock(AssetPartyResolver.class);
         HttpServletRequest request = mock(HttpServletRequest.class);
@@ -34,7 +35,7 @@ class AssetControllerIdentityTest {
                 .path("operatorSubject").asText()).isEqualTo("user-union-1");
             return List.of();
         });
-        AssetController controller = new AssetController(service, identities, parties);
+        AssetController controller = new AssetController(service, replacements, identities, parties);
         var fields = new ObjectMapper().createObjectNode().put("operatorSubject", "forged-user");
 
         controller.command("handover-sign",
@@ -46,12 +47,13 @@ class AssetControllerIdentityTest {
     @Test
     void importCommandsAlwaysDemandTheirDedicatedPermissions() {
         AssetService service = mock(AssetService.class);
+        AssetCatalogReplacementService replacements = mock(AssetCatalogReplacementService.class);
         RequestIdentityService identities = mock(RequestIdentityService.class);
         AssetPartyResolver parties = mock(AssetPartyResolver.class);
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(identities.current(request)).thenReturn(Optional.empty());
         when(service.execute(any(), any(), any())).thenReturn(List.of());
-        AssetController controller = new AssetController(service, identities, parties);
+        AssetController controller = new AssetController(service, replacements, identities, parties);
         var fields = new ObjectMapper().createObjectNode().putObject("operations");
 
         controller.command("update-import",

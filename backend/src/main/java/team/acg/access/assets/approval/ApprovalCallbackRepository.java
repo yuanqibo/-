@@ -86,6 +86,10 @@ public class ApprovalCallbackRepository {
             message(error), event.eventId());
     }
 
+    public int deleteAll() {
+        return jdbc.update("DELETE FROM approval_callback_event");
+    }
+
     private boolean claim(String eventId, Instant now) {
         Instant stale = now.minus(Duration.ofMinutes(5));
         return jdbc.update("UPDATE approval_callback_event SET processing_status = 'PROCESSING', attempts = attempts + 1, "

@@ -153,6 +153,10 @@ public class BusinessDataRepository {
         return TABLES.containsKey(type);
     }
 
+    public int deleteAll() {
+        return TABLES.values().stream().mapToInt(table -> jdbc.update("DELETE FROM " + table)).sum();
+    }
+
     private List<StoredRecord> readRecords(String table, boolean forUpdate) {
         String lock = forUpdate ? " FOR UPDATE" : "";
         return jdbc.query("SELECT record_id, document, version, created_at, updated_at FROM " + table

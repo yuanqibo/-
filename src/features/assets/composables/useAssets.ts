@@ -175,6 +175,8 @@ const importMany = async (drafts: AssetDraft[]): Promise<number> => {
 const replaceAll = async (drafts: AssetDraft[]): Promise<number> => {
   state.assets = await replaceAssetsRequest(drafts)
   await reloadOperations()
+  state.business = {}
+  state.businessLoaded = false
   return state.assets.length
 }
 

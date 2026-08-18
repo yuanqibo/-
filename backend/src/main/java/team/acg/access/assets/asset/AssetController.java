@@ -22,11 +22,14 @@ import java.util.Map;
 @RequestMapping("/api/assets")
 public class AssetController {
     private final AssetService service;
+    private final AssetCatalogReplacementService replacementService;
     private final RequestIdentityService identityService;
     private final AssetPartyResolver partyResolver;
 
-    public AssetController(AssetService service, RequestIdentityService identityService, AssetPartyResolver partyResolver) {
+    public AssetController(AssetService service, AssetCatalogReplacementService replacementService,
+                           RequestIdentityService identityService, AssetPartyResolver partyResolver) {
         this.service = service;
+        this.replacementService = replacementService;
         this.identityService = identityService;
         this.partyResolver = partyResolver;
     }
@@ -73,8 +76,9 @@ public class AssetController {
         List<JsonNode> drafts = request == null ? null : request.items();
         List<JsonNode> normalized = partyResolver.normalizeReplacementDrafts(
             drafts, servletRequest.getHeader(HttpHeaders.AUTHORIZATION));
-        List<JsonNode> items = service.replaceCatalog(normalized, actor(servletRequest));
-        return Map.of("items", items, "count", items.size());
+        boolean resetHistory = request != null && Boolean.TRUE.equals(request.resetHistory());
+        List<JsonNode> items = replacementService.replaceCatalog(normalized, actor(servletRequest), resetHistory);
+        return Map.of("items", items, "count", items.size(), "historyReset", resetHistory);
     }
 
     @PostMapping("/commands/{action}")
@@ -105,6 +109,6 @@ public class AssetController {
     }
 
     public record CreateAssetRequest(JsonNode item, String sourceAssetId) {}
-    public record AssetImportRequest(List<JsonNode> items) {}
+    public record AssetImportRequest(List<JsonNode> items, Boolean resetHistory) {}
     public record AssetCommandRequest(List<String> assetIds, JsonNode fields) {}
 }

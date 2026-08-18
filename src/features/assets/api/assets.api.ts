@@ -75,7 +75,7 @@ export const importAssets = async (items: AssetDraft[]): Promise<AssetRecord[]> 
 }
 
 export const replaceAssets = async (items: AssetDraft[]): Promise<AssetRecord[]> => {
-  const replaced = (await apiRequest<{ items: AssetRecord[] }>('/api/assets/replace', { method: 'POST', body: { items } })).items || []
+  const replaced = (await apiRequest<{ items: AssetRecord[] }>('/api/assets/replace', { method: 'POST', body: { items, resetHistory: true } })).items || []
   invalidateAssetDataCache()
   return replaced
 }

@@ -142,6 +142,10 @@ public class ApprovalRequestRepository {
         return count != null && count == 1;
     }
 
+    public int deleteAll() {
+        return jdbc.update("DELETE FROM approval_request_record");
+    }
+
     private Optional<RequestRecord> queryOne(String sql, Object... arguments) {
         return jdbc.query(sql, rs -> rs.next()
             ? Optional.of(new RequestRecord(read(rs.getString(1)), rs.getLong(2),

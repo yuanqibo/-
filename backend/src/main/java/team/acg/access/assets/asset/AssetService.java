@@ -153,6 +153,11 @@ public class AssetService {
 
     @Transactional
     public List<JsonNode> replaceCatalog(List<JsonNode> drafts, Actor actor) {
+        return replaceCatalog(drafts, actor, false);
+    }
+
+    @Transactional
+    public List<JsonNode> replaceCatalog(List<JsonNode> drafts, Actor actor, boolean resetHistory) {
         if (drafts == null || drafts.isEmpty() || drafts.size() > MAX_ASSETS) {
             throw new IllegalArgumentException("Asset replacement requires between 1 and 5000 rows");
         }
@@ -181,12 +186,13 @@ public class AssetService {
             String id = requiredText(draft, "id", 191);
             if (!ids.add(id)) throw new IllegalArgumentException("Duplicate asset id: " + id);
             JsonNode previous = existing.get(id);
-            ObjectNode asset = previous != null && previous.isObject()
+            ObjectNode asset = !resetHistory && previous != null && previous.isObject()
                 ? (ObjectNode) previous.deepCopy() : mapper.createObjectNode();
             asset.put("id", id);
             String category = requiredText(draft, "category", 128);
             String name = draft.path("name").asText("").trim();
-            if (name.isEmpty()) name = previous == null ? category + "资产" : previous.path("name").asText(category + "资产");
+            if (name.isEmpty()) name = resetHistory || previous == null
+                ? category + "资产" : previous.path("name").asText(category + "资产");
             asset.put("name", name);
             asset.put("category", category);
             asset.put("type", category);
@@ -199,7 +205,7 @@ public class AssetService {
             }
             String location = asset.path("location").asText("").trim();
             asset.put("location", location.isEmpty() ? defaultLocation : location);
-            if (previous == null) {
+            if (resetHistory || previous == null) {
                 if (!asset.has("price")) asset.put("price", 0);
                 if (!asset.has("rent")) asset.put("rent", 0);
                 if (!asset.has("purchaseMethod")) asset.put("purchaseMethod", "采购");
@@ -212,7 +218,7 @@ public class AssetService {
             }
             String status = normalizeReplacementStatus(requiredText(draft, "status", 32));
             asset.put("status", status);
-            rejectWorkflowChangesDuringPendingSignature(previous, asset);
+            if (!resetHistory) rejectWorkflowChangesDuringPendingSignature(previous, asset);
             clearStaleWorkflowFields(asset, status);
             normalizeUnassignedUsage(asset);
             replacement.add(asset);

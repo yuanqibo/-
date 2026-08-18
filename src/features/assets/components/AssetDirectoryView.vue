@@ -1020,11 +1020,11 @@ const submitImport = async (): Promise<void> => {
   submitting.value = true
   try {
     if (importMode.value === 'replace') {
-      await ElMessageBox.confirm(`将用文件中的 ${validImportRows.value.length} 条资产替换当前 ${assets.value.length} 条资产，仅保留文件未提供的系统字段。是否继续？`, '全量替换资产', { type: 'warning', confirmButtonText: '确认替换' })
+      await ElMessageBox.confirm(`将用文件中的 ${validImportRows.value.length} 条资产建立新的资产基础库，并清空当前交接、签收、审批及其他业务历史。此操作不可恢复，是否继续？`, '全量替换资产', { type: 'warning', confirmButtonText: '确认替换' })
       const count = await replaceAll(validImportRows.value)
       importOpen.value = false
       selected.value = []
-      ElMessage.success(`资产全量替换完成，共 ${count} 条`)
+      ElMessage.success(`资产基础库已重置，共 ${count} 条新资产`)
       return
     }
     if (importMode.value === 'asset') {
