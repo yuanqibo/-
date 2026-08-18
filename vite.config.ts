@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [vue()],
   build: {
     outDir: 'frontend-dist',
+    assetsDir: 'build-assets',
     modulePreload: {
       resolveDependencies(_url, dependencies, context) {
         if (context.hostType !== 'html') return dependencies

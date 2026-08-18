@@ -48,6 +48,7 @@ public class EcpProxyController {
         .build();
     private final String baseUrl;
     private final String appCode;
+    private final Duration requestTimeout;
     private final ObjectProvider<SessionTokenResolver> sessionTokenResolverProvider;
     private final ObjectProvider<EcpIdentityService> identityCacheProvider;
     private final ObjectProvider<EcpRequestOperatorService> requestOperatorsProvider;
@@ -55,6 +56,7 @@ public class EcpProxyController {
 
     public EcpProxyController(@Value("${asset-portal.ecp-api-base-url}") String baseUrl,
                               @Value("${ecp.sdk.app-code}") String appCode,
+                              @Value("${asset-portal.ecp-proxy.request-timeout:12s}") Duration requestTimeout,
                               ObjectProvider<SessionTokenResolver> sessionTokenResolverProvider,
                               ObjectProvider<EcpIdentityService> identityCacheProvider,
                               ObjectProvider<EcpRequestOperatorService> requestOperatorsProvider,
@@ -64,6 +66,7 @@ public class EcpProxyController {
             throw new IllegalArgumentException("ECP proxy app-code must be " + EcpSecurityPolicy.APP_CODE);
         }
         this.appCode = appCode;
+        this.requestTimeout = requestTimeout;
         this.sessionTokenResolverProvider = sessionTokenResolverProvider;
         this.identityCacheProvider = identityCacheProvider;
         this.requestOperatorsProvider = requestOperatorsProvider;
@@ -88,7 +91,7 @@ public class EcpProxyController {
         String roleMutationSessionToken = roleMutation ? requiredSessionToken(servletRequest) : "";
         String query = servletRequest.getQueryString() == null ? "" : "?" + servletRequest.getQueryString();
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path + query))
-            .timeout(Duration.ofSeconds(30));
+            .timeout(requestTimeout);
 
         servletRequest.getHeaderNames().asIterator().forEachRemaining(name -> {
             if (!name.startsWith(":") && !EXCLUDED_REQUEST_HEADERS.contains(name.toLowerCase())

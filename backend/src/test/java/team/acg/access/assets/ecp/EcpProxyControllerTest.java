@@ -16,6 +16,7 @@ import team.acg.access.assets.auth.RequestIdentityService;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -83,6 +84,7 @@ class EcpProxyControllerTest {
         controller = new EcpProxyController(
             "http://127.0.0.1:" + upstream.getAddress().getPort(),
             "WLY5YG",
+            Duration.ofSeconds(12),
             sessionTokenResolverProvider,
             identityCacheProvider,
             requestOperatorsProvider,

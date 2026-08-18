@@ -117,7 +117,6 @@ const bootstrap = async (): Promise<void> => {
   app.use(ElLoading)
   await configureEcp(app, router)
   app.use(router)
-  await router.isReady()
   app.mount('#app')
 }
 

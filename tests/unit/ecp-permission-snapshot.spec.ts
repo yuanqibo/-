@@ -20,7 +20,7 @@ describe('ECP permission snapshot loading', () => {
     })
   })
 
-  it('forces a fresh snapshot before every protected route decision', async () => {
+  it('reuses a cached snapshot so protected-route rendering is not blocked by ECP', async () => {
     const snapshot = {
       permissionCodes: ['asset:employee:view'],
       featureCodes: ['PORTAL_SETTINGS'],
@@ -33,7 +33,7 @@ describe('ECP permission snapshot loading', () => {
     const result = await loadPortalPermissionSnapshot('WLY5YG')
 
     expect(sdkMocks.initAuthzSdk).toHaveBeenCalledWith('WLY5YG')
-    expect(sdkMocks.loadPermissionSnapshot).toHaveBeenCalledWith(true)
+    expect(sdkMocks.loadPermissionSnapshot).toHaveBeenCalledWith(false)
     expect(result?.permissionCodes).toEqual(expect.arrayContaining([
       ...snapshot.permissionCodes,
       'asset:disposal:view',

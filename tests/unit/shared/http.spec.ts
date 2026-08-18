@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getAuthzSessionToken, handleAuthzUnauthorized } from '@acg/ecp-auth'
-import { ApiError, apiRequest } from '../../../src/shared/api/http'
+import { ApiError, ApiTimeoutError, apiRequest } from '../../../src/shared/api/http'
 
 vi.mock('@acg/ecp-auth', () => ({
   getAuthzSessionToken: vi.fn(),
@@ -56,5 +56,18 @@ describe('apiRequest', () => {
 
     await expect(apiRequest('/api/assets')).rejects.toMatchObject({ status: 401 })
     expect(handleAuthzUnauthorized).toHaveBeenCalledOnce()
+  })
+
+  it('aborts a stalled request and returns a recoverable timeout error', async () => {
+    vi.useFakeTimers()
+    fetchMock.mockImplementation((_path, options) => new Promise((_resolve, reject) => {
+      options?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+    }))
+
+    const pending = apiRequest('/api/assets').catch((reason: unknown) => reason)
+    await vi.advanceTimersByTimeAsync(12_000)
+
+    await expect(pending).resolves.toBeInstanceOf(ApiTimeoutError)
+    vi.useRealTimers()
   })
 })

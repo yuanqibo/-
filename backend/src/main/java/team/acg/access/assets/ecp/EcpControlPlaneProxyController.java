@@ -28,9 +28,12 @@ public class EcpControlPlaneProxyController {
         .followRedirects(HttpClient.Redirect.NEVER)
         .build();
     private final String baseUrl;
+    private final Duration requestTimeout;
 
-    public EcpControlPlaneProxyController(@Value("${asset-portal.ecp-api-base-url}") String baseUrl) {
+    public EcpControlPlaneProxyController(@Value("${asset-portal.ecp-api-base-url}") String baseUrl,
+                                          @Value("${asset-portal.ecp-proxy.request-timeout:12s}") Duration requestTimeout) {
         this.baseUrl = baseUrl.replaceAll("/$", "");
+        this.requestTimeout = requestTimeout;
     }
 
     @RequestMapping({"/api/ecp/control-plane", "/api/ecp/control-plane/**"})
@@ -54,7 +57,7 @@ public class EcpControlPlaneProxyController {
 
         String query = servletRequest.getQueryString() == null ? "" : "?" + servletRequest.getQueryString();
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path + query))
-            .timeout(Duration.ofSeconds(40));
+            .timeout(requestTimeout);
         servletRequest.getHeaderNames().asIterator().forEachRemaining(name -> {
             if (!name.startsWith(":") && !EXCLUDED_REQUEST_HEADERS.contains(name.toLowerCase())) {
                 servletRequest.getHeaders(name).asIterator().forEachRemaining(value -> request.header(name, value));

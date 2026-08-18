@@ -57,7 +57,9 @@ export const withLocalAppAdminGrants = <T extends PermissionBearingContext>(cont
 }
 
 export const loadPortalPermissionSnapshot = async (appCode: string) => {
-  const snapshot = await initAuthzSdk(appCode).loadPermissionSnapshot(true)
+  // Reuse the SDK's persisted session/snapshot on repeated embedded-app opens.
+  // A forced reload here serializes two ECP requests before Vue can render.
+  const snapshot = await initAuthzSdk(appCode).loadPermissionSnapshot(false)
   return snapshot
     ? withLocalAppAdminGrants(withEmployeeSelfServiceSnapshot(snapshot) as AuthzPermissionSnapshot)
     : null
