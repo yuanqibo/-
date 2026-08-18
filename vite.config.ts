@@ -21,9 +21,10 @@ export default defineConfig({
           // makes the browser fetch the whole SDK before Vue can mount.
           if (id.includes('vite/preload-helper')) return 'vite-preload'
           if (!id.includes('node_modules')) return undefined
-          // The ECP workspace web component is a prebundled, lazy-only artifact.
-          // Keep it outside the eager SDK chunk so normal portal routes never download it.
-          if (id.includes('/@acg/ecp-auth-vue/dist/workspace/element.js')) return undefined
+          // The member-authorization workspace is a route-level feature. Keep
+          // every workspace entry outside the ECP runtime chunk so opening the
+          // portal does not download its editor, custom element, and dialogs.
+          if (id.includes('/@acg/ecp-auth-vue/dist/workspace/')) return undefined
           // ECP packages have cross-package imports; keeping them together avoids
           // circular chunk initialization failures in production builds.
           if (['ecp-auth-vue', 'ecp-auth', 'ecp-core', 'ecp-ui', 'ecp-sdk'].some((dependency) => id.includes(`/@acg/${dependency}/`))) return 'ecp'

@@ -122,7 +122,7 @@ const bootstrap = (): void => {
   // startup watchdog allows. The mounted shell remains responsive meanwhile.
   void import('./ecp')
     .then(async ({ configureEcp, installPortalRoutes }) => {
-      await configureEcp(app, router)
+      await configureEcp(router)
       installPortalRoutes(router)
       const current = `${window.location.pathname}${window.location.search}${window.location.hash}`
       await router.replace(current || '/')

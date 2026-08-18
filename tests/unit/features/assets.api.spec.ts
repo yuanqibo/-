@@ -8,13 +8,18 @@ import {
   createAsset,
   fetchAssetCatalog,
   fetchAssets,
+  fetchBusinessData,
+  invalidateAssetDataCache,
   runAssetCommand,
   searchDirectoryPeople,
   updateStocktake
 } from '../../../src/features/assets/api/assets.api'
 
 describe('assets feature API', () => {
-  beforeEach(() => apiRequest.mockReset())
+  beforeEach(() => {
+    apiRequest.mockReset()
+    invalidateAssetDataCache()
+  })
 
   it('keeps create and copy payloads compatible with the Java API', async () => {
     apiRequest.mockResolvedValue({ item: { id: 'AST-1' } })
@@ -37,6 +42,13 @@ describe('assets feature API', () => {
     apiRequest.mockResolvedValueOnce({ items: [{ id: 'AST-1' }, { id: 'AST-2' }] })
     await fetchAssets()
     expect(apiRequest).toHaveBeenCalledTimes(3)
+  })
+
+  it('normalizes empty successful catalog and business responses', async () => {
+    apiRequest.mockResolvedValueOnce(null).mockResolvedValueOnce(null)
+
+    await expect(fetchAssetCatalog()).resolves.toEqual({ items: [], disposedCount: 0 })
+    await expect(fetchBusinessData()).resolves.toEqual({})
   })
 
   it('encodes command and stocktake identifiers', async () => {

@@ -34,10 +34,11 @@ export const invalidateAssetDataCache = (): void => {
 }
 
 export const fetchAssetCatalog = (): Promise<AssetCatalogResponse> => cachedRead('assets', async () => {
-  const payload = await apiRequest<Partial<AssetCatalogResponse>>('/api/assets')
+  const payload = await apiRequest<Partial<AssetCatalogResponse> | null>('/api/assets')
+  const catalog = payload && typeof payload === 'object' ? payload : {}
   return {
-    items: payload.items || [],
-    disposedCount: Math.max(0, Number(payload.disposedCount || 0))
+    items: Array.isArray(catalog.items) ? catalog.items : [],
+    disposedCount: Math.max(0, Number(catalog.disposedCount || 0))
   }
 })
 
@@ -89,7 +90,10 @@ export const runAssetCommand = async (action: AssetCommand, assetIds: string[], 
 }
 
 export const fetchBusinessData = (): Promise<BusinessDataResponse> =>
-  cachedRead('business', () => apiRequest<BusinessDataResponse>('/api/business-data'))
+  cachedRead('business', async () => {
+    const payload = await apiRequest<BusinessDataResponse | null>('/api/business-data')
+    return payload && typeof payload === 'object' ? payload : {}
+  })
 
 export const createStocktake = async (item: Pick<BusinessRecord, 'name' | 'scope' | 'owner' | 'total' | 'date'>): Promise<BusinessRecord> => {
   const created = (await apiRequest<{ item: BusinessRecord }>('/api/business-data/stocktakes', { method: 'POST', body: item })).item

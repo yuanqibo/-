@@ -1,7 +1,6 @@
 import { createEcpSdk } from '@acg/ecp-sdk'
 import { initAuthzSdk } from '@acg/ecp-auth'
 import { createBundleFromGlob, validateAuthzBundle } from '@acg/ecp-auth-vue'
-import type { App as VueApp } from 'vue'
 import type { Component } from 'vue'
 import type { Router, RouteRecordRaw } from 'vue-router'
 import type { AuthzPermissionSnapshot, EcpAuthConfigSourceMode } from '@acg/ecp-sdk'
@@ -188,7 +187,7 @@ const scheduleEcpDoctor = (): void => {
   globalThis.setTimeout(start, 1_500)
 }
 
-export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
+export const configureEcp = (router: Router): Promise<void> => {
   if (!localAuthzValidationReport.ok) {
     const failures = localAuthzValidationReport.errors
       .map((issue) => `${issue.code}: ${issue.message}`)
@@ -196,7 +195,6 @@ export const configureEcp = (app: VueApp, router: Router): Promise<void> => {
     return Promise.reject(new Error(`ECP local bundle validation failed${failures ? `: ${failures}` : ''}`))
   }
   ecpReadyPromise = ecp.setup({
-      app,
       router,
       locale: 'zh-CN'
     })
