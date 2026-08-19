@@ -54,10 +54,13 @@ const customTemplates = ref<Array<Record<string, unknown>>>([])
 const builtInTemplates = [
   { key: 'standard', name: '标准资产标签', settings: { labelWidth: 40, labelHeight: 30, logoWidth: 14, logoHeight: 8, logoScale: 80, logoText: 'AM', logoImage: '', qrSize: 13, qrTextGap: 2, contentScale: 80, offsetX: 0, offsetY: 0, fontSize: 12, fieldFontSizes: [], columns: 1, rows: 1, columnGap: 0, rowGap: 0, fields: ['name', 'id', 'category'], scanFields: [], customFields: '', showLogo: false } },
   { key: 'compact', name: '小型二维码标签', settings: { labelWidth: 60, labelHeight: 40, logoWidth: 10, logoHeight: 6, logoScale: 100, logoText: 'IT', logoImage: '', qrSize: 15, qrTextGap: 10, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 7, fieldFontSizes: [], columns: 1, rows: 1, columnGap: 5, rowGap: 5, fields: ['id', 'name', 'category', 'owner'], scanFields: [], customFields: '', showLogo: false } },
-  { key: 'full', name: '大号信息标签', settings: { labelWidth: 60, labelHeight: 40, logoWidth: 18, logoHeight: 10, logoScale: 100, logoText: '资产云', logoImage: '', qrSize: 24, qrTextGap: 6, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 12, fieldFontSizes: [], columns: 1, rows: 1, columnGap: 5, rowGap: 5, fields: ['name', 'id'], scanFields: [], customFields: '管理员=custodian', showLogo: false } },
-  { key: 'defaultAsset', name: '默认资产标签', settings: { labelWidth: 60, labelHeight: 40, logoWidth: 14, logoHeight: 8, logoScale: 100, logoText: 'AM', logoImage: '', qrSize: 18, qrTextGap: 2, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 9, fieldFontSizes: [], columns: 3, rows: 8, columnGap: 3, rowGap: 2, fields: ['id', 'name', 'category', 'owner', 'location'], scanFields: ['id', 'name', 'owner', 'phone', 'location'], customFields: '', showLogo: true } }
+  { key: 'full', name: '大号信息标签', settings: { labelWidth: 60, labelHeight: 40, logoWidth: 18, logoHeight: 10, logoScale: 100, logoText: '资产云', logoImage: '', qrSize: 24, qrTextGap: 6, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 12, fieldFontSizes: [], columns: 1, rows: 1, columnGap: 5, rowGap: 5, fields: ['name', 'id'], scanFields: [], customFields: '管理员=custodian', showLogo: false } }
 ]
 const templateOptions = computed(() => [...builtInTemplates, ...customTemplates.value.map((item) => ({ key: String(item.key || item.id), name: String(item.name || '自定义模板'), settings: item.settings as Record<string, unknown> || {} }))])
+const supportedTemplateKey = (value: unknown): string => {
+  const key = String(value || '').trim()
+  return templateOptions.value.some((item) => item.key === key) ? key : 'standard'
+}
 const activeCustomTemplate = computed(() => customTemplates.value.find((item) => String(item.key || item.id) === String(labelSettings.templateKey || '')))
 const labelFieldOptions = [
   { key: 'id', label: '资产编码' }, { key: 'name', label: '资产名称' }, { key: 'category', label: '资产分类' },
@@ -68,15 +71,13 @@ const labelFieldOptions = [
   { key: 'price', label: '金额' }, { key: 'supplier', label: '供应商' }, { key: 'purchaseMethod', label: '购置方式' }
 ]
 const labelFields = computed<string[]>(() => Array.isArray(labelSettings.fields) ? labelSettings.fields as string[] : [])
-const labelScanFields = computed<string[]>({ get: () => Array.isArray(labelSettings.scanFields) ? labelSettings.scanFields as string[] : [], set: (value) => { labelSettings.scanFields = value } })
-const labelCustomFields = computed<string>({ get: () => String(labelSettings.customFields || ''), set: (value) => { labelSettings.customFields = value } })
 const activeBaseTemplateKey = computed(() => {
   const key = String(labelSettings.templateKey || 'standard')
   if (builtInTemplates.some((item) => item.key === key)) return key
   const storedBase = String(activeCustomTemplate.value?.baseTemplateKey || (activeCustomTemplate.value?.settings as Record<string, unknown> | undefined)?.templateKey || '')
   return builtInTemplates.some((item) => item.key === storedBase) ? storedBase : 'standard'
 })
-const labelFieldCount = computed(() => activeBaseTemplateKey.value === 'compact' ? 4 : activeBaseTemplateKey.value === 'full' ? 2 : activeBaseTemplateKey.value === 'defaultAsset' ? 5 : 3)
+const labelFieldCount = computed(() => activeBaseTemplateKey.value === 'compact' ? 4 : activeBaseTemplateKey.value === 'full' ? 2 : 3)
 const labelPreviewFields = computed(() => Array.from({ length: labelFieldCount.value }, (_, index) => labelFields.value[index] || ''))
 const labelFieldName = (key: string): string => labelFieldOptions.find((option) => option.key === key)?.label || '选择字段'
 const setLabelField = (index: number, value: string): void => {
@@ -166,9 +167,13 @@ const syncFromStore = (): void => {
     customTexts: { ...defaultCodeRules.customTexts, ...(storedRules.customTexts as object || {}) },
     dateFormats: { ...defaultCodeRules.dateFormats, ...(storedRules.dateFormats as object || {}) }
   })
-  Object.keys(labelSettings).forEach((key) => delete labelSettings[key])
-  Object.assign(labelSettings, clone(builtInTemplates[0].settings), { templateKey: 'standard' }, clone(store.value.assetLabelPrintSettingsV2 || {}))
   customTemplates.value = clone(store.value.assetLabelCustomTemplatesV1 || [])
+  const storedLabelSettings = clone(store.value.assetLabelPrintSettingsV2 || {})
+  const storedTemplateKey = String(storedLabelSettings.templateKey || '').trim()
+  const templateKey = supportedTemplateKey(storedTemplateKey)
+  Object.keys(labelSettings).forEach((key) => delete labelSettings[key])
+  // The removed built-in template has a different layout; do not carry its values into the standard template.
+  Object.assign(labelSettings, clone(builtInTemplates[0].settings), { templateKey: 'standard' }, storedTemplateKey === 'defaultAsset' ? {} : storedLabelSettings, { templateKey })
 }
 
 watch(kind, syncFromStore)
@@ -359,9 +364,10 @@ const saveLabel = async (): Promise<void> => {
   finally { saving.value = false }
 }
 const applyTemplate = (key: string): void => {
-  const preset = builtInTemplates.find((item) => item.key === key)?.settings
-  const custom = customTemplates.value.find((item) => String(item.key || item.id) === key)
-  Object.assign(labelSettings, clone(custom?.settings as Record<string, unknown> || preset || {}), { templateKey: key })
+  const templateKey = supportedTemplateKey(key)
+  const preset = builtInTemplates.find((item) => item.key === templateKey)?.settings
+  const custom = customTemplates.value.find((item) => String(item.key || item.id) === templateKey)
+  Object.assign(labelSettings, clone(custom?.settings as Record<string, unknown> || preset || {}), { templateKey })
 }
 const resetLabel = async (): Promise<void> => {
   applyTemplate(String(labelSettings.templateKey || 'standard'))
@@ -441,11 +447,10 @@ onMounted(async () => { await load(); syncFromStore() })
         <article v-for="item in templateOptions" :key="item.key" class="asset-label-template-card" :class="{ active: String(labelSettings.templateKey || 'standard') === item.key }" @click="applyTemplate(item.key)">
           <button class="asset-label-template-radio" type="button" :aria-label="`选择${item.name}`" :aria-pressed="String(labelSettings.templateKey || 'standard') === item.key"><span></span></button>
           <header class="asset-label-template-card-head"><strong>{{ Number(item.settings.labelWidth || 40) }}*{{ Number(item.settings.labelHeight || 30) }}mm</strong><i aria-hidden="true"></i><strong>{{ item.name }}</strong></header>
-          <div v-if="item.key === 'defaultAsset'" class="asset-label-template-preview is-default"><div class="default-asset-template-label" aria-label="默认资产标签内容预览"><div class="default-asset-template-logo">AM</div><strong class="default-asset-template-code">010100012</strong><div class="default-asset-template-name">MacBook</div><div class="default-asset-template-fields"><p><span>资产编码</span><strong>010100012</strong></p><p><span>资产名称</span><strong>MacBook</strong></p><p><span>资产分类</span><strong>笔记本电脑</strong></p><p><span>使用人</span><strong>未分配</strong></p><p><span>所在位置</span><strong>杭州公司</strong></p></div><div class="default-asset-template-qr"><AssetQrGraphic text="资产编码:010100012" /></div><small class="default-asset-template-caption">资产编码:010100012...</small></div></div>
-          <div v-else class="asset-label-template-preview"><div class="asset-label-template-ticket" :class="{ 'is-fields4': item.key === 'compact', 'is-topField': item.key === 'full' }"><div class="asset-label-template-qr"><AssetQrGraphic text="资产编码:010100012" /></div><div class="asset-label-template-fields"><p v-for="index in item.key === 'compact' ? 4 : item.key === 'full' ? 2 : 3" :key="index"><span>字段名称{{ index }}：</span><strong>xxxx</strong></p></div></div></div>
+          <div class="asset-label-template-preview"><div class="asset-label-template-ticket" :class="{ 'is-fields4': item.key === 'compact', 'is-topField': item.key === 'full' }"><div class="asset-label-template-qr"><AssetQrGraphic text="资产编码:010100012" /></div><div class="asset-label-template-fields"><p v-for="index in item.key === 'compact' ? 4 : item.key === 'full' ? 2 : 3" :key="index"><span>字段名称{{ index }}：</span><strong>xxxx</strong></p></div></div></div>
         </article>
       </div></aside>
-      <div class="asset-label-template-right"><form v-if="activeBaseTemplateKey !== 'defaultAsset'" class="asset-label-template-config-form first-template-config-form" @submit.prevent="saveLabel">
+      <div class="asset-label-template-right"><form class="asset-label-template-config-form first-template-config-form" @submit.prevent="saveLabel">
         <div class="asset-label-template-config-tabs"><button class="asset-label-template-config-tab active" type="button">配置1 <span aria-hidden="true">✎</span></button><div class="asset-label-template-tab-actions"><button v-if="activeCustomTemplate && can('asset:label_template_settings:delete')" class="asset-label-template-delete" type="button" @click="removeCustomTemplate(activeCustomTemplate)">删除模板</button><button v-if="can('asset:label_template_settings:create')" class="asset-label-template-add" type="button" @click="openTemplateDialog(activeCustomTemplate)">{{ activeCustomTemplate ? '重命名' : '＋新增' }}</button></div></div>
         <div class="asset-label-template-stage">
           <div v-if="activeBaseTemplateKey === 'standard'" class="first-label-config-preview" :style="firstLabelPreviewStyle" :aria-label="`配置1 ${labelSettings.labelWidth}*${labelSettings.labelHeight}mm 预览`"><div class="first-label-preview-card"><span v-if="labelSettings.showLogo" class="first-label-preview-logo" :class="{ 'has-image': labelSettings.logoImage }"><img v-if="labelSettings.logoImage" :src="String(labelSettings.logoImage)" :alt="String(labelSettings.logoText || 'Logo')"><template v-else>{{ labelSettings.logoText || 'AM' }}</template></span><div class="first-label-preview-content"><div class="first-label-preview-qr"><AssetQrGraphic text="资产编码:010100012" /></div><div class="first-label-preview-fields"><span v-for="(field, index) in labelPreviewFields" :key="index" :style="{ '--first-label-row-font-size': `${labelFieldFontSize(index)}px` }">{{ labelFieldName(field) }}</span></div></div></div></div>
@@ -460,7 +465,6 @@ onMounted(async () => { await load(); syncFromStore() })
         <section class="asset-label-template-config-section first-config-section"><h2>扫码展示字段 <button type="button" class="first-clear-link">清空</button></h2><button class="first-add-field" type="button">＋添加字段</button></section>
         <div class="first-template-actions"><button class="btn" type="button" @click="resetLabel">重 置</button><button v-if="can('asset:label_template_settings:save')" class="btn primary" type="submit">{{ saving ? '保存中...' : '保 存' }}</button></div>
       </form>
-      <form v-else class="asset-label-template-config-form default-label-editor-form" @submit.prevent="saveLabel"><div class="label-config-head default-label-editor-head"><div><div class="eyebrow">标签打印配置</div><h3>模板、尺寸、字段与版面</h3></div></div><section class="default-label-editor-preview-section"><div class="default-label-editor-preview-stage"><div class="default-label-editor-preview-frame"><div class="default-asset-template-label" aria-label="默认资产标签内容预览"><div class="default-asset-template-logo">AM</div><strong class="default-asset-template-code">010100012</strong><div class="default-asset-template-name">MacBook</div><div class="default-asset-template-fields"><p><span>资产编码</span><strong>010100012</strong></p><p><span>资产名称</span><strong>MacBook</strong></p><p><span>资产分类</span><strong>笔记本电脑</strong></p><p><span>使用人</span><strong>未分配</strong></p><p><span>所在位置</span><strong>杭州公司</strong></p></div><div class="default-asset-template-qr"><AssetQrGraphic text="资产编码:010100012" /></div><small class="default-asset-template-caption">资产编码:010100012...</small></div></div></div></section><section class="label-config-section default-label-editor-section default-label-template-section"><label class="label-config-field wide"><span>标签模板</span><el-select :model-value="String(labelSettings.templateKey || 'defaultAsset')" aria-label="标签模板" @change="applyTemplate(String($event))"><el-option v-for="item in templateOptions" :key="item.key" :label="item.name" :value="item.key" /></el-select></label><label class="label-toggle-field default-label-logo-toggle"><input v-model="labelSettings.showLogo" type="checkbox"><span>显示 Logo</span></label><label class="label-config-field default-field-width"><span>标签宽 mm</span><input v-model.number="labelSettings.labelWidth" type="number" min="20" max="160"></label><label class="label-config-field default-field-height"><span>标签高 mm</span><input v-model.number="labelSettings.labelHeight" type="number" min="12" max="120"></label><label class="label-config-field default-field-logo-width"><span>Logo 宽 mm</span><input v-model.number="labelSettings.logoWidth" type="number" min="0" max="60"></label><label class="label-config-field default-field-logo-height"><span>Logo 高 mm</span><input v-model.number="labelSettings.logoHeight" type="number" min="0" max="40"></label><label class="label-config-field default-field-logo-text"><span>Logo 文案</span><input v-model="labelSettings.logoText" maxlength="12"></label><label class="label-config-field default-field-qr"><span>二维码 mm</span><input v-model.number="labelSettings.qrSize" type="number" min="8" max="60"></label></section><section class="label-config-section default-label-editor-section"><label class="label-config-field"><span>内容缩放 %</span><input v-model.number="labelSettings.contentScale" type="number" min="50" max="160"></label><label class="label-config-field"><span>X 偏移 mm</span><input v-model.number="labelSettings.offsetX" type="number" min="-30" max="30" step="0.5"></label><label class="label-config-field"><span>Y 偏移 mm</span><input v-model.number="labelSettings.offsetY" type="number" min="-30" max="30" step="0.5"></label><label class="label-config-field"><span>字体 px</span><input v-model.number="labelSettings.fontSize" type="number" min="5" max="22"></label><label class="label-config-field"><span>每行列数</span><input v-model.number="labelSettings.columns" type="number" min="1" max="8"></label><label class="label-config-field"><span>每页行数</span><input v-model.number="labelSettings.rows" type="number" min="1" max="14"></label><label class="label-config-field"><span>列间距 mm</span><input v-model.number="labelSettings.columnGap" type="number" min="0" max="30" step="0.5"></label><label class="label-config-field"><span>行间距 mm</span><input v-model.number="labelSettings.rowGap" type="number" min="0" max="30" step="0.5"></label></section><section class="label-config-section label-field-section default-label-editor-section"><div class="label-config-field full"><span>标签显示字段</span><div class="label-field-checks"><label v-for="field in labelFieldOptions" :key="field.key" class="label-field-check" :class="{ checked: labelFields.includes(field.key) }"><input v-model="labelSettings.fields" type="checkbox" :value="field.key"><span>{{ field.label }}</span></label></div></div><div class="label-config-field full"><span>扫码显示字段</span><div class="label-field-checks"><label v-for="field in labelFieldOptions" :key="field.key" class="label-field-check" :class="{ checked: labelScanFields.includes(field.key) }"><input v-model="labelScanFields" type="checkbox" :value="field.key"><span>{{ field.label }}</span></label></div></div><label class="label-config-field full"><span>自定义字段</span><textarea v-model="labelCustomFields" rows="3" placeholder="每行一个，例如：管理员=custodian"></textarea></label></section><div class="modal-actions label-print-actions default-label-editor-actions"><button class="btn" type="button" @click="resetLabel">重 置</button><button v-if="can('asset:label_template_settings:save')" class="btn primary" type="submit">{{ saving ? '保存中...' : '保 存' }}</button></div></form>
       </div>
     </section>
 

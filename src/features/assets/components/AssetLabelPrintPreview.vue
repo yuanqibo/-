@@ -62,11 +62,6 @@ const presets: Record<string, Omit<LabelSettings, 'templateKey' | 'fieldFontSize
     labelWidth: 60, labelHeight: 40, logoWidth: 18, logoHeight: 10, logoScale: 100, logoText: '资产云', logoImage: '', qrSize: 24,
     qrTextGap: 6, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 12, columns: 1, rows: 1, columnGap: 5, rowGap: 5,
     fields: ['name', 'id'], scanFields: [], customFields: '管理员=custodian', showLogo: false
-  },
-  defaultAsset: {
-    labelWidth: 60, labelHeight: 40, logoWidth: 14, logoHeight: 8, logoScale: 100, logoText: 'AM', logoImage: '', qrSize: 18,
-    qrTextGap: 2, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 9, columns: 3, rows: 8, columnGap: 3, rowGap: 2,
-    fields: ['id', 'name', 'category', 'owner', 'location'], scanFields: ['id', 'name', 'owner', 'phone', 'location'], customFields: '', showLogo: true
   }
 }
 
@@ -97,12 +92,14 @@ const normalizedSettings = computed<LabelSettings>(() => {
   const customSettings = customTemplate.value?.settings && typeof customTemplate.value.settings === 'object'
     ? customTemplate.value.settings as Record<string, unknown>
     : {}
-  const source = { ...customSettings, ...props.settings }
+  const source = String(props.settings.templateKey || '').trim() === 'defaultAsset'
+    ? {}
+    : { ...customSettings, ...props.settings }
   const fontSize = clampNumber(source.fontSize, defaults.fontSize, 5, 22)
   const rawFontSizes = Array.isArray(source.fieldFontSizes) ? source.fieldFontSizes : String(source.fieldFontSizes || '').split(',')
   const fields = stringList(source.fields, defaults.fields).slice(0, key === 'full' ? 2 : 24)
   return {
-    templateKey: String(props.settings.templateKey || key),
+    templateKey: key,
     labelWidth: clampNumber(source.labelWidth, defaults.labelWidth, 20, 160),
     labelHeight: clampNumber(source.labelHeight, defaults.labelHeight, 12, 120),
     logoWidth: clampNumber(source.logoWidth, defaults.logoWidth, 0, 60),

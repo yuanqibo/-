@@ -2252,7 +2252,7 @@ button.asset-code-rule-field-name {
 .asset-label-template-list {
   display: grid;
   min-height: 0;
-  gap: 10px;
+  gap: 8px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -2273,7 +2273,7 @@ button.asset-code-rule-field-name {
 }
 
 .asset-label-template-card-head {
-  height: 28px;
+  height: 26px;
   display: grid;
   grid-template-columns: 1fr 1px 1fr;
   align-items: center;
@@ -2326,7 +2326,11 @@ button.asset-code-rule-field-name {
 }
 
 .asset-label-template-preview {
-  padding: 9px 8px;
+  position: relative;
+  height: 108px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 6px;
   display: grid;
   place-items: center;
 }
@@ -2492,7 +2496,9 @@ button.asset-code-rule-field-name {
 }
 
 .asset-label-template-ticket {
-  position: relative;
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 60mm;
   height: 40mm;
   min-height: 0;
@@ -2500,7 +2506,7 @@ button.asset-code-rule-field-name {
   padding: 0;
   background: #ffffff;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
-  transform: scale(0.74);
+  transform: translate(-50%, -50%) scale(0.54);
   transform-origin: center;
 }
 
@@ -3234,7 +3240,10 @@ button.asset-code-rule-field-name {
   }
 
   .asset-label-template-preview {
-    padding: 20px 28px;
+    height: 112px;
+    min-height: 0;
+    overflow: hidden;
+    padding: 8px;
   }
 
   .asset-label-template-ticket {
