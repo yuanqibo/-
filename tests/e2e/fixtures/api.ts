@@ -121,7 +121,7 @@ export const installApiMocks = async (page: Page, options: ApiMockOptions = {}):
       }
     }
   }
-  await page.route('http://127.0.0.1:4174/api/**', async (route) => {
+  await page.route('**/api/**', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
     const method = request.method()

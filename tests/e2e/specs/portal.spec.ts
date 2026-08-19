@@ -1470,6 +1470,52 @@ test.describe('登录后门户质量回归', () => {
     await expect(importDialog.getByText('最大数据行数不超过5000行；', { exact: true })).toBeVisible()
   })
 
+  test('资产退还或编辑成功后回到未筛选的资产主列表', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '资产主列表回退在桌面项目执行')
+    const contextAssets = [
+      {
+        id: 'AST-CONTEXT-RETURN', name: '袁其博的笔记本', status: '领用', category: 'IT设备', type: '设备',
+        owner: '袁其博', ownerSubject: 'E2E-YQB', department: '研发部', company: '示例公司', ownerCompany: '示例公司',
+        location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'T14', sn: 'CONTEXT-RETURN-SN', assetTag: '',
+        supplier: '测试供应商', price: 5000, purchaseDate: '2026-07-01', warrantyDate: '2029-07-01', purchaseMethod: '采购', condition: '正常', note: ''
+      },
+      {
+        id: 'AST-CONTEXT-OTHER', name: '其他空闲显示器', status: '空闲', category: '显示器', type: '设备',
+        owner: '未分配', ownerSubject: '', department: '', company: '示例公司', ownerCompany: '示例公司',
+        location: '杭州仓库', custodian: '资产管理员', brand: '测试品牌', model: 'U27', sn: 'CONTEXT-OTHER-SN', assetTag: '',
+        supplier: '测试供应商', price: 3000, purchaseDate: '2026-07-01', warrantyDate: '2029-07-01', purchaseMethod: '采购', condition: '正常', note: ''
+      }
+    ]
+    await openApp(page, '/assets', { assets: contextAssets })
+
+    const search = page.getByRole('searchbox', { name: '搜索资产', exact: true })
+    const expectMainList = async (): Promise<void> => {
+      await expect(page).toHaveURL('/assets')
+      await expect(search).toHaveValue('')
+      await expect(page.getByText('共 2 条', { exact: true })).toBeVisible()
+      await expect(page.getByText('其他空闲显示器', { exact: true })).toBeVisible()
+    }
+
+    await search.fill('袁其博')
+    await expect(page.getByText('袁其博的笔记本', { exact: true })).toBeVisible()
+    await page.getByLabel('选择AST-CONTEXT-RETURN').check()
+    await page.getByRole('button', { name: '操作', exact: true }).click()
+    await page.getByRole('menuitem', { name: '领用退还', exact: true }).click()
+    const returnDialog = page.getByRole('dialog', { name: '新增退库单' })
+    await returnDialog.getByRole('button', { name: '保存并提交', exact: true }).click()
+    await expect(returnDialog).toBeHidden()
+    await expectMainList()
+
+    await search.fill('袁其博')
+    await page.getByLabel('选择AST-CONTEXT-RETURN').check()
+    await page.getByRole('button', { name: '编辑', exact: true }).click()
+    await page.getByRole('menuitem', { name: '修改', exact: true }).click()
+    const editDialog = page.getByRole('dialog', { name: '编辑资产' })
+    await editDialog.getByRole('button', { name: '确定', exact: true }).click()
+    await expect(editDialog).toBeHidden()
+    await expectMainList()
+  })
+
   test('领用退库新增入口的位置选择默认收起且员工申领不提供新增', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '密集流程表单在桌面项目执行')
     await openApp(page, '/assets/receive-return')

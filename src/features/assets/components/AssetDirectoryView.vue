@@ -689,6 +689,25 @@ const clearAdvanced = (): void => {
   advancedOpen.value = false
 }
 
+const returnToAssetList = async (): Promise<void> => {
+  if (props.mode !== 'list') return
+
+  // AssetListPage is cached. Clear its local view state before returning so a
+  // completed operation never leaves the operator in a previous person's view.
+  query.value = ''
+  status.value = '全部'
+  category.value = '全部'
+  Object.assign(assetAdvanced, defaultAssetAdvanced())
+  Object.assign(assetAdvancedDraft, defaultAssetAdvanced())
+  page.value = 1
+  jumpPage.value = undefined
+  selected.value = []
+  detail.value = null
+  advancedOpen.value = false
+
+  await router.replace('/assets')
+}
+
 const createDraft = reactive<AssetDraft>({
   name: '', category: '', type: '', status: '空闲', location: '', company: '', department: '', owner: '', ownerSubject: '',
   custodian: '', brand: '', model: '', sn: '', assetTag: '', supplier: '', purchaseDate: new Date().toISOString().slice(0, 10)
@@ -880,6 +899,7 @@ const submitAction = async (): Promise<void> => {
     await command(actionForm.action, actionForm.assetIds, fields)
     actionOpen.value = false
     selected.value = []
+    await returnToAssetList()
     ElMessage.success(`${actionLabel(actionForm.action)}操作已完成`)
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : '资产操作失败') }
   finally { submitting.value = false }
@@ -918,7 +938,10 @@ const submitEdit = async (): Promise<void> => {
     if (editAction.value === 'edit') fields.type = editForm.category
     else fields.date = new Date().toISOString().slice(0, 10)
     await command(editAction.value, editIds.value, fields)
-    editOpen.value = false; selected.value = []; ElMessage.success(editAction.value === 'edit' ? '资产已更新' : '批量修改已完成')
+    editOpen.value = false
+    selected.value = []
+    await returnToAssetList()
+    ElMessage.success(editAction.value === 'edit' ? '资产已更新' : '批量修改已完成')
   }
   catch (error) { ElMessage.error(error instanceof Error ? error.message : '修改资产失败') }
   finally { submitting.value = false }
