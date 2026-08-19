@@ -2260,6 +2260,8 @@ button.asset-code-rule-field-name {
 
 .asset-label-template-card {
   position: relative;
+  width: min(100%, 320px);
+  justify-self: center;
   border: 1px solid #d1d5db;
   border-radius: 0;
   background: #ffffff;
@@ -2327,7 +2329,7 @@ button.asset-code-rule-field-name {
 
 .asset-label-template-preview {
   position: relative;
-  height: 108px;
+  height: 124px;
   min-height: 0;
   overflow: hidden;
   padding: 6px;
@@ -2506,7 +2508,7 @@ button.asset-code-rule-field-name {
   padding: 0;
   background: #ffffff;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
-  transform: translate(-50%, -50%) scale(0.54);
+  transform: translate(-50%, -50%) scale(0.6);
   transform-origin: center;
 }
 
@@ -3240,7 +3242,7 @@ button.asset-code-rule-field-name {
   }
 
   .asset-label-template-preview {
-    height: 112px;
+    height: 124px;
     min-height: 0;
     overflow: hidden;
     padding: 8px;
