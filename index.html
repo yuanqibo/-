@@ -5,10 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231296db'/%3E%3Cpath d='M8 9h16v5H8zm0 9h16v5H8z' fill='white'/%3E%3C/svg%3E" />
     <title>资产管理平台</title>
+    <style>
+      html, body, #app { min-height: 100%; margin: 0; background: #f7f9fc; }
+      .portal-preboot {
+        display: grid;
+        min-height: 100vh;
+        place-items: center;
+        color: #344054;
+        font: 15px system-ui, sans-serif;
+        opacity: 0;
+        animation: portal-preboot-reveal 160ms ease 1200ms forwards;
+      }
+      @keyframes portal-preboot-reveal { to { opacity: 1; } }
+    </style>
   </head>
   <body>
     <div id="app">
-      <div role="status" style="display:grid;min-height:100vh;place-items:center;background:#f7f9fc;color:#344054;font:15px system-ui,sans-serif">正在启动资产管理平台</div>
+      <div class="portal-preboot" role="status">正在启动资产管理平台</div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
