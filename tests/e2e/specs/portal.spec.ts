@@ -410,6 +410,8 @@ test.describe('登录后门户质量回归', () => {
     const workspaceOverlay = page.locator('body > .el-overlay')
     await expect(workspaceOverlay).toBeVisible()
     await expect(workspaceOverlay).toHaveClass(/authz-workspace-host/)
+    await expect(workspaceOverlay).toHaveClass(/authz-workspace-overlay/)
+    await expect.poll(() => workspaceOverlay.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgba(15, 23, 42, 0.34)')
     await expect.poll(() => workspaceOverlay.evaluate((element) => getComputedStyle(element).getPropertyValue('--ecp-primary-500').trim())).toBe('#3370ff')
     await expect(workspace).not.toHaveCSS('position', 'fixed')
     await expect(page.locator('.system-menu')).toBeVisible()

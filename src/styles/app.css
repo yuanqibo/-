@@ -477,3 +477,29 @@ body:has(.authz-workspace-host) #app {
     max-height: 260px !important;
   }
 }
+
+/* ECP teleports drawers to body. Keep the portal workspace visible beneath a
+   real backdrop while leaving the drawer surface opaque and interactive. */
+.authz-workspace-overlay.el-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2000 !important;
+  overflow: hidden !important;
+  background: rgba(15, 23, 42, 0.34) !important;
+  background-color: rgba(15, 23, 42, 0.34) !important;
+  pointer-events: auto !important;
+}
+
+.authz-workspace-overlay.el-overlay > .el-drawer,
+.authz-workspace-overlay.el-overlay > .el-overlay-dialog > .el-dialog {
+  z-index: 1 !important;
+}
+
+.authz-workspace-overlay.el-overlay .role-editor-wizard-drawer,
+.authz-workspace-overlay.el-overlay .target-workspace-subject-assignment-drawer,
+.authz-workspace-overlay.el-overlay .target-workspace__code-drawer,
+.authz-workspace-overlay.el-overlay .el-dialog {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  opacity: 1 !important;
+}

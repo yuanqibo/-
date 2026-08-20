@@ -1,4 +1,3 @@
-import type { App as VueApp } from 'vue'
 import type { RouteRecordRaw, Router } from 'vue-router'
 import type { AuthzSessionContext } from '@acg/ecp-sdk'
 import { configureAuthzBrowserRuntime } from '@acg/ecp-auth'
@@ -100,7 +99,7 @@ export const ecp = {
   }
 }
 
-export const configureEcp = async (_app: VueApp, router: Router): Promise<void> => {
+export const configureEcp = async (router: Router): Promise<void> => {
   configureAuthzBrowserRuntime({ defaultAppCode: 'WLY5YG', baseUrl: '/api/v1' })
   routes.forEach((route) => {
     if (router.hasRoute(String(route.name))) return
@@ -108,4 +107,5 @@ export const configureEcp = async (_app: VueApp, router: Router): Promise<void> 
     else router.addRoute(route)
   })
 }
+export const installPortalRoutes = (_router: Router): void => undefined
 export const waitForEcpReady = async (): Promise<void> => undefined
