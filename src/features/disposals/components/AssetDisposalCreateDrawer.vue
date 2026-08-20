@@ -43,6 +43,7 @@ const form = reactive<DisposalDraft>({
 
 const availableAssets = computed(() => assets.value.filter((asset) => asset.status === '空闲'))
 const selectedAssets = computed(() => availableAssets.value.filter((asset) => selectedAssetIds.value.includes(asset.id)))
+const selectedSubmissionAssetIds = computed(() => selectedAssetIds.value.filter((id) => selectedAssetRowIds.value.includes(id)))
 const pickerAssets = computed(() => {
   return availableAssets.value.filter((asset) => matchesPinyinSearch(
     [asset.id, asset.name, asset.category, asset.brand, asset.model, asset.sn, asset.supplier, asset.location], pickerQuery.value))
@@ -144,12 +145,16 @@ const submitCreate = async (): Promise<void> => {
     ElMessage.warning('请填写必填信息并至少选择一项空闲资产')
     return
   }
+  if (!selectedSubmissionAssetIds.value.length) {
+    ElMessage.warning('请勾选至少一项资产')
+    return
+  }
   submitting.value = true
   try {
     const created = await create({
       ...form,
       returnDate: form.disposalType === '退租' ? form.returnDate : '',
-      assetIds: [...selectedAssetIds.value]
+      assetIds: [...selectedSubmissionAssetIds.value]
     })
     opened.value = false
     await loadAssets(true)
@@ -188,11 +193,11 @@ const submitCreate = async (): Promise<void> => {
       </div>
       <div class="disposal-picker-table selected-assets-table">
         <table><thead><tr><th class="check-cell"><input type="checkbox" :checked="allSelectedRowsMarked" aria-label="全选已加入资产" @change="toggleAllSelectedAssetRows(($event.target as HTMLInputElement).checked)"></th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌 / 型号</th><th>设备序列号</th><th>供应商</th><th>所在位置</th></tr></thead>
-          <tbody><tr v-for="asset in selectedAssets" :key="asset.id"><td class="check-cell"><input type="checkbox" :checked="selectedAssetRowIds.includes(asset.id)" :aria-label="`选择移除${asset.id}`" @change="toggleSelectedAssetRow(asset.id, ($event.target as HTMLInputElement).checked)"></td><td>{{ asset.id }}</td><td>{{ asset.category }}</td><td>{{ asset.name }}</td><td>{{ [asset.brand, asset.model].filter(Boolean).join(' / ') || '-' }}</td><td>{{ asset.sn || '-' }}</td><td>{{ asset.supplier || '-' }}</td><td>{{ asset.location || '-' }}</td></tr><tr v-if="!selectedAssets.length"><td colspan="8"><el-empty description="尚未选择资产" :image-size="56" /></td></tr></tbody>
+          <tbody><tr v-for="asset in selectedAssets" :key="asset.id"><td class="check-cell"><input type="checkbox" :checked="selectedAssetRowIds.includes(asset.id)" :aria-label="`选择${asset.id}`" @change="toggleSelectedAssetRow(asset.id, ($event.target as HTMLInputElement).checked)"></td><td>{{ asset.id }}</td><td>{{ asset.category }}</td><td>{{ asset.name }}</td><td>{{ [asset.brand, asset.model].filter(Boolean).join(' / ') || '-' }}</td><td>{{ asset.sn || '-' }}</td><td>{{ asset.supplier || '-' }}</td><td>{{ asset.location || '-' }}</td></tr><tr v-if="!selectedAssets.length"><td colspan="8"><el-empty description="尚未选择资产" :image-size="56" /></td></tr></tbody>
         </table>
       </div>
     </section>
-    <template #footer><div class="disposal-create-footer"><button class="table-action" type="button" @click="opened = false">关闭</button><button class="table-action primary" type="button" :disabled="submitting" @click="submitCreate">{{ submitting ? '提交中...' : '保存并提交' }}</button></div></template>
+    <template #footer><div class="disposal-create-footer"><button class="table-action" type="button" @click="opened = false">关闭</button><button class="table-action primary" type="button" :disabled="submitting || !selectedSubmissionAssetIds.length" @click="submitCreate">{{ submitting ? '提交中...' : '保存并提交' }}</button></div></template>
   </el-drawer>
 
   <el-dialog v-model="assetPickerOpen" title="选择处置资产" width="min(1040px, 94vw)" class="disposal-asset-picker-dialog" append-to-body destroy-on-close>

@@ -825,7 +825,9 @@ const actionLocationPlaceholder = computed(() => ({
   handover: '请选择接收位置'
 } as Partial<Record<AssetCommand, string>>)[actionForm.action] || '请选择位置')
 const actionAssets = computed(() => actionForm.assetIds.map((id) => assets.value.find((item) => item.id === id)).filter((item): item is AssetRecord => Boolean(item)))
-const allActionAssetsSelected = computed(() => actionForm.assetIds.length > 0 && actionForm.assetIds.every((id) => actionSelectedIds.value.includes(id)))
+const selectedActionAssetIds = computed(() => actionForm.assetIds.filter((id) => actionSelectedIds.value.includes(id)))
+const allActionAssetsSelected = computed(() => actionAssets.value.length > 0 && actionAssets.value.every((item) => actionSelectedIds.value.includes(item.id)))
+const canSubmitAction = computed(() => actionForm.action === 'cancel-inbound' || selectedActionAssetIds.value.length > 0)
 const needsPerson = computed(() => actionForm.action === 'receive' || actionForm.action === 'borrow' || (actionForm.action === 'handover' && actionForm.handoverType === 'personal'))
 const initializeActionForm = (items: AssetRecord[], action: AssetCommand): void => {
   const first = items[0]
@@ -879,9 +881,11 @@ const removeActionAssets = (): void => {
 const toggleAllActionAssets = (checked: boolean): void => { actionSelectedIds.value = checked ? [...actionForm.assetIds] : [] }
 const submitAction = async (): Promise<void> => {
   if (!actionForm.assetIds.length) { ElMessage.warning('请先选择资产'); return }
+  const assetIds = actionForm.action === 'cancel-inbound' ? actionForm.assetIds : selectedActionAssetIds.value
+  if (!assetIds.length) { ElMessage.warning('请勾选至少一项资产'); return }
   if (needsPerson.value && !actionForm.personSubject) { ElMessage.warning('请搜索并选择 ECP 人员'); return }
   if (actionForm.action !== 'cancel-inbound' && !actionForm.location) { ElMessage.warning('请选择资产位置'); return }
-  if (actionForm.action === 'borrow' && actionForm.assetIds.some((id) => !actionForm.expectedReturnDates[id])) { ElMessage.warning('请填写资产明细中的预计归还日期'); return }
+  if (actionForm.action === 'borrow' && assetIds.some((id) => !actionForm.expectedReturnDates[id])) { ElMessage.warning('请填写资产明细中的预计归还日期'); return }
   submitting.value = true
   try {
     const fields: Record<string, unknown> = {
@@ -896,7 +900,7 @@ const submitAction = async (): Promise<void> => {
       handoverType: actionForm.handoverType === 'personal' ? '员工交接' : '公共交接',
       company: actionForm.company, department: actionForm.department
     })
-    await command(actionForm.action, actionForm.assetIds, fields)
+    await command(actionForm.action, assetIds, fields)
     actionOpen.value = false
     selected.value = []
     await returnToAssetList()
@@ -1603,7 +1607,7 @@ onMounted(() => {
           <div class="asset-flow-table-wrap"><table v-resizable-columns="`assets:action:${actionForm.action}`" class="asset-flow-table"><thead><tr><th class="asset-flow-select-cell"><input type="checkbox" :checked="allActionAssetsSelected" aria-label="全选资产明细" @change="toggleAllActionAssets(($event.target as HTMLInputElement).checked)"></th><th v-if="actionForm.action === 'borrow'">预计归还日期</th><th>资产图片</th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌</th><th>型号</th><th>设备序列号</th><th>金额</th><th>所属/承租公司</th><th>使用公司</th><th>使用部门</th><th>所在位置</th><th>使用人</th><th>管理员</th><th>购置方式</th><th>订单号</th><th>供应商</th><th>备注</th></tr></thead><tbody><tr v-for="item in actionAssets" :key="item.id"><td class="asset-flow-select-cell"><input v-model="actionSelectedIds" type="checkbox" :value="item.id" :aria-label="`选择${item.id}`"></td><td v-if="actionForm.action === 'borrow'"><el-date-picker v-model="actionForm.expectedReturnDates[item.id]" class="asset-flow-date-input" value-format="YYYY-MM-DD" /></td><td><img v-if="item.image" class="asset-flow-image" :src="item.image" :alt="item.name"><span v-else>-</span></td><td>{{ item.id }}</td><td>{{ item.category || '-' }}</td><td>{{ item.name }}</td><td>{{ item.brand || '-' }}</td><td>{{ item.model || '-' }}</td><td>{{ item.sn || '-' }}</td><td>{{ item.price || 0 }}</td><td>{{ item.ownerCompany || item.company || '-' }}</td><td>{{ item.company || '-' }}</td><td>{{ item.department || '-' }}</td><td>{{ item.location || '-' }}</td><td>{{ item.owner || '-' }}</td><td>{{ item.custodian || '-' }}</td><td>{{ item.purchaseMethod || '-' }}</td><td>{{ item.orderNo || '-' }}</td><td>{{ item.supplier || '-' }}</td><td>{{ item.note || '-' }}</td></tr><tr v-if="!actionAssets.length" class="empty-row"><td :colspan="actionForm.action === 'borrow' ? 20 : 19">暂无已选择资产，请点击选择资产添加。</td></tr></tbody></table></div>
         </section>
       </el-form>
-      <template #footer><el-button @click="actionOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitAction">{{ actionForm.action === 'cancel-inbound' ? '确认撤销' : '保存并提交' }}</el-button></template>
+      <template #footer><el-button @click="actionOpen = false">取消</el-button><el-button type="primary" :disabled="!canSubmitAction" :loading="submitting" @click="submitAction">{{ actionForm.action === 'cancel-inbound' ? '确认撤销' : '保存并提交' }}</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="importOpen" :title="importTitle" width="min(820px, 94vw)" class="asset-dialog asset-import-dialog" append-to-body>
