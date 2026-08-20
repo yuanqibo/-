@@ -1,4 +1,4 @@
-import { match as pinyinMatch, pinyin } from 'pinyin-pro'
+import { pinyin } from 'pinyin-pro'
 
 type SearchIndex = { raw: string; compact: string; pinyin: string; initials: string }
 
@@ -46,6 +46,5 @@ export const matchesPinyinSearch = (values: readonly unknown[], query: unknown):
     if (!isPinyinQuery(keyword) || !valueIndex.pinyin) return false
     return valueIndex.pinyin.includes(keyword)
       || valueIndex.initials.includes(keyword)
-      || pinyinMatch(valueIndex.raw, keyword)
   })
 }

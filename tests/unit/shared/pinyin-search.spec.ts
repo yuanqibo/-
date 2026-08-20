@@ -17,4 +17,10 @@ describe('matchesPinyinSearch', () => {
     expect(matchesPinyinSearch(values, 'thinkpad')).toBe(true)
     expect(matchesPinyinSearch(values, 'does-not-exist')).toBe(false)
   })
+
+  it('does not treat an unrelated latin account as a pinyin match', () => {
+    expect(matchesPinyinSearch(['沈宇', '沈钰', '吴竟杰', 'wujingjie@access.com'], 'shenyu')).toBe(true)
+    expect(matchesPinyinSearch(['吴竟杰', 'wujingjie@access.com'], 'shenyu')).toBe(false)
+    expect(matchesPinyinSearch(['沈宇', '沈钰'], 'wujingjie')).toBe(false)
+  })
 })
