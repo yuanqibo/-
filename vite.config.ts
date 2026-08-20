@@ -23,6 +23,7 @@ export default defineConfig({
         // Static assets are served with immutable caching. Add an explicit
         // release suffix when deploying a repaired vendor bundle so embedded
         // WebViews cannot reuse an earlier file with the same content hash.
+        entryFileNames: chunkFileNames,
         chunkFileNames,
         manualChunks(id) {
           // Vite injects this helper into the entry module for dynamic imports.
