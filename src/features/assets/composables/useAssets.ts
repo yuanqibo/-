@@ -193,9 +193,13 @@ const command = async (action: AssetCommand, assetIds: string[], fields: Record<
   if (action === 'delete' || action === 'cancel-inbound') {
     const removed = new Set(assetIds)
     state.assets = state.assets.filter((item) => !removed.has(item.id))
-    return
+  } else {
+    replaceAssets(items)
   }
-  replaceAssets(items)
+
+  // Command responses may only contain the affected assets. Refresh the full
+  // catalog so cached list pages immediately reflect every server-side change.
+  await loadAssets(true)
 }
 
 const saveCatalogValue = async (domain: 'categories' | 'locations', value: unknown): Promise<void> => {

@@ -22,6 +22,14 @@ describe('useAssets', () => {
   })
 
   it('loads all feature sources and keeps command updates in sync', async () => {
+    api.fetchAssets.mockReset()
+    api.fetchAssets
+      .mockResolvedValueOnce([asset('AST-1', '笔记本')])
+      .mockResolvedValueOnce([
+        { ...asset('AST-1', '笔记本', '领用'), owner: '张三' },
+        asset('AST-2', '显示器')
+      ])
+      .mockResolvedValueOnce([{ ...asset('AST-1', '笔记本', '领用'), owner: '张三' }])
     const assets = useAssets()
     await assets.load(true)
     expect(assets.assets.value.map((item) => item.id)).toEqual(['AST-1'])
@@ -33,6 +41,7 @@ describe('useAssets', () => {
     api.runAssetCommand.mockResolvedValue([{ ...asset('AST-1', '笔记本', '领用'), owner: '张三' }])
     await assets.command('receive', ['AST-1'], { receiver: '张三' })
     expect(assets.assets.value.find((item) => item.id === 'AST-1')).toMatchObject({ status: '领用', owner: '张三' })
+    expect(api.fetchAssets).toHaveBeenCalledTimes(2)
 
     api.runAssetCommand.mockResolvedValue([])
     await assets.command('delete', ['AST-2'], {})
