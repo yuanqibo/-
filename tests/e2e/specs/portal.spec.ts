@@ -1476,6 +1476,33 @@ test.describe('登录后门户质量回归', () => {
     await expect(importDialog.getByText('最大数据行数不超过5000行；', { exact: true })).toBeVisible()
   })
 
+  test('资产导入校验分类树中的父级分类并拦截未知分类', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), '资产导入校验在桌面项目执行')
+    const categoryTree = [{
+      id: 'cat-mobile', code: '03', name: '移动设备', enabled: true, children: [{
+        id: 'cat-phone', code: '0303', name: '手机', enabled: true, children: [
+          { id: 'cat-iphone', code: '030303', name: '苹果手机', enabled: true, children: [] },
+          { id: 'cat-android', code: '030301', name: '安卓手机', enabled: true, children: [] }
+        ]
+      }]
+    }]
+    const workbook = (category: string): Buffer => Buffer.from(`<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="资产导入"><Table><Row><Cell><Data ss:Type="String">资产名称</Data></Cell><Cell><Data ss:Type="String">资产分类</Data></Cell><Cell><Data ss:Type="String">品牌</Data></Cell><Cell><Data ss:Type="String">购置方式</Data></Cell><Cell><Data ss:Type="String">所属/承租公司</Data></Cell><Cell><Data ss:Type="String">购置/起租日期</Data></Cell><Cell><Data ss:Type="String">所在位置</Data></Cell><Cell><Data ss:Type="String">使用公司</Data></Cell></Row><Row><Cell><Data ss:Type="String">测试手机</Data></Cell><Cell><Data ss:Type="String">${category}</Data></Cell><Cell><Data ss:Type="String">测试品牌</Data></Cell><Cell><Data ss:Type="String">采购</Data></Cell><Cell><Data ss:Type="String">示例公司</Data></Cell><Cell><Data ss:Type="String">2026-08-20</Data></Cell><Cell><Data ss:Type="String">杭州仓库</Data></Cell><Cell><Data ss:Type="String">示例公司</Data></Cell></Row></Table></Worksheet></Workbook>`)
+
+    await openApp(page, '/assets', { categoryTree })
+    await page.getByRole('button', { name: '导入/导出', exact: true }).click()
+    await page.getByRole('menuitem', { name: '资产导入', exact: true }).click()
+    const importDialog = page.getByRole('dialog', { name: '资产导入' })
+    const input = importDialog.locator('input[type="file"]')
+
+    await input.setInputFiles({ name: '手机分类.xls', mimeType: 'application/vnd.ms-excel', buffer: workbook('手机') })
+    await expect(importDialog.locator('.asset-import-status')).toHaveText('可导入 1 条，错误 0 条。')
+    await expect(importDialog.getByText('可导入', { exact: true })).toBeVisible()
+
+    await input.setInputFiles({ name: '未知分类.xls', mimeType: 'application/vnd.ms-excel', buffer: workbook('不存在的分类') })
+    await expect(importDialog.locator('.asset-import-status')).toContainText('可导入 0 条，错误 1 条。')
+    await expect(importDialog.locator('.standard-import-error')).toHaveText('资产分类“不存在的分类”不存在')
+  })
+
   test('资产退还或编辑成功后回到未筛选的资产主列表', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), '资产主列表回退在桌面项目执行')
     const contextAssets = [

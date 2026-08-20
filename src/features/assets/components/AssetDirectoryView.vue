@@ -981,9 +981,11 @@ const openImport = (mode: AssetImportMode): void => {
   importOpen.value = true
 }
 const validateImportRows = async (rows: AssetImportRow[]): Promise<AssetImportRow[]> => {
-  const knownCategories = new Set(importMode.value === 'replace'
-    ? managedCatalogNames(store.value.assetCategoryTree || [])
-    : managedCategories.value.map((item) => item.value))
+  const configuredCategoryNames = managedCatalogNames(store.value.assetCategoryTree || [])
+  // Imports may use configured parent categories; keep validation aligned with the full tree.
+  const knownCategories = new Set(configuredCategoryNames.length
+    ? configuredCategoryNames
+    : importMode.value === 'replace' ? [] : categories.value)
   const knownLocations = new Set(managedLocations.value.map((item) => item.value))
   const knownAssets = new Map(assets.value.map((item) => [item.id, item]))
   const seen = new Set<string>()
