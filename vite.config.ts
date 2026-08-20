@@ -1,6 +1,11 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+const buildRevision = String(process.env.ASSET_PORTAL_BUILD_REVISION || '').trim()
+const chunkFileNames = buildRevision
+  ? `build-assets/[name]-[hash]-${buildRevision}.js`
+  : 'build-assets/[name]-[hash].js'
+
 export default defineConfig({
   plugins: [vue()],
   build: {
@@ -15,6 +20,10 @@ export default defineConfig({
     },
     rollupOptions: {
       output: {
+        // Static assets are served with immutable caching. Add an explicit
+        // release suffix when deploying a repaired vendor bundle so embedded
+        // WebViews cannot reuse an earlier file with the same content hash.
+        chunkFileNames,
         manualChunks(id) {
           // Vite injects this helper into the entry module for dynamic imports.
           // It must stay separate from the ECP chunk or importing the helper
