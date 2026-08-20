@@ -53,8 +53,10 @@ onBeforeUnmount(() => document.documentElement.style.removeProperty('--ecp-prima
     </Teleport>
     <Teleport to="body">
       <div v-show="roleDetailOpen" class="el-overlay is-drawer">
-        <section class="role-editor-wizard-drawer el-drawer rtl" style="width: 600px; height: 100%" role="dialog" aria-label="编辑应用角色">
-          <h2>编辑应用角色</h2>
+        <section class="role-editor-wizard-drawer el-drawer rtl" style="width: 600px; height: 100%" role="dialog" aria-label="角色详情">
+          <h2>角色详情</h2>
+          <p>角色编码：APP_ADMIN</p>
+          <input aria-label="角色名称" value="应用管理员" disabled>
           <button type="button" aria-label="关闭角色详情" @click="roleDetailOpen = false">关闭</button>
         </section>
       </div>

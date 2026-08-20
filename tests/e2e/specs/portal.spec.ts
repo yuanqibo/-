@@ -442,8 +442,11 @@ test.describe('登录后门户质量回归', () => {
     await expect.poll(() => workspace.evaluate((element) => getComputedStyle(element).position)).not.toBe('fixed')
 
     await workspace.getByRole('button', { name: '详情', exact: true }).click()
-    const roleDrawer = page.getByRole('dialog', { name: '编辑应用角色' })
+    const roleDrawer = page.getByRole('dialog', { name: '角色详情' })
     await expect(roleDrawer).toBeVisible()
+    await expect(roleDrawer).toContainText('APP_ADMIN')
+    await expect(roleDrawer.getByLabel('角色名称')).toBeDisabled()
+    await expect(roleDrawer).not.toContainText('编辑应用角色')
     const roleDrawerBox = await roleDrawer.boundingBox()
     expect(roleDrawerBox).not.toBeNull()
     expect(roleDrawerBox!.width).toBe(600)
