@@ -1518,7 +1518,7 @@ onMounted(() => {
             <el-form-item class="field" label="订单号"><el-input v-model="createDraft.orderNo" placeholder="请输入" /></el-form-item>
             <el-form-item class="field" label="计量单位"><el-input v-model="createDraft.unit" placeholder="请输入" /></el-form-item>
             <el-form-item class="field" label="购置方式" prop="purchaseMethod"><el-select v-model="createDraft.purchaseMethod" placement="bottom-start" placeholder="请选择"><el-option v-for="item in purchaseMethods" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-            <el-form-item class="field wide" label="备注"><el-input v-model="createDraft.note" type="textarea" :rows="2" placeholder="请输入" /></el-form-item>
+            <el-form-item class="field" label="备注"><el-input v-model="createDraft.note" type="textarea" :rows="1" placeholder="请输入" /></el-form-item>
             <el-form-item class="field" label="租金"><div class="asset-unit-control"><el-input-number v-model="createDraft.rent" :min="0" :precision="2" controls-position="right" placeholder="请输入" /><span class="asset-unit-control__suffix">元</span></div></el-form-item>
           </div>
         </section>

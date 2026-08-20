@@ -13740,6 +13740,63 @@ body.is-resizing-column * {
   padding-top: 8px;
 }
 
+/* Keep the asset creation grid compact and consistent without changing edit forms. */
+.asset-create-dialog {
+  width: min(1120px, 94vw) !important;
+}
+
+.asset-create-dialog .asset-create-form {
+  gap: 18px;
+}
+
+.asset-create-dialog .asset-form-section {
+  gap: 12px;
+}
+
+.asset-create-dialog .asset-form-section + .asset-form-section {
+  padding-top: 16px;
+}
+
+.asset-create-dialog .asset-form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 18px;
+  row-gap: 12px;
+}
+
+.asset-create-dialog .asset-form-grid .field {
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 36px;
+  align-items: center;
+}
+
+.asset-create-dialog .asset-form-grid .field.wide {
+  grid-column: auto;
+}
+
+.asset-create-dialog .asset-form-grid .el-form-item__label {
+  min-height: 36px;
+  font-size: 14px;
+}
+
+.asset-create-dialog .asset-create-form .el-input__wrapper,
+.asset-create-dialog .asset-create-form .el-select__wrapper {
+  min-height: 36px;
+}
+
+.asset-create-dialog .asset-create-form .el-date-editor,
+.asset-create-dialog .asset-create-form .el-input-number {
+  width: 100%;
+}
+
+.asset-create-dialog .asset-create-form textarea {
+  min-height: 36px;
+  height: 36px;
+  line-height: 18px;
+  padding-top: 8px;
+  resize: vertical;
+}
+
 .el-dialog.asset-dialog {
   max-height: calc(100vh - 48px);
   display: flex;
