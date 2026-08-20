@@ -110,15 +110,16 @@ const firstLabelPreviewStyle = computed<Record<string, string>>(() => ({
   '--first-label-offset-y': `${Number(labelSettings.offsetY || 0)}mm`, '--first-label-qr-size': `${Number(labelSettings.qrSize || 13)}mm`,
   '--first-label-qr-text-gap': `${Number(labelSettings.qrTextGap || 2)}mm`
 }))
-const templateListPreviewStyle = (item: { settings: Record<string, unknown> }): Record<string, string> => {
-  const width = clampNumber(item.settings.labelWidth, 40, 20, 160)
-  const height = clampNumber(item.settings.labelHeight, 30, 12, 120)
-  // Keep the on-screen sample inside its fixed preview window while preserving the physical aspect ratio.
+const templateListPreviewStyle = (): Record<string, string> => {
+  // The template picker is an overview, so every thumbnail uses one stable frame.
+  // The editor and print path continue to use each template's real dimensions.
+  const previewWidth = 60
+  const previewHeight = 40
   const millimetresToPixels = 96 / 25.4
-  const scale = Math.min(0.96, 108 / (height * millimetresToPixels), 260 / (width * millimetresToPixels))
+  const scale = Math.min(0.96, 108 / (previewHeight * millimetresToPixels), 260 / (previewWidth * millimetresToPixels))
   return {
-    '--label-template-width': `${width}mm`,
-    '--label-template-height': `${height}mm`,
+    '--label-template-width': `${previewWidth}mm`,
+    '--label-template-height': `${previewHeight}mm`,
     '--label-template-preview-scale': String(Math.round(scale * 1000) / 1000)
   }
 }
@@ -459,7 +460,7 @@ onMounted(async () => { await load(); syncFromStore() })
         <article v-for="item in templateOptions" :key="item.key" class="asset-label-template-card" :class="{ active: String(labelSettings.templateKey || 'standard') === item.key }" @click="applyTemplate(item.key)">
           <button class="asset-label-template-radio" type="button" :aria-label="`选择${item.name}`" :aria-pressed="String(labelSettings.templateKey || 'standard') === item.key"><span></span></button>
           <header class="asset-label-template-card-head"><strong>{{ Number(item.settings.labelWidth || 40) }}*{{ Number(item.settings.labelHeight || 30) }}mm</strong><i aria-hidden="true"></i><strong>{{ item.name }}</strong></header>
-          <div class="asset-label-template-preview"><div class="asset-label-template-ticket" :class="{ 'is-standard': item.key === 'standard', 'is-fields4': item.key === 'compact', 'is-topField': item.key === 'full' }" :style="templateListPreviewStyle(item)"><div class="asset-label-template-qr"><AssetQrGraphic text="资产编码:010100012" /></div><div class="asset-label-template-fields"><p v-for="index in item.key === 'compact' ? 4 : item.key === 'full' ? 2 : 3" :key="index"><span>字段名称{{ index }}：</span><strong>xxxx</strong></p></div></div></div>
+          <div class="asset-label-template-preview"><div class="asset-label-template-ticket" :class="{ 'is-standard': item.key === 'standard', 'is-fields4': item.key === 'compact', 'is-topField': item.key === 'full' }" :style="templateListPreviewStyle()"><div class="asset-label-template-qr"><AssetQrGraphic text="资产编码:010100012" /></div><div class="asset-label-template-fields"><p v-for="index in item.key === 'compact' ? 4 : item.key === 'full' ? 2 : 3" :key="index"><span>字段名称{{ index }}：</span><strong>xxxx</strong></p></div></div></div>
         </article>
       </div></aside>
       <div class="asset-label-template-right"><form class="asset-label-template-config-form first-template-config-form" @submit.prevent="saveLabel">
