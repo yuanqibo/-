@@ -21,6 +21,7 @@ const query = ref('')
 const tab = ref('全部')
 const employeeRequestPage = ref(1)
 const employeeRequestPageSize = ref(10)
+const employeeAdvancedOpen = ref(false)
 const detail = ref<ApprovalRecord | null>(null)
 const decisionOpen = ref(false)
 const requestOpen = ref(false)
@@ -28,6 +29,8 @@ const submitting = ref(false)
 const requestType = ref('资产领用')
 const requestAssetId = ref('')
 const decisionForm = reactive<{ decision: ApprovalDecision; reason: string }>({ decision: 'approve', reason: '' })
+const employeeAdvancedDraft = reactive({ type: '', startDate: '', endDate: '' })
+const employeeAdvancedApplied = reactive({ type: '', startDate: '', endDate: '' })
 const permissions = computed(() => new Set(user.value?.permissionCodes || []))
 const canReview = computed(() => !isEmployeeTerminal.value && permissions.value.has('asset:request:review'))
 const managerTabs = ['全部', '待处理', '已完成', '已拒绝']
@@ -49,6 +52,10 @@ const employeeRequestActions = computed(() => employeeRequestActionDefinitions.f
   const setting = selfServiceSettings.value[action.settingKey]
   return Boolean(setting && typeof setting === 'object' && (setting as { enabled?: boolean }).enabled === true)
 }))
+const employeeRequestTypeOptions = computed(() => Array.from(new Set([
+  ...employeeRequestActions.value.map((action) => action.label),
+  ...rows.value.map((item) => displayRequestType(item))
+].filter(Boolean))))
 const matchesTab = (item: ApprovalRecord, selected: string): boolean => {
   if (selected === '全部') return true
   if (selected === '待处理' || selected === '待审批') return pendingStatuses.has(item.status)
@@ -76,7 +83,16 @@ const deviceItems = (item: ApprovalRecord): Array<Record<string, unknown>> => Ar
 const tabCount = (selected: string): number => selected === '全部' ? rows.value.length : rows.value.filter((item) => matchesTab(item, selected)).length
 const filtered = computed(() => rows.value.filter((item) => {
   const keyword = query.value.trim().toLowerCase()
-  return matchesTab(item, tab.value) && (!keyword || [item.id, item.type, item.applicant, item.asset, item.status].some((value) => String(value || '').toLowerCase().includes(keyword)))
+  const requestDate = String(item.date || '').slice(0, 10)
+  const requestType = displayRequestType(item)
+  const matchesAdvancedType = !employeeAdvancedApplied.type || requestType === employeeAdvancedApplied.type
+  const matchesStartDate = !employeeAdvancedApplied.startDate || requestDate >= employeeAdvancedApplied.startDate
+  const matchesEndDate = !employeeAdvancedApplied.endDate || requestDate <= employeeAdvancedApplied.endDate
+  return matchesTab(item, tab.value)
+    && matchesAdvancedType
+    && matchesStartDate
+    && matchesEndDate
+    && (!keyword || [item.id, item.type, item.applicant, item.asset, item.status].some((value) => String(value || '').toLowerCase().includes(keyword)))
 }))
 const employeeRequestPageCount = computed(() => Math.max(1, Math.ceil(filtered.value.length / employeeRequestPageSize.value)))
 const pagedEmployeeRequests = computed(() => {
@@ -148,6 +164,24 @@ const openRequest = (type = '资产领用'): void => {
   requestType.value = type
   requestAssetId.value = ''
   requestOpen.value = true
+}
+const openEmployeeAdvanced = (): void => {
+  Object.assign(employeeAdvancedDraft, employeeAdvancedApplied)
+  employeeAdvancedOpen.value = !employeeAdvancedOpen.value
+}
+const clearEmployeeAdvanced = (): void => {
+  Object.assign(employeeAdvancedDraft, { type: '', startDate: '', endDate: '' })
+  Object.assign(employeeAdvancedApplied, { type: '', startDate: '', endDate: '' })
+  employeeRequestPage.value = 1
+}
+const applyEmployeeAdvanced = (): void => {
+  if (employeeAdvancedDraft.startDate && employeeAdvancedDraft.endDate && employeeAdvancedDraft.startDate > employeeAdvancedDraft.endDate) {
+    ElMessage.warning('开始时间不能晚于结束时间')
+    return
+  }
+  Object.assign(employeeAdvancedApplied, employeeAdvancedDraft)
+  employeeRequestPage.value = 1
+  employeeAdvancedOpen.value = false
 }
 const onRequestSubmitted = (): void => {
   tab.value = '全部'
@@ -251,7 +285,17 @@ watch(canReview, () => {
             <div class="employee-request-tabs" role="tablist">
               <button v-for="item in tabs" :key="item" :class="{ active: tab === item }" type="button" @click="tab = item">{{ item }} ({{ tabCount(item) }})</button>
             </div>
-            <button class="employee-request-advanced" type="button">高级搜索</button>
+            <button class="employee-request-advanced" type="button" :aria-expanded="employeeAdvancedOpen" @click="openEmployeeAdvanced">高级搜索</button>
+            <el-config-provider v-if="employeeAdvancedOpen" :locale="zhCn">
+              <div class="employee-request-advanced-panel" role="dialog" aria-label="高级搜索" @click.stop>
+                <div class="employee-request-advanced-panel-actions"><button class="btn primary" type="button" @click="applyEmployeeAdvanced">查询</button><button class="btn" type="button" @click="clearEmployeeAdvanced">重置</button></div>
+                <div class="employee-request-advanced-fields">
+                  <label><span>申请类型：</span><el-select v-model="employeeAdvancedDraft.type" clearable placeholder="请选择" aria-label="申请类型"><el-option v-for="option in employeeRequestTypeOptions" :key="option" :label="option" :value="option" /></el-select></label>
+                  <label><span>开始时间：</span><el-date-picker v-model="employeeAdvancedDraft.startDate" type="date" value-format="YYYY-MM-DD" placeholder="请选择" aria-label="开始时间" /></label>
+                  <label><span>结束时间：</span><el-date-picker v-model="employeeAdvancedDraft.endDate" type="date" value-format="YYYY-MM-DD" placeholder="请选择" aria-label="结束时间" /></label>
+                </div>
+              </div>
+            </el-config-provider>
           </div>
           <div class="employee-request-card-list">
             <article v-for="item in pagedEmployeeRequests" :key="item.id" class="employee-request-card">
