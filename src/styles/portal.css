@@ -10431,7 +10431,7 @@ body.is-resizing-column * {
 .signature-status { display: inline-flex; align-items: center; min-height: 26px; border-radius: 4px; padding: 0 9px; font-size: 13px; }
 .signature-status.待签字 { color: #d97706; background: #fff4df; }
 .signature-status.已签字 { color: #16845b; background: #e7f8f1; }
-.signature-status.已打回 { color: #d84a4a; background: #fff0f0; }
+.signature-status.已驳回 { color: #d84a4a; background: #fff0f0; }
 .signature-status.已终止 { color: #6c7788; background: #eef1f5; }
 .signature-dialog-label { margin: 0 0 8px; color: #445168; font-size: 14px; }
 .signature-notice { margin: 0 0 14px; border-left: 3px solid #1296db; padding: 10px 12px; color: #5e6b7f; background: #f6faff; font-size: 13px; line-height: 1.6; }

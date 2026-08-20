@@ -5,7 +5,7 @@ import SignaturePad from '../../../shared/components/SignaturePad.vue'
 import { useAssets } from '../../assets/composables/useAssets'
 import type { AssetOperationRecord } from '../../assets/types/assets'
 
-type SignatureTab = '待签字' | '已签字' | '已打回'
+type SignatureTab = '待签字' | '已签字' | '已驳回'
 
 const { state, operations, loadOperations, command } = useAssets()
 const tab = ref<SignatureTab>('待签字')
@@ -24,13 +24,13 @@ const receiptRows = computed(() => operations.value.filter((item) => receiptType
 )))
 const statusGroup = (item: AssetOperationRecord): SignatureTab => {
   if (item.status === '待签字') return '待签字'
-  if (item.status === '已打回' || item.status === '已终止') return '已打回'
+  if (item.status === '已打回' || item.status === '已终止') return '已驳回'
   return '已签字'
 }
 const statusLabel = (item: AssetOperationRecord): string => item.status === '已终止' ? '已终止' : statusGroup(item)
 const rows = computed(() => receiptRows.value.filter((item) => statusGroup(item) === tab.value))
 const selected = computed(() => receiptRows.value.find((item) => item.id === selectedId.value) || null)
-const rejectLabel = computed(() => selected.value?.type === 'HANDOVER' ? '撤回交接' : '打回')
+const rejectLabel = computed(() => selected.value?.type === 'HANDOVER' ? '撤回交接' : '驳回')
 const tabCount = (value: SignatureTab): number => receiptRows.value.filter((item) => statusGroup(item) === value).length
 const typeLabel = (type: AssetOperationRecord['type']): string => {
   if (type === 'RECEIVE') return '资产领用'
@@ -75,7 +75,7 @@ const submitSign = async (): Promise<void> => {
 const submitReject = async (): Promise<void> => {
   const item = requirePendingSelection()
   if (!item) return
-  if (!rejectionReason.value.trim()) { ElMessage.warning('请填写打回原因'); return }
+  if (!rejectionReason.value.trim()) { ElMessage.warning('请填写驳回原因'); return }
   submitting.value = true
   try {
     await command(item.type === 'HANDOVER' ? 'handover-reject' : 'receipt-reject', [item.assetId], {
@@ -85,10 +85,10 @@ const submitReject = async (): Promise<void> => {
     })
     rejectOpen.value = false
     selectedId.value = ''
-    tab.value = '已打回'
-    ElMessage.success('单据已打回')
+    tab.value = '已驳回'
+    ElMessage.success('单据已驳回')
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '打回失败')
+    ElMessage.error(error instanceof Error ? error.message : '驳回失败')
   } finally { submitting.value = false }
 }
 
@@ -97,9 +97,9 @@ onMounted(() => { void loadOperations() })
 
 <template>
   <section class="employee-signature-page standard-business-view">
-    <header class="standard-page-header"><div><h1>签字</h1><p>核对待签收单据，签字确认或说明原因后打回。</p></div></header>
+    <header class="standard-page-header"><div><h1>签字</h1><p>核对待签收单据，签字确认或说明原因后驳回。</p></div></header>
     <div class="employee-signature-tabs" role="tablist">
-      <button v-for="item in (['待签字', '已签字', '已打回'] as SignatureTab[])" :key="item" type="button"
+      <button v-for="item in (['待签字', '已签字', '已驳回'] as SignatureTab[])" :key="item" type="button"
         :class="{ active: tab === item }" @click="tab = item; selectedId = ''">{{ item }} ({{ tabCount(item) }})</button>
     </div>
     <div v-if="tab === '待签字'" class="employee-signature-actions">
@@ -126,8 +126,8 @@ onMounted(() => { void loadOperations() })
       <SignaturePad v-model="signatureImage" :height="300" />
       <template #footer><el-button @click="signOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitSign">确定</el-button></template>
     </el-dialog>
-    <el-dialog v-model="rejectOpen" :title="selected?.type === 'HANDOVER' ? '撤回交接单' : '打回签收单'" width="min(560px, 92vw)" append-to-body destroy-on-close>
-      <el-form label-position="top"><el-form-item :label="selected?.type === 'HANDOVER' ? '撤回原因' : '打回原因'" required><el-input v-model="rejectionReason" type="textarea" :rows="4" maxlength="500" show-word-limit placeholder="请说明设备问题或非本人领用等原因" /></el-form-item></el-form>
+    <el-dialog v-model="rejectOpen" :title="selected?.type === 'HANDOVER' ? '撤回交接单' : '驳回签收单'" width="min(560px, 92vw)" append-to-body destroy-on-close>
+      <el-form label-position="top"><el-form-item :label="selected?.type === 'HANDOVER' ? '撤回原因' : '驳回原因'" required><el-input v-model="rejectionReason" type="textarea" :rows="4" maxlength="500" show-word-limit placeholder="请说明设备问题或非本人领用等原因" /></el-form-item></el-form>
       <template #footer><el-button @click="rejectOpen = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitReject">确定</el-button></template>
     </el-dialog>
     <el-drawer :model-value="Boolean(detail)" title="签收单详情" size="min(620px, 92vw)" append-to-body @close="detail = null">
@@ -137,7 +137,7 @@ onMounted(() => { void loadOperations() })
         <div><span>资产分类</span><strong>{{ detail.assetCategory || '-' }}</strong></div><div><span>品牌/型号</span><strong>{{ [detail.assetBrand, detail.assetModel].filter(Boolean).join(' ') || '-' }}</strong></div>
         <div><span>设备序列号</span><strong>{{ detail.assetSn || '-' }}</strong></div><div><span>接收位置</span><strong>{{ detail.location || '-' }}</strong></div>
         <div><span>发起人</span><strong>{{ detail.operator || '-' }}</strong></div><div><span>签收状态</span><strong>{{ statusLabel(detail) }}</strong></div>
-        <div v-if="detail.rejectionReason" class="wide"><span>打回原因</span><strong>{{ detail.rejectionReason }}</strong></div>
+        <div v-if="detail.rejectionReason" class="wide"><span>驳回原因</span><strong>{{ detail.rejectionReason }}</strong></div>
         <div v-if="detail.noticeContent" class="wide"><span>签收须知</span><strong>{{ detail.noticeContent }}</strong></div>
         <div v-if="detail.signatureImage" class="wide"><span>签字图片</span><img :src="String(detail.signatureImage)" alt="员工签字图片" /></div>
       </div>
