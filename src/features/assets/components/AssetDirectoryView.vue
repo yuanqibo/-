@@ -1138,7 +1138,28 @@ const flowOrderPrintKind = computed<AssetOrderPrintKind>(() => receiveReturnTab.
   : receiveReturnTab.value === 'employee' ? 'employee' : receiveReturnTab.value === 'handover' ? 'handover' : 'receive')
 const notifyBorrowPrint = (): void => { ElMessage.success('已生成借用归还单打印预览') }
 const printNow = (): void => {
-  const cleanup = (): void => document.body.classList.remove('printing-asset-labels')
+  const settings = printSettings.value as Record<string, unknown>
+  const numberSetting = (value: unknown, fallback: number, min: number, max: number): number => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? Math.min(Math.max(parsed, min), max) : fallback
+  }
+  const labelWidth = numberSetting(settings.labelWidth, 40, 20, 160)
+  const labelHeight = numberSetting(settings.labelHeight, 30, 12, 120)
+  const columns = Math.round(numberSetting(settings.columns, 1, 1, 8))
+  const rows = Math.round(numberSetting(settings.rows, 1, 1, 14))
+  const columnGap = numberSetting(settings.columnGap, 0, 0, 30)
+  const rowGap = numberSetting(settings.rowGap, 0, 0, 30)
+  const pageWidth = labelWidth * columns + columnGap * Math.max(0, columns - 1)
+  const pageHeight = labelHeight * rows + rowGap * Math.max(0, rows - 1)
+  document.getElementById('asset-label-print-page-size')?.remove()
+  const pageStyle = document.createElement('style')
+  pageStyle.id = 'asset-label-print-page-size'
+  pageStyle.textContent = `@media print { @page { size: ${pageWidth}mm ${pageHeight}mm; margin: 0; } }`
+  document.head.appendChild(pageStyle)
+  const cleanup = (): void => {
+    document.body.classList.remove('printing-asset-labels')
+    pageStyle.remove()
+  }
   document.body.classList.add('printing-asset-labels')
   window.addEventListener('afterprint', cleanup, { once: true })
   window.print()

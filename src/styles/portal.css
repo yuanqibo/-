@@ -2501,15 +2501,42 @@ button.asset-code-rule-field-name {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 60mm;
-  height: 40mm;
+  width: var(--label-template-width, 60mm);
+  height: var(--label-template-height, 40mm);
   min-height: 0;
   display: block;
   padding: 0;
+  box-sizing: border-box;
   background: #ffffff;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
-  transform: translate(-50%, -50%) scale(0.6);
+  transform: translate(-50%, -50%) scale(var(--label-template-preview-scale, 0.6));
   transform-origin: center;
+}
+
+.asset-label-template-ticket.is-standard .asset-label-template-qr {
+  left: 3mm;
+  top: 7mm;
+  width: 13mm;
+  height: 13mm;
+}
+
+.asset-label-template-ticket.is-standard .asset-label-template-qr .asset-label-qr {
+  width: 13mm;
+  height: 13mm;
+}
+
+.asset-label-template-ticket.is-standard .asset-label-template-fields {
+  left: 18mm;
+  right: 2mm;
+  top: 6.4mm;
+  gap: 2.2mm;
+  font-size: 2.25mm;
+}
+
+.asset-label-template-ticket.is-standard .asset-label-template-fields p {
+  grid-template-columns: 11mm minmax(0, 1fr);
+  column-gap: 0.6mm;
+  min-height: 3.2mm;
 }
 
 .asset-label-template-qr {
