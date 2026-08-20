@@ -13767,6 +13767,7 @@ body.is-resizing-column * {
   grid-template-columns: 108px minmax(0, 1fr);
   gap: 8px;
   min-height: 36px;
+  min-width: 0;
   align-items: center;
 }
 
@@ -13775,8 +13776,35 @@ body.is-resizing-column * {
 }
 
 .asset-create-dialog .asset-form-grid .el-form-item__label {
+  width: 108px;
+  min-width: 108px;
   min-height: 36px;
   font-size: 14px;
+  justify-content: flex-end;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.asset-create-dialog .asset-form-grid .el-form-item__content {
+  width: 100%;
+  min-width: 0;
+}
+
+.asset-create-dialog .asset-form-grid .el-form-item__content > .el-input,
+.asset-create-dialog .asset-form-grid .el-form-item__content > .el-select,
+.asset-create-dialog .asset-form-grid .el-form-item__content > .el-autocomplete,
+.asset-create-dialog .asset-form-grid .el-form-item__content > .el-date-editor,
+.asset-create-dialog .asset-form-grid .el-form-item__content > .el-input-number,
+.asset-create-dialog .asset-form-grid .el-form-item__content > .asset-unit-control {
+  width: 100%;
+  min-width: 0;
+}
+
+.asset-create-dialog .asset-form-grid .el-input__wrapper,
+.asset-create-dialog .asset-form-grid .el-select__wrapper {
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .asset-create-dialog .asset-create-form .el-input__wrapper,

@@ -1399,6 +1399,23 @@ test.describe('登录后门户质量回归', () => {
     })
     expect(alignment.maxOffset, JSON.stringify(alignment)).toBeLessThanOrEqual(1)
     expect(alignment.overflowingLabels, JSON.stringify(alignment)).toBe(0)
+    const columnWidths = await dialog.evaluate((element) => {
+      const visible = (node: Element): boolean => {
+        const rect = node.getBoundingClientRect()
+        return rect.width > 0 && rect.height > 0
+      }
+      const fields = Array.from(element.querySelectorAll('.asset-form-grid .el-form-item')).filter(visible)
+      const labels = fields.map((field) => field.querySelector<HTMLElement>('.el-form-item__label')?.getBoundingClientRect().width || 0)
+      const controls = fields.map((field) => field.querySelector<HTMLElement>('.el-input, .el-select, .el-autocomplete, .el-date-editor, .asset-unit-control')?.getBoundingClientRect().width || 0)
+      return {
+        labelSpread: Math.max(...labels) - Math.min(...labels),
+        controlSpread: Math.max(...controls) - Math.min(...controls),
+        labels,
+        controls
+      }
+    })
+    expect(columnWidths.labelSpread, JSON.stringify(columnWidths)).toBeLessThanOrEqual(1)
+    expect(columnWidths.controlSpread, JSON.stringify(columnWidths)).toBeLessThanOrEqual(1)
     await dialog.locator('.el-form-item').filter({ hasText: '资产名称' }).locator('input').fill('新测试设备')
     await dialog.locator('.el-form-item').filter({ hasText: '品牌' }).locator('input').fill('测试品牌')
     await dialog.locator('.el-form-item').filter({ hasText: '资产分类' }).locator('.el-select').click()
