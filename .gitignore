@@ -4,6 +4,7 @@ data/
 frontend-dist/
 playwright-report/
 test-results/
+outputs/
 backend/target/
 /target/
 *.log
