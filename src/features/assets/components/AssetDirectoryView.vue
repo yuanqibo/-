@@ -20,7 +20,7 @@ const AssetDisposalCreateDrawer = defineAsyncComponent(() => import('../../dispo
 
 type Mode = 'list' | 'inbound' | 'receive-return' | 'borrow-return' | 'handover'
 type ColumnKey = 'id' | 'name' | 'category' | 'status' | 'owner' | 'department' | 'location' | 'brand' | 'model' | 'sn' | 'supplier' | 'price' | 'purchaseDate'
-type ListColumnKey = 'status' | 'code' | 'name' | 'category' | 'brand' | 'model' | 'sn' | 'phone' | 'email' | 'date' | 'location' | 'price' | 'purchase' | 'rent' | 'supplier' | 'owner' | 'usage'
+type ListColumnKey = 'status' | 'code' | 'name' | 'category' | 'brand' | 'model' | 'sn' | 'phone' | 'email' | 'date' | 'location' | 'price' | 'purchase' | 'rent' | 'supplier' | 'owner'
 type HandoverDocumentColumnKey = 'status' | 'order' | 'operator' | 'receiver' | 'receiverCompany' | 'receiverDepartment' | 'date' | 'handoverType' | 'targetLocation' | 'note' | 'signer' | 'signatureImage' | 'actions'
 type HandoverAssetColumnKey = 'assetImage' | 'assetId' | 'assetCategory' | 'assetName' | 'assetBrand' | 'assetModel' | 'assetSn' | 'assetOwnerCompany' | 'assetLocation' | 'handoverPerson' | 'handoverCompany' | 'handoverDepartment'
 type HandoverColumnKey = HandoverDocumentColumnKey | HandoverAssetColumnKey
@@ -189,7 +189,7 @@ const listColumns: Array<{ key: ListColumnKey; label: string; width: number }> =
   { key: 'date', label: '领用日期', width: 90 }, { key: 'location', label: '所在位置', width: 92 },
   { key: 'price', label: '金额', width: 64 }, { key: 'purchase', label: '购置方式', width: 82 },
   { key: 'rent', label: '租金', width: 56 }, { key: 'supplier', label: '供应商', width: 104 },
-  { key: 'owner', label: '使用人', width: 78 }, { key: 'usage', label: '使用信息', width: 110 }
+  { key: 'owner', label: '使用人', width: 78 }
 ]
 const listColumnKeys = listColumns.map((item) => item.key)
 const parseListSettings = (): { columns: ListColumnKey[]; density: TableDensity } => {
@@ -564,16 +564,18 @@ const assetStatusLabel = (value: unknown): string => {
   return status === '借用中' ? '借用' : status
 }
 
+const listOwnerValue = (value: unknown): string => {
+  const owner = String(value ?? '').trim()
+  return owner && owner !== '未分配' ? owner : ''
+}
+
 const listCellValue = (item: AssetRecord, key: ListColumnKey): string | number => {
   if (key === 'code') return item.id || '-'
   if (key === 'date') return String(item.receiveDate || '-')
   if (key === 'purchase') return String(item.purchaseMethod || '-')
-  if (key === 'usage') {
-    const department = hasCurrentUsage(item) ? item.department : ''
-    return `${assetStatusLabel(item.status)} / ${department || '-'}`
-  }
   if (key === 'rent') return Number(item.rent || 0)
   if (key === 'status') return assetStatusLabel(item.status)
+  if (key === 'owner') return listOwnerValue(item.owner)
   const value = item[key]
   return value === undefined || value === null || value === '' ? '-' : String(value)
 }
