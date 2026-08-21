@@ -586,11 +586,18 @@ const assetStatusClass = (value: string): string => {
   return 'violet'
 }
 const padTimePart = (value: number): string => String(value).padStart(2, '0')
+const isPreciseOperationTime = (value: unknown): boolean => {
+  const text = String(value || '').trim()
+  if (!text) return false
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(text)) return true
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/.test(text)
+}
 const formatOperationTime = (value: unknown): string => {
   const text = String(value || '').trim()
   if (!text) return '-'
   if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(text)) return text
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${text} 00:00`
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text.slice(0, 7)
+  if (/^\d{4}-\d{2}$/.test(text)) return text
   const parsed = new Date(text)
   if (Number.isNaN(parsed.getTime())) return text
   return `${parsed.getFullYear()}-${padTimePart(parsed.getMonth() + 1)}-${padTimePart(parsed.getDate())} ${padTimePart(parsed.getHours())}:${padTimePart(parsed.getMinutes())}`
@@ -1203,18 +1210,77 @@ const operationTypeForLifecycle = (action: string): AssetOperationRecord['type']
   return ''
 }
 const operationTimestampForLifecycle = (record: AssetOperationRecord, action: string): string => {
-  if (action.includes('打回')) return formatOperationTime(record.rejectedAt || record.createdAt || record.date)
-  if (action.includes('取消') || action.includes('终止')) return formatOperationTime(record.cancelledAt || record.createdAt || record.date)
-  if (action.includes('签收') || action.includes('签字')) return formatOperationTime(record.signedAt || record.createdAt || record.date)
-  return formatOperationTime(record.createdAt || record.date)
+  if (action.includes('打回')) return formatOperationTime(record.rejectedAt || record.createdAt)
+  if (action.includes('取消') || action.includes('终止')) return formatOperationTime(record.cancelledAt || record.createdAt)
+  if (action.includes('签收') || action.includes('签字')) return formatOperationTime(record.signedAt || record.createdAt)
+  return formatOperationTime(record.createdAt)
 }
-const detailOperationRows = (item: AssetRecord): Array<[string, string, string]> => {
-  const history = item.lifecycle?.length ? item.lifecycle : [[item.purchaseDate || new Date().toISOString(), '资产入库', '通过资产系统录入']]
+type DetailOperationRow = {
+  time: string
+  operator: string
+  channel: string
+  action: string
+  content: string
+  precise: boolean
+  order: number
+}
+const operationActionLabel = (record: AssetOperationRecord): string => {
+  const labels: Record<AssetOperationRecord['type'], string> = {
+    INBOUND: '资产入库',
+    RECEIVE: '资产领用',
+    RETURN: '资产退库',
+    BORROW: '资产借用',
+    BORROW_RETURN: '借用归还',
+    HANDOVER: '资产交接'
+  }
+  return labels[record.type] || record.type
+}
+const detailValue = (value: unknown): string => {
+  const text = String(value ?? '').trim()
+  return text && text !== '-' ? text : ''
+}
+const operationContent = (item: AssetRecord, record: AssetOperationRecord | undefined,
+                          action: string, description: unknown): string => {
+  const base = detailValue(description)
+  const values: Array<[string, unknown]> = [
+    ['资产编码', record?.assetId || item.id],
+    ['资产名称', record?.assetName || item.name],
+    ['分类', record?.assetCategory || item.category],
+    ['品牌', record?.assetBrand || item.brand],
+    ['型号', record?.assetModel || item.model],
+    ['序列号', record?.assetSn || item.sn],
+    ['操作人', record?.operator || item.custodian],
+    ['使用人', record?.party || item.owner],
+    ['原使用人', record?.previousParty],
+    ['公司', record?.company || item.company],
+    ['部门', record?.department || item.department],
+    ['位置', record?.location || item.location],
+    ['交接类型', record?.handoverType],
+    ['预计归还', record?.expectedReturnDate],
+    ['签字人', record?.signer],
+    ['状态', record?.status],
+    ['备注', record?.note || item.note],
+    ['打回原因', record?.rejectionReason]
+  ]
+  const details = values
+    .map(([label, value]) => {
+      const text = detailValue(value)
+      return text ? `${label}：${text}` : ''
+    })
+    .filter(Boolean)
+  const prefix = base || `${action}已完成`
+  return [prefix, ...details].join('；')
+}
+const detailOperationRows = (item: AssetRecord): DetailOperationRow[] => {
+  const history = item.lifecycle?.length
+    ? item.lifecycle
+    : [[item.purchaseDate || '', '资产入库', '资产进入资产台账']]
   const candidates = operations.value
     .filter((record) => record.assetId === item.id)
     .sort((left, right) => String(left.createdAt || left.date).localeCompare(String(right.createdAt || right.date)))
   const used = new Set<string>()
-  return history.map(([time, action, description]) => {
+  const rows: DetailOperationRow[] = history.map(([time, action, description], index) => {
+    const legacyDate = /^\d{4}-\d{2}-\d{2}$/.test(String(time || '').trim())
     if (/^\d{4}-\d{2}-\d{2}$/.test(String(time || '').trim())) {
       const type = operationTypeForLifecycle(action)
       const candidate = type
@@ -1223,10 +1289,44 @@ const detailOperationRows = (item: AssetRecord): Array<[string, string, string]>
         : undefined
       if (candidate) {
         used.add(candidate.id)
-        return [operationTimestampForLifecycle(candidate, action), action, description]
+        return {
+          time: operationTimestampForLifecycle(candidate, action),
+          operator: detailValue(candidate.operator) || detailValue(item.custodian) || '-',
+          channel: detailValue(candidate.sourceType) || '网页',
+          action,
+          content: operationContent(item, candidate, action, description),
+          precise: true,
+          order: index
+        }
       }
     }
-    return [formatOperationTime(time), action, description]
+    return {
+      time: formatOperationTime(time),
+      operator: detailValue(item.custodian) || '-',
+      channel: '网页',
+      action,
+      content: operationContent(item, undefined, action, description),
+      precise: !legacyDate && isPreciseOperationTime(time),
+      order: index
+    }
+  })
+  candidates.forEach((record) => {
+    if (used.has(record.id)) return
+    const action = operationActionLabel(record)
+    rows.push({
+      time: operationTimestampForLifecycle(record, action),
+      operator: detailValue(record.operator) || detailValue(item.custodian) || '-',
+      channel: detailValue(record.sourceType) || '网页',
+      action,
+      content: operationContent(item, record, action, ''),
+      precise: true,
+      order: history.length + rows.length
+    })
+  })
+  return rows.sort((left, right) => {
+    if (left.precise !== right.precise) return left.precise ? -1 : 1
+    if (left.precise) return right.time.localeCompare(left.time)
+    return right.order - left.order
   })
 }
 const terminateReceipt = async (item: AssetRecord): Promise<void> => {
@@ -1541,7 +1641,7 @@ onMounted(() => {
             <label v-for="field in ([['供应商', detail.supplier], ['联系人', detail.supplierContact || detail.contact], ['联系方式', detail.supplierPhone || detail.contactPhone || detail.phone || detail.email], ['维保到期时间', detail.warrantyDate === '未设置' ? '' : detail.warrantyDate]] as Array<[string, unknown]>)" :key="field[0]" class="asset-detail-form-item"><span>{{ field[0] }}：</span><div class="asset-detail-readonly"><strong>{{ detailText(field[1]) }}</strong></div></label>
             <label class="asset-detail-form-item wide"><span>维保说明：</span><div class="asset-detail-readonly tall"><strong>{{ detailText(detail.maintenanceNote || detail.repairNote) }}</strong></div></label>
           </div></section>
-          <section class="asset-detail-section asset-detail-operations"><h3>操作记录</h3><div class="asset-detail-table-wrap"><table v-resizable-columns="'assets:detail:operations'" class="asset-detail-operation-table"><thead><tr><th>操作时间</th><th>操作人</th><th>渠道</th><th>操作类型</th><th>操作内容</th></tr></thead><tbody><tr v-for="(row, index) in detailOperationRows(detail)" :key="index"><td>{{ row[0] }}</td><td>{{ detail.custodian || user?.name || 'admin' }}</td><td>网页</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td></tr></tbody></table></div><div class="asset-detail-operation-footer"><span>共 {{ detailOperationRows(detail).length }} 条</span><button class="page-btn" type="button" disabled>‹</button><button class="page-btn active" type="button">1</button><button class="page-btn" type="button" disabled>›</button><el-select model-value="20" class="asset-page-size-select" aria-label="每页条数" disabled><el-option label="20 条/页" value="20" /></el-select></div></section>
+          <section class="asset-detail-section asset-detail-operations"><h3>操作记录</h3><div class="asset-detail-table-wrap"><table v-resizable-columns="'assets:detail:operations'" class="asset-detail-operation-table"><thead><tr><th>操作时间</th><th>操作人</th><th>渠道</th><th>操作类型</th><th>操作内容</th></tr></thead><tbody><tr v-for="(row, index) in detailOperationRows(detail)" :key="index"><td>{{ row.time }}</td><td>{{ row.operator }}</td><td>{{ row.channel }}</td><td>{{ row.action }}</td><td>{{ row.content }}</td></tr></tbody></table></div><div class="asset-detail-operation-footer"><span>共 {{ detailOperationRows(detail).length }} 条</span><button class="page-btn" type="button" disabled>‹</button><button class="page-btn active" type="button">1</button><button class="page-btn" type="button" disabled>›</button><el-select model-value="20" class="asset-page-size-select" aria-label="每页条数" disabled><el-option label="20 条/页" value="20" /></el-select></div></section>
         </div>
         <div class="asset-detail-footer-actions">
           <button v-if="detail.status === '空闲' && can('asset:item:receive')" class="table-action primary" type="button" @click="openAction(detail, 'receive')">领用</button>

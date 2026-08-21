@@ -671,7 +671,7 @@ public class AssetService {
                 case "borrow-return" -> {
                     ObjectNode borrowOperation = operationRepository.updateLatest(assetId, "BORROW", Set.of("待归还"), operation -> {
                         operation.put("status", "已归还");
-                        operation.put("returnedAt", date(commandFields.path("date").asText()));
+                        operation.put("returnedAt", operationTimestamp());
                     });
                     ObjectNode returnOperation = buildOperation(
                         asset, previous, commandFields, "BORROW_RETURN", "GH", "已完成");
@@ -684,19 +684,19 @@ public class AssetService {
                 case "handover-sign" -> operationRepository.updateLatest(
                     assetId, "HANDOVER", Set.of("待签字"), operation -> {
                         operation.put("status", "已完成");
-                        operation.put("signedAt", date(commandFields.path("date").asText()));
+                        operation.put("signedAt", operationTimestamp());
                         operation.put("signerSubject", commandFields.path("operatorSubject").asText());
                     });
                 case "handover-cancel" -> updatePendingHandoverOperation(
                     assetId, commandFields, operation -> {
                         operation.put("status", "已取消");
-                        operation.put("cancelledAt", date(commandFields.path("date").asText()));
+                        operation.put("cancelledAt", operationTimestamp());
                         operation.put("cancelledBy", commandFields.path("operator").asText());
                     });
                 case "handover-reject" -> updatePendingHandoverOperation(
                     assetId, commandFields, operation -> {
                         operation.put("status", "已打回");
-                        operation.put("rejectedAt", date(commandFields.path("date").asText()));
+                        operation.put("rejectedAt", operationTimestamp());
                         operation.put("rejectedBy", commandFields.path("operator").asText());
                         operation.put("rejectionReason", commandFields.path("reason").asText());
                     });
@@ -729,7 +729,7 @@ public class AssetService {
                 case "cancel-inbound" -> operationRepository.updateLatest(
                     assetId, "INBOUND", Set.of("已完成"), operation -> {
                         operation.put("status", "已取消");
-                        operation.put("cancelledAt", date(commandFields.path("date").asText()));
+                        operation.put("cancelledAt", operationTimestamp());
                     });
                 default -> {
                     // Metadata edits do not create lifecycle orders.

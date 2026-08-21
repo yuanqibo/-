@@ -12324,8 +12324,9 @@ body.is-resizing-column * {
 }
 
 .asset-detail-operation-table td:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.55;
 }
 
 .asset-detail-operation-footer {
