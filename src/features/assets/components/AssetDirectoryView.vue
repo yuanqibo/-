@@ -69,7 +69,7 @@ type ManagedOption = ManagedCatalogOption
 
 const props = withDefaults(defineProps<{ mode?: Mode }>(), { mode: 'list' })
 const router = useRouter()
-const { state, assets, operations, business, store, load, loadAssets, loadStore, create, copy, importMany, replaceAll, command } = useAssets()
+const { state, assets, operations, business, store, load, loadAssets, loadOperations, loadStore, create, copy, importMany, replaceAll, command } = useAssets()
 const { user } = usePortalSession()
 const { isEmployeeTerminal } = useTerminalMode()
 const query = ref('')
@@ -433,10 +433,10 @@ const operationAsset = (record: AssetOperationRecord): AssetRecord => {
     warrantyDate: current?.warrantyDate || '',
     operationId: record.id,
     operationType: record.type,
-    operationDate: record.date || '-',
+    operationDate: formatOperationTime(record.createdAt || record.date),
     operationStatus: record.status || '-',
     purchaseMethod: record.sourceType || (String(current?.purchaseMethod || '').includes('导入') ? 'excel批量导入' : '新增资产'),
-    createdDate: record.date || '-',
+    createdDate: formatOperationTime(record.createdAt || record.date),
     operator: record.operator || '-',
     employeeCode: record.employeeCode || '-',
     expectedReturnDate: record.expectedReturnDate || current?.expectedReturnDate || '-',
@@ -585,7 +585,17 @@ const assetStatusClass = (value: string): string => {
   if (value === '交接待签字') return 'red'
   return 'violet'
 }
-const operationDate = (item: AssetRecord): string => String(item.operationDate || item.receiveDate || item.borrowDate || item.purchaseDate || '-')
+const padTimePart = (value: number): string => String(value).padStart(2, '0')
+const formatOperationTime = (value: unknown): string => {
+  const text = String(value || '').trim()
+  if (!text) return '-'
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(text)) return text
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${text} 00:00`
+  const parsed = new Date(text)
+  if (Number.isNaN(parsed.getTime())) return text
+  return `${parsed.getFullYear()}-${padTimePart(parsed.getMonth() + 1)}-${padTimePart(parsed.getDate())} ${padTimePart(parsed.getHours())}:${padTimePart(parsed.getMinutes())}`
+}
+const operationDate = (item: AssetRecord): string => formatOperationTime(item.operationDate || item.receiveDate || item.borrowDate || item.purchaseDate)
 const handoverCellValue = (item: AssetRecord, key: HandoverColumnKey): string => {
   const values: Partial<Record<HandoverColumnKey, unknown>> = {
     operator: item.operator || item.custodian,
@@ -1183,9 +1193,42 @@ const statusType = (value: string): 'success' | 'warning' | 'info' | 'danger' =>
   return 'info'
 }
 const detailText = (value: unknown): string => String(value ?? '').trim() || '-'
-const detailOperationRows = (item: AssetRecord): Array<[string, string, string]> => item.lifecycle?.length
-  ? item.lifecycle
-  : [[item.purchaseDate || new Date().toISOString().slice(0, 10), '资产入库', '通过资产系统录入']]
+const operationTypeForLifecycle = (action: string): AssetOperationRecord['type'] | '' => {
+  if (action.includes('入库') || action.includes('清单替换')) return 'INBOUND'
+  if (action.includes('退库')) return 'RETURN'
+  if (action.includes('借用归还')) return 'BORROW_RETURN'
+  if (action.includes('借用')) return 'BORROW'
+  if (action.includes('交接')) return 'HANDOVER'
+  if (action.includes('领用') || action.includes('签收')) return 'RECEIVE'
+  return ''
+}
+const operationTimestampForLifecycle = (record: AssetOperationRecord, action: string): string => {
+  if (action.includes('打回')) return formatOperationTime(record.rejectedAt || record.createdAt || record.date)
+  if (action.includes('取消') || action.includes('终止')) return formatOperationTime(record.cancelledAt || record.createdAt || record.date)
+  if (action.includes('签收') || action.includes('签字')) return formatOperationTime(record.signedAt || record.createdAt || record.date)
+  return formatOperationTime(record.createdAt || record.date)
+}
+const detailOperationRows = (item: AssetRecord): Array<[string, string, string]> => {
+  const history = item.lifecycle?.length ? item.lifecycle : [[item.purchaseDate || new Date().toISOString(), '资产入库', '通过资产系统录入']]
+  const candidates = operations.value
+    .filter((record) => record.assetId === item.id)
+    .sort((left, right) => String(left.createdAt || left.date).localeCompare(String(right.createdAt || right.date)))
+  const used = new Set<string>()
+  return history.map(([time, action, description]) => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(time || '').trim())) {
+      const type = operationTypeForLifecycle(action)
+      const candidate = type
+        ? candidates.find((record) => !used.has(record.id) && record.type === type && (!record.date || record.date === time))
+          || candidates.find((record) => !used.has(record.id) && record.type === type)
+        : undefined
+      if (candidate) {
+        used.add(candidate.id)
+        return [operationTimestampForLifecycle(candidate, action), action, description]
+      }
+    }
+    return [formatOperationTime(time), action, description]
+  })
+}
 const terminateReceipt = async (item: AssetRecord): Promise<void> => {
   try {
     const isHandover = item.operationType === 'HANDOVER'
@@ -1207,7 +1250,7 @@ const disposeSelected = (): void => {
 }
 const handleAssetDisposalCreated = (): void => { selected.value = [] }
 onMounted(() => {
-  if (props.mode === 'list') void loadAssets()
+  if (props.mode === 'list') void Promise.all([loadAssets(), loadOperations()])
   else void load()
 })
 </script>

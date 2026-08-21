@@ -20,6 +20,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.hamcrest.Matchers.matchesPattern;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -223,6 +224,7 @@ class AssetControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].status").value("领用"))
             .andExpect(jsonPath("$.items[0].owner").value("李雷"))
+            .andExpect(jsonPath("$.items[0].lifecycle[1][0]").value(matchesPattern("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}")))
             .andExpect(jsonPath("$.items[0].lifecycle[1][1]").value("资产领用"));
 
         mvc.perform(post("/api/assets/commands/borrow").contentType(MediaType.APPLICATION_JSON).content("""

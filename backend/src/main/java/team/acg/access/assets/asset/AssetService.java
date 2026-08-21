@@ -11,6 +11,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.ArrayList;
@@ -25,6 +27,9 @@ import team.acg.access.assets.store.PortalReferenceCatalog;
 
 @Service
 public class AssetService {
+    private static final ZoneId OPERATION_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final DateTimeFormatter OPERATION_TIME_FORMATTER =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(OPERATION_ZONE);
     private static final int MAX_ASSETS = 5_000;
     private static final Set<String> ALLOWED_STATUS = Set.of(
         "空闲", "闲置", "上架", "待验收", "领用", "借用", "借用中", "维修中", "审批中",
@@ -191,7 +196,7 @@ public class AssetService {
             "company", "companyUnionId", "ownerCompany", "location", "custodian", "supplier",
             "price", "rent", "purchaseDate", "receiveDate", "phone", "email", "purchaseMethod",
             "orderNo", "unit", "note");
-        String today = java.time.LocalDate.now().toString();
+        String today = java.time.LocalDate.now(OPERATION_ZONE).toString();
 
         for (JsonNode draft : drafts) {
             if (draft == null || !draft.isObject()) {
@@ -227,7 +232,7 @@ public class AssetService {
                 if (!asset.has("receiveDate")) asset.put("receiveDate", asset.path("ownerSubject").asText("").isBlank() ? "" : today);
                 if (!asset.has("custodian")) asset.put("custodian", actor == null ? "系统" : actor.name());
                 ArrayNode lifecycle = mapper.createArrayNode();
-                lifecycle.add(mapper.createArrayNode().add(today).add("资产清单替换").add("通过完整资产清单导入"));
+                lifecycle.add(mapper.createArrayNode().add(operationTimestamp()).add("资产清单替换").add("通过完整资产清单导入"));
                 asset.set("lifecycle", lifecycle);
             }
             String status = normalizeReplacementStatus(requiredText(draft, "status", 32));
@@ -375,8 +380,9 @@ public class AssetService {
         asset.put("owner", assigned ? owner : "未分配");
         asset.put("status", "维修中".equals(condition) ? "维修中" : assigned ? "领用" : "空闲");
         ArrayNode lifecycle = mapper.createArrayNode();
-        lifecycle.add(mapper.createArrayNode().add(date(asset.path("purchaseDate").asText())).add("资产入库").add("通过新增资产表单录入"));
-        if (assigned) lifecycle.add(mapper.createArrayNode().add(date(asset.path("receiveDate").asText())).add("资产领用").add(owner + " 领用 " + asset.path("name").asText()));
+        String operationTime = operationTimestamp();
+        lifecycle.add(mapper.createArrayNode().add(operationTime).add("资产入库").add("通过新增资产表单录入"));
+        if (assigned) lifecycle.add(mapper.createArrayNode().add(operationTime).add("资产领用").add(owner + " 领用 " + asset.path("name").asText()));
         asset.set("lifecycle", lifecycle);
         return asset;
     }
@@ -1064,8 +1070,12 @@ public class AssetService {
 
     private void lifecycle(ObjectNode asset, JsonNode fields, String action, String description) {
         ArrayNode history = asset.path("lifecycle").isArray() ? (ArrayNode) asset.path("lifecycle") : mapper.createArrayNode();
-        history.add(mapper.createArrayNode().add(date(fields.path("date").asText())).add(action).add(description));
+        history.add(mapper.createArrayNode().add(operationTimestamp()).add(action).add(description));
         asset.set("lifecycle", history);
+    }
+
+    private String operationTimestamp() {
+        return OPERATION_TIME_FORMATTER.format(Instant.now());
     }
 
     private void validate(JsonNode asset, JsonNode existing, Set<String> ids,
