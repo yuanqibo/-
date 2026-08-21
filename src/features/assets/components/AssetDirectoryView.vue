@@ -592,6 +592,12 @@ const isPreciseOperationTime = (value: unknown): boolean => {
   if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(text)) return true
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/.test(text)
 }
+const isReliableOperationTime = (value: unknown): boolean => {
+  if (!isPreciseOperationTime(value)) return false
+  const text = String(value || '').trim().replace(' ', 'T')
+  const parsed = new Date(text)
+  return !Number.isNaN(parsed.getTime()) && parsed.getTime() <= Date.now() + 5 * 60 * 1000
+}
 const formatOperationTime = (value: unknown): string => {
   const text = String(value || '').trim()
   if (!text) return '-'
@@ -601,6 +607,12 @@ const formatOperationTime = (value: unknown): string => {
   const parsed = new Date(text)
   if (Number.isNaN(parsed.getTime())) return text
   return `${parsed.getFullYear()}-${padTimePart(parsed.getMonth() + 1)}-${padTimePart(parsed.getDate())} ${padTimePart(parsed.getHours())}:${padTimePart(parsed.getMinutes())}`
+}
+const formatHistoricalOperationTime = (value: unknown): string => {
+  if (isReliableOperationTime(value)) return formatOperationTime(value)
+  const text = String(value || '').trim()
+  const month = text.match(/^(\d{4}-\d{2})(?:-\d{2})?(?:[ T].*)?$/)
+  return month ? month[1] : formatOperationTime(value)
 }
 const operationDate = (item: AssetRecord): string => formatOperationTime(item.operationDate || item.receiveDate || item.borrowDate || item.purchaseDate)
 const handoverCellValue = (item: AssetRecord, key: HandoverColumnKey): string => {
@@ -1210,10 +1222,14 @@ const operationTypeForLifecycle = (action: string): AssetOperationRecord['type']
   return ''
 }
 const operationTimestampForLifecycle = (record: AssetOperationRecord, action: string): string => {
-  if (action.includes('打回')) return formatOperationTime(record.rejectedAt || record.createdAt)
-  if (action.includes('取消') || action.includes('终止')) return formatOperationTime(record.cancelledAt || record.createdAt)
-  if (action.includes('签收') || action.includes('签字')) return formatOperationTime(record.signedAt || record.createdAt)
-  return formatOperationTime(record.createdAt)
+  const eventTime = action.includes('打回')
+    ? record.rejectedAt
+    : action.includes('取消') || action.includes('终止')
+      ? record.cancelledAt
+      : action.includes('签收') || action.includes('签字')
+        ? record.signedAt
+        : undefined
+  return formatHistoricalOperationTime(isReliableOperationTime(eventTime) ? eventTime : record.createdAt || eventTime)
 }
 type DetailOperationRow = {
   time: string
@@ -1295,18 +1311,19 @@ const detailOperationRows = (item: AssetRecord): DetailOperationRow[] => {
           channel: detailValue(candidate.sourceType) || '网页',
           action,
           content: operationContent(item, candidate, action, description),
-          precise: true,
+          precise: isReliableOperationTime(candidate.createdAt) || isReliableOperationTime(candidate.signedAt)
+            || isReliableOperationTime(candidate.cancelledAt) || isReliableOperationTime(candidate.rejectedAt),
           order: index
         }
       }
     }
     return {
-      time: formatOperationTime(time),
+      time: formatHistoricalOperationTime(time),
       operator: detailValue(item.custodian) || '-',
       channel: '网页',
       action,
       content: operationContent(item, undefined, action, description),
-      precise: !legacyDate && isPreciseOperationTime(time),
+      precise: !legacyDate && isReliableOperationTime(time),
       order: index
     }
   })
