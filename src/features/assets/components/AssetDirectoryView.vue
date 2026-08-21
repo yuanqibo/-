@@ -610,9 +610,8 @@ const formatOperationTime = (value: unknown): string => {
 }
 const formatHistoricalOperationTime = (value: unknown): string => {
   if (isReliableOperationTime(value)) return formatOperationTime(value)
-  const text = String(value || '').trim()
-  const month = text.match(/^(\d{4}-\d{2})(?:-\d{2})?(?:[ T].*)?$/)
-  return month ? month[1] : formatOperationTime(value)
+  const now = new Date()
+  return `${now.getFullYear()}-${padTimePart(now.getMonth() + 1)}-${padTimePart(now.getDate())}`
 }
 const operationDate = (item: AssetRecord): string => formatOperationTime(item.operationDate || item.receiveDate || item.borrowDate || item.purchaseDate)
 const handoverCellValue = (item: AssetRecord, key: HandoverColumnKey): string => {
@@ -1258,44 +1257,17 @@ const detailValue = (value: unknown): string => {
 const operationContent = (item: AssetRecord, record: AssetOperationRecord | undefined,
                           action: string, description: unknown): string => {
   const base = detailValue(description)
-  const values: Array<[string, unknown]> = [
-    ['操作单号', record?.id],
-    ['资产编码', record?.assetId || item.id],
-    ['资产名称', record?.assetName || item.name],
-    ['分类', record?.assetCategory || item.category],
-    ['品牌', record?.assetBrand || item.brand],
-    ['型号', record?.assetModel || item.model],
-    ['序列号', record?.assetSn || item.sn],
-    ['资产价格', record?.assetPrice || item.price],
-    ['操作人', record?.operator || item.custodian],
-    ['使用人', record?.party || item.owner],
-    ['原使用人', record?.previousParty],
-    ['资产所属公司', record?.assetOwnerCompany],
-    ['公司', record?.company || item.company],
-    ['部门', record?.department || item.department],
-    ['位置', record?.location || item.location],
-    ['原公司', record?.previousCompany],
-    ['原部门', record?.previousDepartment],
-    ['原位置', record?.previousLocation],
-    ['交接类型', record?.handoverType],
-    ['预计归还', record?.expectedReturnDate],
-    ['签字人', record?.signer],
-    ['撤回人', record?.cancelledBy],
-    ['打回人', record?.rejectedBy],
-    ['状态', record?.status],
-    ['备注', record?.note || item.note],
-    ['通知内容', record?.noticeContent],
-    ['打回原因', record?.rejectionReason],
-    ['归还单号', record?.returnOrderId]
-  ]
-  const details = values
-    .map(([label, value]) => {
-      const text = detailValue(value)
-      return text ? `${label}：${text}` : ''
-    })
-    .filter(Boolean)
-  const prefix = base || `${action}已完成`
-  return [prefix, ...details].join('；')
+  if (base) return base
+  const name = detailValue(record?.assetName || item.name) || '该资产'
+  const operator = detailValue(record?.operator || item.custodian) || '系统'
+  const party = detailValue(record?.party || item.owner)
+  if (action.includes('退库')) return `${operator} 办理 ${name} 退库`
+  if (action.includes('归还')) return `${operator} 办理 ${name} 归还`
+  if (action.includes('借用')) return `${party || operator} 借用 ${name}`
+  if (action.includes('交接')) return `${name} 交接至 ${party || '接收人'}`
+  if (action.includes('领用')) return `${party || operator} 领用 ${name}`
+  if (action.includes('入库')) return `通过资产系统录入 ${name}`
+  return `${action}：${name}`
 }
 const detailOperationRows = (item: AssetRecord): DetailOperationRow[] => {
   const history = item.lifecycle?.length
