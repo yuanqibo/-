@@ -34,9 +34,9 @@ public class SelfServiceRequestPolicy {
     private static final Set<String> CONFIGURABLE_APPROVAL_SETTINGS = Set.of(
         "receiveAsset", "borrowAsset", "handoverAsset");
     private static final Map<String, Set<String>> OWNED_ASSET_STATUSES = Map.of(
-        "giveBackAsset", Set.of("借用中"),
+        "giveBackAsset", Set.of("借用", "借用中"),
         "returnAsset", Set.of("领用"),
-        "handoverAsset", Set.of("领用", "借用中"));
+        "handoverAsset", Set.of("领用", "借用", "借用中"));
 
     private final AppStoreRepository storeRepository;
     private final AssetService assetService;

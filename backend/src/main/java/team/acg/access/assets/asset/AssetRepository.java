@@ -72,6 +72,14 @@ public class AssetRepository {
             (rs, row) -> read(rs.getString(1)), "已处置");
     }
 
+    /** Migrate the former borrow label without changing any other asset fields. */
+    public int normalizeLegacyBorrowStatuses(Instant now) {
+        return jdbc.update(
+            "UPDATE asset_record SET status = ?, document = REPLACE(document, ?, ?), "
+                + "version = version + 1, updated_at = ? WHERE status = ?",
+            "借用", "\"status\":\"借用中\"", "\"status\":\"借用\"", Timestamp.from(now), "借用中");
+    }
+
     public long countByStatus(String status) {
         Long count = jdbc.queryForObject(
             "SELECT COUNT(*) FROM asset_record WHERE status = ?", Long.class, status);

@@ -107,7 +107,7 @@ class AssetControllerTest {
             .andExpect(jsonPath("$.items[?(@.id == 'PC-KEEP')].status").value("领用"))
             .andExpect(jsonPath("$.items[?(@.id == 'PC-KEEP')].location").value("总部"))
             .andExpect(jsonPath("$.items[?(@.id == 'PC-KEEP')].supplier").value("原供应商"))
-            .andExpect(jsonPath("$.items[?(@.id == 'PC-NEW')].status").value("借用中"))
+            .andExpect(jsonPath("$.items[?(@.id == 'PC-NEW')].status").value("借用"))
             .andExpect(jsonPath("$.items[?(@.id == 'PC-NEW')].name").value("电脑资产"))
             .andExpect(jsonPath("$.items[?(@.id == 'PC-IDLE')].ownerSubject").value(""))
             .andExpect(jsonPath("$.items[?(@.id == 'PC-IDLE')].company").value(""))

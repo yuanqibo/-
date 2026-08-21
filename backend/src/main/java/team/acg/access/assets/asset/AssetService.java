@@ -27,7 +27,8 @@ import team.acg.access.assets.store.PortalReferenceCatalog;
 public class AssetService {
     private static final int MAX_ASSETS = 5_000;
     private static final Set<String> ALLOWED_STATUS = Set.of(
-        "空闲", "闲置", "上架", "待验收", "领用", "借用中", "维修中", "审批中",
+        "空闲", "闲置", "上架", "待验收", "领用", "借用", "借用中", "维修中", "审批中",
+        "领用审批中", "交接审批中", "退库审批中",
         "领用待签字", "借用待签字", "交接待签字", "处置中", "已处置", "已报废");
     private static final Set<String> UNASSIGNED = Set.of("空闲", "闲置", "上架", "待验收");
     private static final Set<String> ASSIGNABLE = Set.of("空闲");
@@ -56,7 +57,20 @@ public class AssetService {
     }
 
     public List<JsonNode> list() {
-        return repository.findActive();
+        repository.normalizeLegacyBorrowStatuses(Instant.now());
+        return repository.findActive().stream()
+            .map(this::normalizeStatusAliases)
+            .toList();
+    }
+
+    /** Keep legacy persisted labels from leaking into API responses and UI filters. */
+    private JsonNode normalizeStatusAliases(JsonNode asset) {
+        if (!asset.isObject()) return asset;
+        String status = asset.path("status").asText("");
+        if (!"借用中".equals(status)) return asset;
+        ObjectNode normalized = asset.deepCopy();
+        normalized.put("status", "借用");
+        return normalized;
     }
 
     public long disposedCount() {
@@ -409,7 +423,7 @@ public class AssetService {
                 asset.put("location", location);
                 copyText(fields, asset, "custodian");
                 asset.put("owner", borrower); asset.put("ownerSubject", borrowerSubject);
-                asset.put("status", requiresSignature ? "借用待签字" : "借用中");
+                asset.put("status", requiresSignature ? "借用待签字" : "借用");
                 asset.put("borrowDate", date(requiredField(fields, "date")));
                 String expected = fields.path("expectedReturnDates").path(asset.path("id").asText()).asText(fields.path("expectedReturnDate").asText());
                 asset.put("expectedReturnDate", date(expected));
@@ -418,7 +432,7 @@ public class AssetService {
                 if (!requiresSignature) clearReceiptSnapshot(asset);
             }
             case "borrow-return" -> {
-                requireStatus(asset, Set.of("借用中"));
+                requireStatus(asset, Set.of("借用", "借用中"));
                 String location = requiredField(fields, "location");
                 copyText(fields, asset, "note");
                 asset.put("location", location);
@@ -427,7 +441,7 @@ public class AssetService {
                 lifecycle(asset, fields, "借用归还", requiredField(fields, "operator") + " 办理 " + name + " 归还");
             }
             case "handover" -> {
-                requireStatus(asset, Set.of("领用", "借用中"));
+                requireStatus(asset, Set.of("领用", "借用", "借用中"));
                 String receiver = requiredField(fields, "receiver");
                 String receiverSubject = requiredField(fields, "receiverSubject");
                 String location = requiredField(fields, "location");
@@ -472,13 +486,13 @@ public class AssetService {
             case "receipt-reject" -> rejectReceipt(asset, fields, false);
             case "receipt-cancel" -> rejectReceipt(asset, fields, true);
             case "borrow-delay" -> {
-                requireStatus(asset, Set.of("借用中"));
+                requireStatus(asset, Set.of("借用", "借用中"));
                 String expected = date(requiredField(fields, "expectedReturnDate"));
                 asset.put("expectedReturnDate", expected);
                 lifecycle(asset, fields, "借用延期", requiredField(fields, "operator") + " 延期 " + name + " 至 " + expected);
             }
             case "repair-start" -> {
-                requireStatus(asset, Set.of("空闲", "闲置", "上架", "待验收", "领用", "借用中"));
+                requireStatus(asset, Set.of("空闲", "闲置", "上架", "待验收", "领用", "借用", "借用中"));
                 asset.put("repairPreviousStatus", asset.path("status").asText());
                 asset.put("status", "维修中");
                 asset.put("repairStartedAt", date(fields.path("date").asText()));
@@ -596,7 +610,7 @@ public class AssetService {
             assignmentFields.put("receiver", asset.path("owner").asText());
             assignmentFields.put("receiverSubject", asset.path("ownerSubject").asText());
             String status = asset.path("status").asText();
-            if ("借用中".equals(status)) {
+            if (Set.of("借用", "借用中").contains(status)) {
                 assignmentFields.put("date", date(asset.path("borrowDate").asText()));
                 ObjectNode operation = buildOperation(asset, null, assignmentFields,
                     "BORROW", "JY", "待归还");
@@ -790,7 +804,7 @@ public class AssetService {
         if (!signatureImage.matches("^data:image/(png|jpeg);base64,[A-Za-z0-9+/=]+$") || signatureImage.length() > 700_000) {
             throw new IllegalArgumentException("A valid PNG or JPEG signature image is required");
         }
-        asset.put("status", "BORROW".equals(type) ? "借用中" : "领用");
+        asset.put("status", "BORROW".equals(type) ? "借用" : "领用");
         lifecycle(asset, fields, "员工签收", asset.path("owner").asText("接收人") + " 已签字确认");
         clearReceiptSnapshot(asset);
     }
@@ -1042,8 +1056,8 @@ public class AssetService {
     private String normalizeReplacementStatus(String value) {
         return switch (value) {
             case "在用", "领用中" -> "领用";
-            case "借用" -> "借用中";
-            case "领用审批中", "交接审批中", "退库审批中" -> "审批中";
+            case "借用中" -> "借用";
+            case "领用审批中", "交接审批中", "退库审批中" -> value;
             default -> value;
         };
     }
@@ -1091,14 +1105,15 @@ public class AssetService {
         if (before.equals(after)) return;
         boolean allowed = switch (before) {
             case "空闲", "闲置", "上架", "待验收" -> Set.of(
-                "领用", "借用中", "领用待签字", "借用待签字", "维修中", "审批中", "处置中", "已报废").contains(after);
-            case "领用" -> Set.of("空闲", "闲置", "维修中", "审批中", "交接待签字", "已报废").contains(after);
-            case "借用中" -> Set.of("空闲", "闲置", "维修中", "审批中", "交接待签字").contains(after);
-            case "维修中" -> Set.of("空闲", "闲置", "领用", "借用中", "已报废").contains(after);
-            case "审批中" -> Set.of("空闲", "闲置", "领用", "借用中", "已报废").contains(after);
-            case "交接待签字" -> Set.of("领用", "借用中").contains(after);
+                "领用", "借用", "借用中", "领用待签字", "借用待签字", "维修中", "审批中",
+                "领用审批中", "交接审批中", "退库审批中", "处置中", "已报废").contains(after);
+            case "领用" -> Set.of("空闲", "闲置", "维修中", "审批中", "领用审批中", "交接审批中", "退库审批中", "交接待签字", "已报废").contains(after);
+            case "借用", "借用中" -> Set.of("空闲", "闲置", "维修中", "审批中", "领用审批中", "交接审批中", "退库审批中", "交接待签字").contains(after);
+            case "维修中" -> Set.of("空闲", "闲置", "领用", "借用", "借用中", "已报废").contains(after);
+            case "审批中", "领用审批中", "交接审批中", "退库审批中" -> Set.of("空闲", "闲置", "领用", "借用", "借用中", "已报废").contains(after);
+            case "交接待签字" -> Set.of("领用", "借用", "借用中").contains(after);
             case "领用待签字" -> Set.of("空闲", "闲置", "上架", "待验收", "领用").contains(after);
-            case "借用待签字" -> Set.of("空闲", "闲置", "上架", "待验收", "借用中").contains(after);
+            case "借用待签字" -> Set.of("空闲", "闲置", "上架", "待验收", "借用", "借用中").contains(after);
             case "处置中" -> Set.of("空闲", "已处置").contains(after);
             case "已处置" -> "空闲".equals(after);
             case "已报废" -> false;

@@ -142,8 +142,8 @@ const actionStatuses: Partial<Record<AssetCommand, string[]>> = {
   receive: ['空闲'],
   borrow: ['空闲'],
   return: ['领用'],
-  'borrow-return': ['借用中'],
-  handover: ['领用', '借用中']
+  'borrow-return': ['借用', '借用中'],
+  handover: ['领用', '借用', '借用中']
 }
 const assetsAllowAction = (items: AssetRecord[], action: AssetCommand): boolean => {
   const allowed = actionStatuses[action]
@@ -153,8 +153,8 @@ const actionStatusWarning = (action: AssetCommand): string => ({
   receive: '领用只能选择空闲资产',
   borrow: '借用只能选择空闲资产',
   return: '退库只能选择领用资产',
-  'borrow-return': '归还只能选择借用中的资产',
-  handover: '交接只能选择领用或借用中的资产'
+  'borrow-return': '归还只能选择借用资产',
+  handover: '交接只能选择领用或借用资产'
 } as Partial<Record<AssetCommand, string>>)[action] || '所选资产当前状态不能执行此操作'
 const canCreateRequest = computed(() => permissions.value.has('asset:request:create'))
 const openEmployeeRequest = (): void => { void router.push('/requests') }
@@ -393,7 +393,7 @@ const filteredAssets = computed(() => {
     const modeMatch = isReceiveFlowMode.value
       ? ['闲置', '空闲', '领用', '领用中'].includes(item.status)
       : props.mode === 'borrow-return'
-        ? ['闲置', '空闲', '借用中'].includes(item.status)
+        ? ['闲置', '空闲', '借用', '借用中'].includes(item.status)
         : true
     return modeMatch
       && matchesPinyinSearch(searchable(item), keyword)
@@ -621,8 +621,8 @@ const receiveAction = computed<AssetCommand>(() => receiveReturnTab.value === 'r
 const pickerCandidates = computed(() => assets.value.filter((item) => {
   if (pickerAction.value === 'receive' || pickerAction.value === 'borrow') return item.status === '空闲'
   if (pickerAction.value === 'return') return ['领用', '领用中'].includes(item.status)
-  if (pickerAction.value === 'handover') return ['领用', '借用中', '交接待签字'].includes(item.status)
-  if (pickerAction.value === 'borrow-return') return item.status === '借用中'
+  if (pickerAction.value === 'handover') return ['领用', '借用', '借用中', '交接待签字'].includes(item.status)
+  if (pickerAction.value === 'borrow-return') return ['借用', '借用中'].includes(item.status)
   return false
 }))
 const confirmAssetPicker = (): void => {
@@ -1178,7 +1178,7 @@ const printOrderNow = (): void => window.print()
 
 const statusType = (value: string): 'success' | 'warning' | 'info' | 'danger' => {
   if (value === '领用') return 'success'
-  if (value === '借用中') return 'warning'
+  if (value === '借用' || value === '借用中') return 'warning'
   if (value === '维修中') return 'danger'
   return 'info'
 }
@@ -1504,8 +1504,8 @@ onMounted(() => {
           <button v-if="detail.status === '空闲' && can('asset:item:receive')" class="table-action primary" type="button" @click="openAction(detail, 'receive')">领用</button>
           <button v-if="detail.status === '领用' && can('asset:item:return')" class="table-action primary" type="button" @click="openAction(detail, 'return')">退库</button>
           <button v-if="detail.status === '空闲' && can('asset:item:borrow')" class="table-action primary" type="button" @click="openAction(detail, 'borrow')">借用</button>
-          <button v-if="detail.status === '借用中' && can('asset:item:borrowReturn')" class="table-action primary" type="button" @click="openAction(detail, 'borrow-return')">归还</button>
-          <button v-if="['领用', '借用中'].includes(detail.status) && can('asset:item:handover')" class="table-action" type="button" @click="openAction(detail, 'handover')">交接</button>
+          <button v-if="['借用', '借用中'].includes(detail.status) && can('asset:item:borrowReturn')" class="table-action primary" type="button" @click="openAction(detail, 'borrow-return')">归还</button>
+          <button v-if="['领用', '借用', '借用中'].includes(detail.status) && can('asset:item:handover')" class="table-action" type="button" @click="openAction(detail, 'handover')">交接</button>
         </div>
       </div>
     </el-drawer>

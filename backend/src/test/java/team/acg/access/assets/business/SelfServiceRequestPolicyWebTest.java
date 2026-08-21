@@ -243,7 +243,7 @@ class SelfServiceRequestPolicyWebTest {
             .andExpect(jsonPath("$.items[0].status").value("已同意"));
 
         ObjectNode borrowed = asset("A-BORROW-PENDING");
-        org.assertj.core.api.Assertions.assertThat(borrowed.path("status").asText()).isEqualTo("借用中");
+        org.assertj.core.api.Assertions.assertThat(borrowed.path("status").asText()).isEqualTo("借用");
         org.assertj.core.api.Assertions.assertThat(borrowed.path("borrowDate").asText()).isEqualTo("2026-07-22");
         org.assertj.core.api.Assertions.assertThat(borrowed.path("custodian").asText()).isEqualTo("管理员");
         org.assertj.core.api.Assertions.assertThat(borrowed.path("owner").asText()).isEqualTo("李雷");
@@ -265,11 +265,11 @@ class SelfServiceRequestPolicyWebTest {
             .andExpect(jsonPath("$.item.approvalStatus").value("APPROVED"));
 
         ObjectNode borrowed = asset("A-BORROW-NOW");
-        org.assertj.core.api.Assertions.assertThat(borrowed.path("status").asText()).isEqualTo("借用中");
+        org.assertj.core.api.Assertions.assertThat(borrowed.path("status").asText()).isEqualTo("借用");
         org.assertj.core.api.Assertions.assertThat(borrowed.path("owner").asText()).isEqualTo("李雷");
         mvc.perform(get("/api/assets"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items[?(@.id == 'A-BORROW-NOW')].status").value("借用中"));
+            .andExpect(jsonPath("$.items[?(@.id == 'A-BORROW-NOW')].status").value("借用"));
     }
 
     @Test
@@ -466,7 +466,7 @@ class SelfServiceRequestPolicyWebTest {
             .andReturn().getResponse().getContentAsString();
 
         ObjectNode pending = asset("A-GIVE-BACK");
-        org.assertj.core.api.Assertions.assertThat(pending.path("status").asText()).isEqualTo("借用中");
+        org.assertj.core.api.Assertions.assertThat(pending.path("status").asText()).isEqualTo("借用");
         org.assertj.core.api.Assertions.assertThat(pending.path("ownerSubject").asText()).isEqualTo("user-1");
 
         String requestId = mapper.readTree(response).path("item").path("id").asText();

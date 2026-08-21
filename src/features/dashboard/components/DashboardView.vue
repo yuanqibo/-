@@ -75,7 +75,7 @@ const totalValue = computed(() => assets.value.reduce((sum, item) => sum + Numbe
 const activeCount = computed(() => assets.value.filter((item) => item.status === '领用').length)
 const pendingCount = computed(() => requests.value.filter((item) => ['审批中', '待审批', '待执行'].includes(item.status)).length)
 const employeeAssets = computed(() => {
-  const assigned = assets.value.filter((item) => ['领用', '领用中', '借用中'].includes(item.status))
+  const assigned = assets.value.filter((item) => ['领用', '领用中', '借用', '借用中'].includes(item.status))
   return assigned.filter((item) => item.owner === user.value?.name || item.ownerSubject === user.value?.externalSubject)
 })
 const failedAssetImages = ref(new Set<string>())
@@ -83,14 +83,14 @@ const hasAssetImage = (item: AssetRecord): boolean => Boolean(item.image) && !fa
 const markAssetImageFailed = (item: AssetRecord): void => {
   failedAssetImages.value = new Set([...failedAssetImages.value, item.id])
 }
-const assetAssignmentLabel = (item: AssetRecord): string => item.status === '借用中' ? '借用' : '领用'
-const assetAssignmentDateLabel = (item: AssetRecord): string => item.status === '借用中' ? '借用日期' : '领用日期'
+const assetAssignmentLabel = (item: AssetRecord): string => ['借用', '借用中'].includes(item.status) ? '借用' : '领用'
+const assetAssignmentDateLabel = (item: AssetRecord): string => ['借用', '借用中'].includes(item.status) ? '借用日期' : '领用日期'
 const approvedRequestForAsset = (item: AssetRecord) => requests.value.find((request) =>
   ['已同意', '已完成'].includes(String(request.status || ''))
   && Array.isArray(request.assetIds)
   && request.assetIds.some((assetId) => String(assetId) === item.id)
 )
-const assetAssignmentDate = (item: AssetRecord): string => item.status === '借用中'
+const assetAssignmentDate = (item: AssetRecord): string => ['借用', '借用中'].includes(item.status)
   ? String(item.borrowDate || approvedRequestForAsset(item)?.borrowDate || item.receiveDate || '-')
   : String(item.receiveDate || approvedRequestForAsset(item)?.receiveDate || item.borrowDate || '-')
 const assetCustodian = (item: AssetRecord): string => {
@@ -100,14 +100,14 @@ const assetCustodian = (item: AssetRecord): string => {
 const assetModelLabel = (item: AssetRecord): string => [item.brand, item.model].filter(Boolean).join(' ') || '-'
 const openEmployeeRequest = (action: 'return' | 'handover', item: AssetRecord): void => {
   employeeAssetDetail.value = null
-  requestType.value = action === 'handover' ? '资产交接' : item.status === '借用中' ? '资产归还' : '资产退还'
+  requestType.value = action === 'handover' ? '资产交接' : ['借用', '借用中'].includes(item.status) ? '资产归还' : '资产退还'
   requestAssetId.value = item.id
   requestOpen.value = true
 }
 
 const statusRows = computed(() => {
   const receiveCount = assets.value.filter((item) => item.status === '领用').length
-  const borrowCount = assets.value.filter((item) => item.status === '借用中').length
+  const borrowCount = assets.value.filter((item) => ['借用', '借用中'].includes(item.status)).length
   const idleCount = Math.max(assets.value.length - receiveCount - borrowCount, 0)
   return [
     { key: 'receive', label: '领用', count: receiveCount, color: '#7c5cf6' },
@@ -195,7 +195,7 @@ const exactMetricLabel = (value: number, mode: CategoryMetricMode = 'count'): st
             <div class="device-card-details">
               <div class="device-card-title-row">
                 <h3 :title="item.name">{{ item.name }}</h3>
-                <span class="device-card-status" :class="{ borrowed: item.status === '借用中' }">{{ assetAssignmentLabel(item) }}</span>
+                <span class="device-card-status" :class="{ borrowed: ['借用', '借用中'].includes(item.status) }">{{ assetAssignmentLabel(item) }}</span>
               </div>
               <dl class="device-card-fields">
                 <div><dt>资产编码</dt><dd><button class="device-card-code" type="button" :title="`查看资产 ${item.id} 详情`" :aria-label="`查看资产 ${item.id} 详情`" @click="employeeAssetDetail = item">{{ item.id }}</button></dd></div>
