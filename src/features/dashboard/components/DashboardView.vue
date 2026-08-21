@@ -22,7 +22,7 @@ type DashboardTooltip = {
   color: string
 }
 
-const { state, assets, requests, load } = useDashboard()
+const { state, assets, disposedCount, requests, load } = useDashboard()
 const { user } = usePortalSession()
 const { isEmployeeTerminal } = useTerminalMode()
 const distributionMode = ref<DistributionMode>('organization')
@@ -112,13 +112,12 @@ const statusRows = computed(() => {
   return [
     { key: 'receive', label: '领用', count: receiveCount, color: '#7c5cf6' },
     { key: 'idle', label: '空闲', count: idleCount, color: '#20a7dc' },
+    { key: 'disposed', label: '已处置', count: disposedCount.value, color: '#f45f63' },
     { key: 'borrow', label: '借用', count: borrowCount, color: '#f59e0b' }
   ]
 })
 
-// The catalog and all dashboard charts use the in-stock asset scope. Disposed
-// records are intentionally kept in a separate disposal view and excluded here.
-const statusTotal = computed(() => assets.value.length)
+const statusTotal = computed(() => assets.value.length + disposedCount.value)
 
 const statusSegments = computed(() => {
   const circumference = 213.6
