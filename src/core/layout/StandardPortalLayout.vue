@@ -7,6 +7,7 @@ import { usePortalSession } from '../auth/portal-session'
 import { useTerminalMode, type PortalTerminalMode } from '../auth/terminal-mode'
 import type { PortalMenuItem } from '../auth/portal-context'
 import ApprovalNotificationDialog from '../../features/approvals/components/ApprovalNotificationDialog.vue'
+import SystemManualDialog from '../../features/help/SystemManualDialog.vue'
 import { useApprovals } from '../../features/approvals/composables/useApprovals'
 import type { ApprovalRecord } from '../../features/approvals/types/approval'
 import PortalNavIcon from './PortalNavIcon.vue'
@@ -32,6 +33,7 @@ const assetSubnav = ref<HTMLElement>()
 const systemSubnav = ref<HTMLElement>()
 const layoutActive = ref(true)
 const approvalNotificationOpen = ref(false)
+const systemManualOpen = ref(false)
 const routePreloads = new Map<string, Promise<void>>()
 let approvalRefreshTimer: ReturnType<typeof setInterval> | null = null
 let menuPreloadHandle: number | null = null
@@ -362,7 +364,7 @@ onUnmounted(() => {
           </button>
         </el-tooltip>
         <el-tooltip content="系统使用说明" placement="right">
-          <button class="sidebar-tool" type="button" aria-label="系统使用说明">
+          <button class="sidebar-tool" type="button" aria-label="系统使用说明" @click="systemManualOpen = true">
             <span class="sidebar-tool-icon"><el-icon><QuestionFilled /></el-icon></span>
           </button>
         </el-tooltip>
@@ -432,5 +434,6 @@ onUnmounted(() => {
       :items="pendingApprovals"
       @select="openApprovalRequest"
     />
+    <SystemManualDialog v-model="systemManualOpen" />
   </div>
 </template>
