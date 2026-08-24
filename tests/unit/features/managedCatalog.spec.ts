@@ -43,4 +43,15 @@ describe('flattenManagedCatalog', () => {
     expect(buildManagedCatalogTree(nodes, [], true)[0].children?.[0].value).toBe('封存仓库')
     expect(managedCatalogNames(nodes)).toEqual(['杭州公司', '封存仓库'])
   })
+
+  it('ignores malformed roots and children instead of throwing', () => {
+    const malformed = [{ id: 'bad', name: '有效节点', children: {} }, null, { id: 'bad-2', children: [] }] as never
+    expect(flattenManagedCatalog(malformed)).toEqual([{
+      value: '有效节点', label: '有效节点', unit: undefined, usefulLife: undefined
+    }])
+    expect(buildManagedCatalogTree(malformed)).toEqual([{
+      value: '有效节点', label: '有效节点', unit: undefined, usefulLife: undefined
+    }])
+    expect(managedCatalogNames(malformed)).toEqual(['有效节点'])
+  })
 })

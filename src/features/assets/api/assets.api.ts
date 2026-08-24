@@ -11,6 +11,12 @@ type BusinessDataResponse = {
 type StoreResponse = { values?: PortalStoreValues }
 type DirectoryResponse = { items?: Array<Record<string, unknown>> }
 
+const isObjectRecord = (value: unknown): value is Record<string, unknown> => Boolean(
+  value && typeof value === 'object' && !Array.isArray(value)
+)
+
+const arrayValue = <T>(value: unknown): T[] => Array.isArray(value) ? value as T[] : []
+
 const READ_CACHE_TTL_MS = 15_000
 const readCache = new Map<string, { expiresAt: number; request: Promise<unknown> }>()
 
@@ -38,7 +44,7 @@ export const fetchAssetCatalog = (): Promise<AssetCatalogResponse> => cachedRead
   const payload = await apiRequest<Partial<AssetCatalogResponse> | null>('/api/assets')
   const catalog = payload && typeof payload === 'object' ? payload : {}
   return {
-    items: Array.isArray(catalog.items) ? catalog.items : [],
+    items: arrayValue<AssetRecord>(catalog.items).filter(isObjectRecord) as AssetRecord[],
     disposedCount: Math.max(0, Number(catalog.disposedCount || 0))
   }
 })
@@ -50,9 +56,11 @@ export const fetchAssetOperations = (): Promise<AssetOperationRecord[]> => cache
   const size = 500
   for (let page = 1; page <= 20; page += 1) {
     const payload = await apiRequest<{ items?: AssetOperationRecord[]; total?: number }>(`/api/asset-operations?page=${page}&size=${size}`)
-    const items = payload.items || []
+    const response = isObjectRecord(payload) ? payload : {}
+    const items = arrayValue<AssetOperationRecord>(response.items)
+      .filter(isObjectRecord) as AssetOperationRecord[]
     records.push(...items)
-    if (items.length < size || records.length >= Number(payload.total || 0)) break
+    if (items.length < size || records.length >= Number(response.total || 0)) break
   }
   return records
 })
@@ -93,7 +101,14 @@ export const runAssetCommand = async (action: AssetCommand, assetIds: string[], 
 export const fetchBusinessData = (): Promise<BusinessDataResponse> =>
   cachedRead('business', async () => {
     const payload = await apiRequest<BusinessDataResponse | null>('/api/business-data')
-    return payload && typeof payload === 'object' ? payload : {}
+    if (!isObjectRecord(payload)) return {}
+    const rawValues = isObjectRecord(payload.values) ? payload.values : {}
+    const values = Object.fromEntries(Object.entries(rawValues)
+      .map(([key, value]) => [key, Array.isArray(value) ? value.filter(isObjectRecord) as BusinessRecord[] : []]))
+    return {
+      values,
+      versions: isObjectRecord(payload.versions) ? payload.versions as Record<string, number> : {}
+    }
   })
 
 export const createStocktake = async (item: Pick<BusinessRecord, 'name' | 'scope' | 'owner' | 'total' | 'date'>): Promise<BusinessRecord> => {
@@ -109,7 +124,10 @@ export const updateStocktake = async (id: string, value: Pick<BusinessRecord, 'c
 }
 
 export const fetchPortalStore = async (): Promise<PortalStoreValues> =>
-  cachedRead('store', async () => (await apiRequest<StoreResponse>('/api/store')).values || {})
+  cachedRead('store', async () => {
+    const payload = await apiRequest<StoreResponse | null>('/api/store')
+    return isObjectRecord(payload?.values) ? payload.values as PortalStoreValues : {}
+  })
 
 export const saveCatalog = async (domain: 'categories' | 'locations', value: unknown): Promise<unknown> => {
   const saved = await apiRequest(`/api/config/catalog/${domain}`, { method: 'PUT', body: { value } })

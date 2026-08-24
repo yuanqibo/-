@@ -7,8 +7,10 @@ import {
   copyAsset,
   createAsset,
   fetchAssetCatalog,
+  fetchAssetOperations,
   fetchAssets,
   fetchBusinessData,
+  fetchPortalStore,
   invalidateAssetDataCache,
   runAssetCommand,
   searchDirectoryPeople,
@@ -49,6 +51,17 @@ describe('assets feature API', () => {
 
     await expect(fetchAssetCatalog()).resolves.toEqual({ items: [], disposedCount: 0 })
     await expect(fetchBusinessData()).resolves.toEqual({})
+  })
+
+  it('drops malformed collection values before pages consume them', async () => {
+    apiRequest
+      .mockResolvedValueOnce({ items: null, total: 2 })
+      .mockResolvedValueOnce({ values: { requests: {}, stocktakes: [{ id: 'STK-1' }, null] } })
+      .mockResolvedValueOnce({ values: [] })
+
+    await expect(fetchAssetOperations()).resolves.toEqual([])
+    await expect(fetchBusinessData()).resolves.toMatchObject({ values: { requests: [], stocktakes: [{ id: 'STK-1' }] } })
+    await expect(fetchPortalStore()).resolves.toEqual({})
   })
 
   it('encodes command and stocktake identifiers', async () => {

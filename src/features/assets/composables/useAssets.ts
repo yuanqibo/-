@@ -17,6 +17,18 @@ import {
 } from '../api/assets.api'
 import type { AssetCommand, AssetDraft, AssetOperationRecord, AssetRecord, BusinessRecord, PortalStoreValues } from '../types/assets'
 
+const isObjectRecord = (value: unknown): value is Record<string, unknown> => Boolean(
+  value && typeof value === 'object' && !Array.isArray(value)
+)
+
+const asAssetRecords = (value: unknown): AssetRecord[] => Array.isArray(value)
+  ? value.filter(isObjectRecord) as AssetRecord[]
+  : []
+
+const asOperationRecords = (value: unknown): AssetOperationRecord[] => Array.isArray(value)
+  ? value.filter(isObjectRecord) as AssetOperationRecord[]
+  : []
+
 type AssetState = {
   assets: AssetRecord[]
   operations: AssetOperationRecord[]
@@ -72,7 +84,7 @@ const loadAssets = async (force = false): Promise<void> => {
     beginRequest()
     state.errorMessage = ''
     try {
-      state.assets = await fetchAssets()
+      state.assets = asAssetRecords(await fetchAssets())
       state.assetsLoaded = true
       syncInitialized()
     } catch (error) {
@@ -91,7 +103,7 @@ const loadOperations = async (force = false): Promise<void> => {
   operationsPending = (async () => {
     beginRequest()
     try {
-      state.operations = await fetchAssetOperations()
+      state.operations = asOperationRecords(await fetchAssetOperations())
       state.operationsLoaded = true
       syncInitialized()
     } catch {
@@ -111,7 +123,7 @@ const loadBusiness = async (force = false): Promise<void> => {
     beginRequest()
     try {
       const business = await fetchBusinessData()
-      state.business = business.values || {}
+      state.business = isObjectRecord(business.values) ? business.values as Record<string, BusinessRecord[]> : {}
       state.businessLoaded = true
       syncInitialized()
     } catch {
@@ -130,7 +142,8 @@ const loadStore = async (force = false): Promise<void> => {
   storePending = (async () => {
     beginRequest()
     try {
-      state.store = await fetchPortalStore()
+      const store = await fetchPortalStore()
+      state.store = isObjectRecord(store) ? store as PortalStoreValues : {}
       state.storeLoaded = true
       syncInitialized()
     } catch {
@@ -154,7 +167,7 @@ const replaceAssets = (items: AssetRecord[]): void => {
 }
 
 const reloadOperations = async (): Promise<void> => {
-  try { state.operations = await fetchAssetOperations() }
+  try { state.operations = asOperationRecords(await fetchAssetOperations()) }
   catch { state.operations = [] }
 }
 

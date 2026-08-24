@@ -460,7 +460,9 @@ const operationAsset = (record: AssetOperationRecord): AssetRecord => {
     ownerCompany: current?.ownerCompany || current?.company || record.company || ''
   }
 }
-const operationRows = (type: AssetOperationRecord['type']): AssetRecord[] => operations.value.filter((record) => record.type === type).map(operationAsset)
+const operationRows = (type: AssetOperationRecord['type']): AssetRecord[] => operations.value
+  .filter((record): record is AssetOperationRecord => Boolean(record && typeof record === 'object' && record.type === type))
+  .map(operationAsset)
 const matchesFlowQuery = (item: AssetRecord): boolean => {
   return matchesPinyinSearch([...searchable(item), item.operationId], query.value)
 }
@@ -505,7 +507,7 @@ const matchesBorrowFilters = (item: AssetRecord): boolean => matchesFlowQuery(it
   && contains(item.phone, borrowAdvanced.phone)
   && contains(item.email, borrowAdvanced.email)
   && equals(item.location, borrowAdvanced.location)
-const employeeRequestRows = computed<AssetRecord[]>(() => (business.value.requests || [])
+const employeeRequestRows = computed<AssetRecord[]>(() => (Array.isArray(business.value.requests) ? business.value.requests : [])
   .filter((request) => request.type === '资产领用' && Array.isArray(request.assetIds))
   .flatMap((request) => (request.assetIds as string[]).flatMap((assetId) => {
     const asset = assets.value.find((item) => item.id === assetId)
@@ -580,9 +582,10 @@ const listCellValue = (item: AssetRecord, key: ListColumnKey): string | number =
   return value === undefined || value === null || value === '' ? '-' : String(value)
 }
 const assetStatusClass = (value: string): string => {
-  if (value.includes('审批')) return 'green'
-  if (value === '空闲' || value === '闲置') return 'blue'
-  if (value === '交接待签字') return 'red'
+  const status = String(value || '')
+  if (status.includes('审批')) return 'green'
+  if (status === '空闲' || status === '闲置') return 'blue'
+  if (status === '交接待签字') return 'red'
   return 'violet'
 }
 const padTimePart = (value: number): string => String(value).padStart(2, '0')
