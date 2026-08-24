@@ -588,20 +588,20 @@ const assetStatusClass = (value: string): string => {
   if (status === '交接待签字') return 'red'
   return 'violet'
 }
-const padTimePart = (value: number): string => String(value).padStart(2, '0')
-const isPreciseOperationTime = (value: unknown): boolean => {
+function padTimePart(value: number): string { return String(value).padStart(2, '0') }
+function isPreciseOperationTime(value: unknown): boolean {
   const text = String(value || '').trim()
   if (!text) return false
   if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(text)) return true
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/.test(text)
 }
-const isReliableOperationTime = (value: unknown): boolean => {
+function isReliableOperationTime(value: unknown): boolean {
   if (!isPreciseOperationTime(value)) return false
   const text = String(value || '').trim().replace(' ', 'T')
   const parsed = new Date(text)
   return !Number.isNaN(parsed.getTime()) && parsed.getTime() <= Date.now() + 5 * 60 * 1000
 }
-const formatOperationTime = (value: unknown): string => {
+function formatOperationTime(value: unknown): string {
   const text = String(value || '').trim()
   if (!text) return '-'
   if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(text)) return text
@@ -611,12 +611,12 @@ const formatOperationTime = (value: unknown): string => {
   if (Number.isNaN(parsed.getTime())) return text
   return `${parsed.getFullYear()}-${padTimePart(parsed.getMonth() + 1)}-${padTimePart(parsed.getDate())} ${padTimePart(parsed.getHours())}:${padTimePart(parsed.getMinutes())}`
 }
-const formatHistoricalOperationTime = (value: unknown): string => {
+function formatHistoricalOperationTime(value: unknown): string {
   if (isReliableOperationTime(value)) return formatOperationTime(value)
   const now = new Date()
   return `${now.getFullYear()}-${padTimePart(now.getMonth() + 1)}-${padTimePart(now.getDate())}`
 }
-const operationDate = (item: AssetRecord): string => formatOperationTime(item.operationDate || item.receiveDate || item.borrowDate || item.purchaseDate)
+function operationDate(item: AssetRecord): string { return formatOperationTime(item.operationDate || item.receiveDate || item.borrowDate || item.purchaseDate) }
 const handoverCellValue = (item: AssetRecord, key: HandoverColumnKey): string => {
   const values: Partial<Record<HandoverColumnKey, unknown>> = {
     operator: item.operator || item.custodian,
