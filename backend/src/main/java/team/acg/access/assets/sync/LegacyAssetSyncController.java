@@ -41,6 +41,12 @@ public class LegacyAssetSyncController {
         return status;
     }
 
+    @GetMapping("/history")
+    @RequirePermission(permissions = "asset:integration:view")
+    public Map<String, Object> history(@RequestParam(defaultValue = "20") int limit) {
+        return Map.of("items", repository.history(limit));
+    }
+
     @GetMapping("/dead-letters")
     @RequirePermission(permissions = "asset:integration:view")
     public Map<String, Object> deadLetters(@RequestParam(defaultValue = "100") int limit) {

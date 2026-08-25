@@ -61,6 +61,18 @@ class LegacyAssetReadOnlyIntegrationTest {
             .andExpect(jsonPath("$.schedule").value("0 0/30 * * * *"))
             .andExpect(jsonPath("$.timeZone").value("Asia/Shanghai"));
 
+        Instant completedAt = Instant.now();
+        jdbc.update("INSERT INTO legacy_asset_sync_run (run_id, sync_code, window_start, window_end, status, fetched_count, applied_count, failed_count, error_message, started_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "run-001", "legacy-asset", Timestamp.from(completedAt.minusSeconds(600)), Timestamp.from(completedAt.minusSeconds(300)),
+            "SUCCESS", 12, 11, 0, null, Timestamp.from(completedAt.minusSeconds(300)), Timestamp.from(completedAt));
+
+        mvc.perform(get("/api/system/legacy-asset-sync/history"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].id").value("run-001"))
+            .andExpect(jsonPath("$.items[0].status").value("SUCCESS"))
+            .andExpect(jsonPath("$.items[0].fetchedCount").value(12))
+            .andExpect(jsonPath("$.items[0].appliedCount").value(11));
+
         String id = "dlq-001";
         Instant now = Instant.now();
         jdbc.update("INSERT INTO legacy_asset_sync_dead_letter (dead_letter_id, event_key, source_asset_id, error_message, retry_count, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

@@ -11,6 +11,38 @@ export type SystemIntegration = {
   updatedAt: string
 }
 
+export type LegacyAssetSyncStatus = {
+  sourceSystem: string
+  sourceOfTruth: string
+  readOnly: boolean
+  schedule: string
+  timeZone: string
+  cursorTime?: string
+  runId?: string
+  status?: string
+  fetchedCount?: number
+  appliedCount?: number
+  failedCount?: number
+  windowStart?: string
+  windowEnd?: string
+  startedAt?: string
+  completedAt?: string
+  errorMessage?: string
+}
+
+export type LegacyAssetSyncRun = {
+  id: string
+  status: string
+  fetchedCount: number
+  appliedCount: number
+  failedCount: number
+  windowStart: string
+  windowEnd: string
+  startedAt: string
+  completedAt?: string
+  errorMessage?: string
+}
+
 export type SystemFormDefinition = {
   id: string
   code: string

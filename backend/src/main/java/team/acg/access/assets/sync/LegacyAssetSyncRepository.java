@@ -122,6 +122,26 @@ public class LegacyAssetSyncRepository {
         return value;
     }
 
+    List<Map<String, Object>> history(int limit) {
+        int boundedLimit = Math.max(1, Math.min(limit, 100));
+        return jdbc.query("SELECT run_id, status, fetched_count, applied_count, failed_count, window_start, window_end, started_at, completed_at, error_message "
+                + "FROM legacy_asset_sync_run WHERE sync_code = ? ORDER BY started_at DESC LIMIT ?",
+            (rs, row) -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", rs.getString("run_id"));
+                item.put("status", rs.getString("status"));
+                item.put("fetchedCount", rs.getInt("fetched_count"));
+                item.put("appliedCount", rs.getInt("applied_count"));
+                item.put("failedCount", rs.getInt("failed_count"));
+                item.put("windowStart", rs.getTimestamp("window_start").toInstant().toString());
+                item.put("windowEnd", rs.getTimestamp("window_end").toInstant().toString());
+                item.put("startedAt", rs.getTimestamp("started_at").toInstant().toString());
+                if (rs.getTimestamp("completed_at") != null) item.put("completedAt", rs.getTimestamp("completed_at").toInstant().toString());
+                if (rs.getString("error_message") != null) item.put("errorMessage", rs.getString("error_message"));
+                return item;
+            }, SYNC_CODE, boundedLimit);
+    }
+
     List<Map<String, Object>> deadLetters(int limit) {
         int boundedLimit = Math.max(1, Math.min(limit, 200));
         return jdbc.query("SELECT dead_letter_id, event_key, source_asset_id, error_message, retry_count, status, created_at, updated_at "

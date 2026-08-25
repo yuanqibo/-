@@ -4786,6 +4786,35 @@ button.asset-code-rule-field-name {
   overflow: auto;
 }
 
+.legacy-sync-actions,
+.legacy-sync-history-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legacy-sync-name {
+  font-weight: 650;
+}
+
+.legacy-sync-alert {
+  margin: 0 0 12px;
+}
+
+.legacy-sync-history-meta {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.legacy-sync-error {
+  min-width: 220px;
+  max-width: 360px;
+  white-space: normal;
+  word-break: break-word;
+}
+
 .employee-directory-panel .panel-header {
   margin-bottom: 12px;
 }
