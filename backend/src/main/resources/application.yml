@@ -58,6 +58,22 @@ asset-portal:
   store:
     max-keys-per-request: ${STORE_MAX_KEYS_PER_REQUEST:100}
     max-value-bytes: ${STORE_MAX_VALUE_BYTES:10485760}
+  legacy-asset-sync:
+    enabled: ${LEGACY_ASSET_SYNC_ENABLED:false}
+    read-only: ${LEGACY_ASSET_SYNC_READ_ONLY:true}
+    base-url: ${LEGACY_ASSET_SYNC_BASE_URL:https://ams.bearrental.com}
+    app-id: ${LEGACY_ASSET_SYNC_APP_ID:}
+    app-secret: ${LEGACY_ASSET_SYNC_APP_SECRET:}
+    username: ${LEGACY_ASSET_SYNC_USERNAME:}
+    cron: ${LEGACY_ASSET_SYNC_CRON:0 0/30 * * * *}
+    zone: ${LEGACY_ASSET_SYNC_ZONE:Asia/Shanghai}
+    request-timeout: ${LEGACY_ASSET_SYNC_REQUEST_TIMEOUT:15s}
+    request-interval: ${LEGACY_ASSET_SYNC_REQUEST_INTERVAL:250ms}
+    safety-delay: ${LEGACY_ASSET_SYNC_SAFETY_DELAY:5m}
+    overlap: ${LEGACY_ASSET_SYNC_OVERLAP:10m}
+    bootstrap-enabled: ${LEGACY_ASSET_SYNC_BOOTSTRAP_ENABLED:false}
+    page-size: ${LEGACY_ASSET_SYNC_PAGE_SIZE:100}
+    initial-cursor: ${LEGACY_ASSET_SYNC_INITIAL_CURSOR:}
 
 ecp:
   sdk:

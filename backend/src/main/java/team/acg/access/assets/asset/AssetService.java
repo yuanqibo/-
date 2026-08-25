@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -33,7 +34,7 @@ public class AssetService {
     private static final int MAX_ASSETS = 5_000;
     private static final Set<String> ALLOWED_STATUS = Set.of(
         "空闲", "闲置", "上架", "待验收", "领用", "借用", "借用中", "维修中", "审批中",
-        "领用审批中", "交接审批中", "退库审批中",
+        "领用审批中", "交接审批中", "退库审批中", "调拨中",
         "领用待签字", "借用待签字", "交接待签字", "处置中", "已处置", "已报废");
     private static final Set<String> UNASSIGNED = Set.of("空闲", "闲置", "上架", "待验收");
     private static final Set<String> ASSIGNABLE = Set.of("空闲");
@@ -48,6 +49,15 @@ public class AssetService {
     private final AssetCodeGenerator codeGenerator;
     private final AssetWorkflowPolicy workflowPolicy;
     private final AssetOperationRepository operationRepository;
+    /**
+     * During the overlap period the legacy system remains the only write authority.
+     * Keeping this as configuration rather than a compile-time switch allows a
+     * controlled rollback while the integration is being verified in production.
+     */
+    @Value("${asset-portal.legacy-asset-sync.enabled:false}")
+    private boolean legacySyncEnabled;
+    @Value("${asset-portal.legacy-asset-sync.read-only:true}")
+    private boolean legacySyncReadOnly;
     public static final Actor SYSTEM = Actor.SYSTEM;
 
     public AssetService(AssetRepository repository, ObjectMapper mapper, PortalReferenceCatalog referenceCatalog,
@@ -146,6 +156,7 @@ public class AssetService {
 
     @Transactional
     public Instant replaceAll(List<JsonNode> assets) {
+        assertWritable();
         if (assets == null || assets.size() > MAX_ASSETS) {
             throw new IllegalArgumentException("Asset snapshot exceeds the 5000 record limit");
         }
@@ -177,6 +188,7 @@ public class AssetService {
 
     @Transactional
     public List<JsonNode> replaceCatalog(List<JsonNode> drafts, Actor actor, boolean resetHistory) {
+        assertWritable();
         if (drafts == null || drafts.isEmpty() || drafts.size() > MAX_ASSETS) {
             throw new IllegalArgumentException("Asset replacement requires between 1 and 5000 rows");
         }
@@ -256,6 +268,7 @@ public class AssetService {
 
     @Transactional
     public List<JsonNode> execute(String action, List<String> assetIds, JsonNode fields) {
+        assertWritable();
         if (action == null || action.isBlank()) throw new IllegalArgumentException("Asset action is required");
         int maximum = isImportAction(action) ? MAX_ASSETS : 500;
         if (assetIds == null || assetIds.isEmpty() || assetIds.size() > maximum) {
@@ -303,6 +316,7 @@ public class AssetService {
 
     @Transactional
     public JsonNode create(JsonNode draft, Actor actor) {
+        assertWritable();
         if (draft == null) throw new IllegalArgumentException("Asset draft is required");
         return createMany(List.of(draft), actor).get(0);
     }
@@ -314,6 +328,7 @@ public class AssetService {
 
     @Transactional
     public JsonNode copy(String sourceAssetId, JsonNode requestedCopy, Actor actor) {
+        assertWritable();
         repository.lockForWrite();
         JsonNode source = repository.find(sourceAssetId);
         if (source == null) throw new IllegalArgumentException("Source asset was not found: " + sourceAssetId);
@@ -337,6 +352,7 @@ public class AssetService {
 
     @Transactional
     public List<JsonNode> createMany(List<JsonNode> drafts, Actor actor) {
+        assertWritable();
         if (drafts == null || drafts.isEmpty() || drafts.size() > MAX_ASSETS) throw new IllegalArgumentException("Asset import requires between 1 and 5000 rows");
         repository.lockForWrite();
         List<JsonNode> assets = repository.findAll();
@@ -358,6 +374,13 @@ public class AssetService {
         Actor trustedActor = actor == null ? Actor.SYSTEM : actor;
         created.forEach(asset -> recordInitialOperations(asset, trustedActor));
         return created;
+    }
+
+    private void assertWritable() {
+        if (legacySyncEnabled && legacySyncReadOnly) {
+            throw new ResponseStatusException(HttpStatus.LOCKED,
+                "Asset catalog is read-only while legacy AMS is the source of truth");
+        }
     }
 
     private ObjectNode buildAsset(JsonNode draft) {

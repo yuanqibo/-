@@ -74,12 +74,30 @@ PUBLIC_BASE_URL=https://assets.example.com
 APPROVAL_CALLBACK_URL=
 ECP_SDK_PERMISSION_ENABLED=false
 ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY=...
+LEGACY_ASSET_SYNC_ENABLED=true
+LEGACY_ASSET_SYNC_READ_ONLY=true
+LEGACY_ASSET_SYNC_APP_ID=...
+LEGACY_ASSET_SYNC_APP_SECRET=...
+# 可选：使用老系统指定登录账号权限，避免超管数据范围
+LEGACY_ASSET_SYNC_USERNAME=
+LEGACY_ASSET_SYNC_REQUEST_INTERVAL=250ms
+LEGACY_ASSET_SYNC_BOOTSTRAP_ENABLED=true # only for the first full sync
+LEGACY_ASSET_SYNC_CRON=0 0/30 * * * *
+LEGACY_ASSET_SYNC_ZONE=Asia/Shanghai
 DATABASE_URL=jdbc:mysql://127.0.0.1:3306/asset_portal?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
 DATABASE_USER=asset_portal
 DATABASE_PASSWORD=...
 ```
 
 `ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY` 用于 Java 后端加密系统对接凭据，必须是 Base64 编码的 32 字节随机值。首次部署可用 `openssl rand -base64 32` 生成，后续必须保持不变并通过密钥管理系统注入，不能提交到 Git。
+
+老系统接口机器人必须先绑定到 `LEGACY_ASSET_SYNC_APP_ID` 对应的应用，否则取 Token 会返回未绑定错误。首次全量同步成功后，将 `LEGACY_ASSET_SYNC_BOOTSTRAP_ENABLED` 改为 `false`；资产写入仍由老系统负责，新系统只接收同步。
+
+如果管理员已为应用开通账号级接口，可配置 `LEGACY_ASSET_SYNC_USERNAME`，系统会改用 `getAuthOpenToken`，只同步该老系统登录账号有权限看到的资产；该接口同样需要老系统管理员开通。
+
+`LEGACY_ASSET_SYNC_REQUEST_INTERVAL` 控制老系统资产接口调用间隔，默认 `250ms`，用于避免首次全量同步时触发供应方限流。若供应方返回 SafeLine `468` 频率保护，当前任务会立即停止且不自动重试，避免延长冷却时间；等待下一次调度即可。
+
+首次全量同步使用 `pageAsset` 分页返回的完整资产快照，避免逐条补查详情；每日增量仅对 `queryAssetChange` 返回的变更资产调用 `queryAssetDetail`。
 
 `ECP_TENANT_ID` 是可选租户白名单；配置后 Java 会拒绝其他租户的有效令牌，不配置则按 ECP 会话本身解析用户与权限。`ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET` 只在显式开启 `ECP_SDK_PERMISSION_ENABLED=true`、需要 SDK 签名快照权限切面时提供。默认生产模式使用 Java 后端基于 ECP session context 的 Bearer 权限守卫。
 
@@ -141,6 +159,13 @@ Vue 标准化迁移已完成。首页、资产、入库、领用退库、借用�
 DATABASE_PASSWORD='...' \
 ECP_APP_SECRET='...' \
 ASSET_PORTAL_SYSTEM_CONFIG_ENCRYPTION_KEY='...' \
+LEGACY_ASSET_SYNC_ENABLED=true \
+LEGACY_ASSET_SYNC_READ_ONLY=true \
+LEGACY_ASSET_SYNC_APP_ID='...' \
+LEGACY_ASSET_SYNC_APP_SECRET='...' \
+LEGACY_ASSET_SYNC_USERNAME='' \
+LEGACY_ASSET_SYNC_REQUEST_INTERVAL='250ms' \
+LEGACY_ASSET_SYNC_BOOTSTRAP_ENABLED=true \
 bash scripts/setup-server.sh
 ```
 

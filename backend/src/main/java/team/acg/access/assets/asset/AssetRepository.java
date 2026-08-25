@@ -99,6 +99,20 @@ public class AssetRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    /** Applies a source-system snapshot while keeping the target record version monotonic. */
+    public void upsertFromSync(JsonNode asset, Instant now) {
+        String id = asset.path("id").asText("").trim();
+        if (id.isEmpty()) throw new IllegalArgumentException("Synchronized asset has no id");
+        List<Long> versions = jdbc.query("SELECT version FROM asset_record WHERE asset_id = ?", (rs, row) -> rs.getLong(1), id);
+        if (versions.isEmpty()) {
+            jdbc.update("INSERT INTO asset_record (asset_id, status, document, version, updated_at) VALUES (?, ?, ?, ?, ?)",
+                id, asset.path("status").asText(), asset.toString(), 1L, Timestamp.from(now));
+            return;
+        }
+        jdbc.update("UPDATE asset_record SET status = ?, document = ?, version = ?, updated_at = ? WHERE asset_id = ?",
+            asset.path("status").asText(), asset.toString(), versions.get(0) + 1, Timestamp.from(now), id);
+    }
+
     public void lockForWrite() {
         jdbc.queryForObject("SELECT version FROM asset_write_guard WHERE guard_id = 1 FOR UPDATE", Long.class);
     }
