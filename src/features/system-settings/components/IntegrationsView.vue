@@ -104,7 +104,7 @@ watch(historyOpen, (open) => {
       <el-alert v-if="sync.errorMessage" class="legacy-sync-alert" type="error" :title="sync.errorMessage" show-icon :closable="false" />
 
       <div v-loading="state.loading || sync.loading" class="table-wrap">
-        <table>
+        <table class="integration-table">
           <thead>
             <tr>
               <th>编码</th>
@@ -122,8 +122,8 @@ watch(historyOpen, (open) => {
             <tr v-if="sync.status" class="legacy-sync-row">
               <td><code>LEGACY_AMS_ASSET_SYNC</code></td>
               <td>
-                <div class="legacy-sync-name">老系统资产同步</div>
-                <div class="panel-subtitle">{{ scheduleLabel }} · {{ sync.status.timeZone }}</div>
+                <span class="legacy-sync-name">老系统资产同步</span>
+                <span class="legacy-sync-schedule">{{ scheduleLabel }} · {{ sync.status.timeZone }}</span>
               </td>
               <td>Bear Rental AMS</td>
               <td>老系统 → 当前系统</td>

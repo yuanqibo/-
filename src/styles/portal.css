@@ -4793,8 +4793,41 @@ button.asset-code-rule-field-name {
   gap: 10px;
 }
 
+.integration-table {
+  width: 100%;
+  min-width: 1440px;
+}
+
+.integration-table th,
+.integration-table td {
+  padding: 9px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.integration-table th {
+  font-size: 12px;
+}
+
+.integration-table code {
+  font-size: 12px;
+}
+
+.integration-table .btn {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
 .legacy-sync-name {
+  display: inline-block;
   font-weight: 650;
+}
+
+.legacy-sync-schedule {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .legacy-sync-alert {
