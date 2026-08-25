@@ -4892,11 +4892,17 @@ button.asset-code-rule-field-name {
   overflow: auto;
 }
 
+.legacy-sync-history-table table {
+  width: max-content;
+  min-width: 100%;
+}
+
 .legacy-sync-history-table th,
 .legacy-sync-history-table td {
   padding: 6px 8px;
   font-size: 12px;
   line-height: 18px;
+  white-space: nowrap;
 }
 
 .legacy-sync-history-table .tag {
@@ -4923,8 +4929,10 @@ button.asset-code-rule-field-name {
   padding: 0;
 }
 
-.legacy-sync-history-page-size {
+.legacy-sync-history-pagination > .legacy-sync-history-page-size.el-select {
+  flex: 0 0 82px;
   width: 82px;
+  max-width: 82px;
 }
 
 .legacy-sync-history-page-size .el-select__wrapper {
@@ -4935,10 +4943,10 @@ button.asset-code-rule-field-name {
 
 .legacy-sync-error {
   min-width: 220px;
-  max-width: 360px;
-  overflow: hidden;
+  max-width: none;
+  overflow: visible;
   white-space: nowrap;
-  text-overflow: ellipsis;
+  text-overflow: clip;
 }
 
 .employee-directory-panel .panel-header {

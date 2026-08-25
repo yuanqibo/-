@@ -213,7 +213,7 @@ watch(historyOpen, (open) => {
           class="legacy-sync-history-pagination-controls"
           background
           small
-          layout="total, prev, pager, next"
+          layout="prev, pager, next"
           :current-page="historyPage"
           :page-size="historyPageSize"
           :total="sync.historyTotal"
