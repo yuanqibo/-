@@ -43,8 +43,18 @@ public class LegacyAssetSyncController {
 
     @GetMapping("/history")
     @RequirePermission(permissions = "asset:integration:view")
-    public Map<String, Object> history(@RequestParam(defaultValue = "20") int limit) {
-        return Map.of("items", repository.history(limit));
+    public Map<String, Object> history(@RequestParam(defaultValue = "1") int page,
+                                        @RequestParam(defaultValue = "10") int pageSize) {
+        int boundedPageSize = Math.max(1, Math.min(pageSize, 50));
+        int total = repository.historyCount();
+        int lastPage = Math.max(1, (int) Math.ceil((double) total / boundedPageSize));
+        int boundedPage = Math.max(1, Math.min(page, lastPage));
+        return Map.of(
+            "items", repository.history(boundedPage, boundedPageSize),
+            "page", boundedPage,
+            "pageSize", boundedPageSize,
+            "total", total
+        );
     }
 
     @GetMapping("/dead-letters")

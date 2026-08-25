@@ -14,9 +14,12 @@ const permissions = computed(() => new Set(user.value?.permissionCodes || []))
 const dialogOpen = ref(false)
 const historyOpen = ref(false)
 const submitting = ref(false)
+const historyPage = ref(1)
+const historyPageSize = ref(10)
 const sync = reactive({
   status: null as LegacyAssetSyncStatus | null,
   history: [] as LegacyAssetSyncRun[],
+  historyTotal: 0,
   loading: false,
   errorMessage: ''
 })
@@ -48,19 +51,32 @@ const loadLegacyAssetSync = async (): Promise<void> => {
   sync.loading = true
   sync.errorMessage = ''
   try {
-    const [status, history] = await Promise.all([fetchLegacyAssetSyncStatus(), fetchLegacyAssetSyncHistory()])
+    const [status, history] = await Promise.all([fetchLegacyAssetSyncStatus(), fetchLegacyAssetSyncHistory(historyPage.value, historyPageSize.value)])
     sync.status = status
-    sync.history = history
+    sync.history = history.items || []
+    sync.historyTotal = history.total || 0
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       sync.status = null
       sync.history = []
+      sync.historyTotal = 0
       return
     }
     sync.errorMessage = error instanceof Error ? error.message : '同步状态加载失败'
   } finally {
     sync.loading = false
   }
+}
+
+const changeHistoryPage = (page: number): void => {
+  historyPage.value = page
+  void loadLegacyAssetSync()
+}
+
+const changeHistoryPageSize = (pageSize: number): void => {
+  historyPageSize.value = pageSize
+  historyPage.value = 1
+  void loadLegacyAssetSync()
 }
 
 const integrationCount = computed(() => integrations.value.length + (sync.status ? 1 : 0))
@@ -81,7 +97,10 @@ onMounted(() => {
 })
 
 watch(historyOpen, (open) => {
-  if (open) void loadLegacyAssetSync()
+  if (open) {
+    historyPage.value = 1
+    void loadLegacyAssetSync()
+  }
 })
 </script>
 
@@ -188,6 +207,31 @@ watch(historyOpen, (open) => {
             </tr>
           </tbody>
         </table>
+      </div>
+      <div v-if="sync.historyTotal > 0" class="legacy-sync-history-pagination">
+        <el-pagination
+          class="legacy-sync-history-pagination-controls"
+          background
+          small
+          layout="total, prev, pager, next"
+          :current-page="historyPage"
+          :page-size="historyPageSize"
+          :total="sync.historyTotal"
+          :disabled="sync.loading"
+          @current-change="changeHistoryPage"
+        />
+        <el-select
+          :model-value="historyPageSize"
+          class="legacy-sync-history-page-size"
+          aria-label="同步记录每页条数"
+          placement="top-start"
+          :disabled="sync.loading"
+          @update:model-value="changeHistoryPageSize"
+        >
+          <el-option label="10 条/页" :value="10" />
+          <el-option label="20 条/页" :value="20" />
+          <el-option label="50 条/页" :value="50" />
+        </el-select>
       </div>
     </el-dialog>
 

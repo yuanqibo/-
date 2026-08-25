@@ -122,10 +122,15 @@ public class LegacyAssetSyncRepository {
         return value;
     }
 
-    List<Map<String, Object>> history(int limit) {
-        int boundedLimit = Math.max(1, Math.min(limit, 100));
+    int historyCount() {
+        Integer total = jdbc.queryForObject("SELECT COUNT(*) FROM legacy_asset_sync_run WHERE sync_code = ?", Integer.class, SYNC_CODE);
+        return total == null ? 0 : total;
+    }
+
+    List<Map<String, Object>> history(int page, int pageSize) {
+        int offset = (page - 1) * pageSize;
         return jdbc.query("SELECT run_id, status, fetched_count, applied_count, failed_count, window_start, window_end, started_at, completed_at, error_message "
-                + "FROM legacy_asset_sync_run WHERE sync_code = ? ORDER BY started_at DESC LIMIT ?",
+                + "FROM legacy_asset_sync_run WHERE sync_code = ? ORDER BY started_at DESC, run_id DESC LIMIT ? OFFSET ?",
             (rs, row) -> {
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("id", rs.getString("run_id"));
@@ -139,7 +144,7 @@ public class LegacyAssetSyncRepository {
                 if (rs.getTimestamp("completed_at") != null) item.put("completedAt", rs.getTimestamp("completed_at").toInstant().toString());
                 if (rs.getString("error_message") != null) item.put("errorMessage", rs.getString("error_message"));
                 return item;
-            }, SYNC_CODE, boundedLimit);
+            }, SYNC_CODE, pageSize, offset);
     }
 
     List<Map<String, Object>> deadLetters(int limit) {

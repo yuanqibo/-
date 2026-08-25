@@ -43,6 +43,13 @@ export type LegacyAssetSyncRun = {
   errorMessage?: string
 }
 
+export type LegacyAssetSyncHistoryPage = {
+  items: LegacyAssetSyncRun[]
+  page: number
+  pageSize: number
+  total: number
+}
+
 export type SystemFormDefinition = {
   id: string
   code: string

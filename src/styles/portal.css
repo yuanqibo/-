@@ -4859,6 +4859,33 @@ button.asset-code-rule-field-name {
   flex-wrap: wrap;
 }
 
+.legacy-sync-history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 42px;
+  padding-top: 10px;
+}
+
+.legacy-sync-history-pagination-controls.el-pagination {
+  --el-pagination-font-size: 13px;
+  --el-pagination-button-width: 30px;
+  --el-pagination-button-height: 30px;
+  margin: 0;
+  padding: 0;
+}
+
+.legacy-sync-history-page-size {
+  width: 96px;
+}
+
+.legacy-sync-history-page-size .el-select__wrapper {
+  min-height: 30px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
 .legacy-sync-error {
   min-width: 220px;
   max-width: 360px;

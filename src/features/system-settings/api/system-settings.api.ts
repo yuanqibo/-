@@ -1,5 +1,5 @@
 import { apiRequest } from '../../../shared/api/http'
-import type { LegacyAssetSyncRun, LegacyAssetSyncStatus, SelfServiceSettings, SystemFormDefinition, SystemIntegration } from '../types/system-settings'
+import type { LegacyAssetSyncHistoryPage, LegacyAssetSyncStatus, SelfServiceSettings, SystemFormDefinition, SystemIntegration } from '../types/system-settings'
 
 export const fetchIntegrations = async (): Promise<SystemIntegration[]> =>
   (await apiRequest<{ items: SystemIntegration[] }>('/api/system/integrations')).items || []
@@ -12,8 +12,8 @@ export const saveIntegration = (value: Omit<SystemIntegration, 'id' | 'secretCon
 export const fetchLegacyAssetSyncStatus = (): Promise<LegacyAssetSyncStatus> =>
   apiRequest<LegacyAssetSyncStatus>('/api/system/legacy-asset-sync/status')
 
-export const fetchLegacyAssetSyncHistory = async (): Promise<LegacyAssetSyncRun[]> =>
-  (await apiRequest<{ items: LegacyAssetSyncRun[] }>('/api/system/legacy-asset-sync/history?limit=20')).items || []
+export const fetchLegacyAssetSyncHistory = (page = 1, pageSize = 10): Promise<LegacyAssetSyncHistoryPage> =>
+  apiRequest<LegacyAssetSyncHistoryPage>(`/api/system/legacy-asset-sync/history?page=${page}&pageSize=${pageSize}`)
 
 export const fetchForms = async (): Promise<SystemFormDefinition[]> =>
   (await apiRequest<{ items: SystemFormDefinition[] }>('/api/system/forms')).items || []

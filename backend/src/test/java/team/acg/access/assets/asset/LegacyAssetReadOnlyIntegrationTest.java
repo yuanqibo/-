@@ -66,8 +66,11 @@ class LegacyAssetReadOnlyIntegrationTest {
             "run-001", "legacy-asset", Timestamp.from(completedAt.minusSeconds(600)), Timestamp.from(completedAt.minusSeconds(300)),
             "SUCCESS", 12, 11, 0, null, Timestamp.from(completedAt.minusSeconds(300)), Timestamp.from(completedAt));
 
-        mvc.perform(get("/api/system/legacy-asset-sync/history"))
+        mvc.perform(get("/api/system/legacy-asset-sync/history").param("page", "1").param("pageSize", "10"))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.page").value(1))
+            .andExpect(jsonPath("$.pageSize").value(10))
+            .andExpect(jsonPath("$.total").value(1))
             .andExpect(jsonPath("$.items[0].id").value("run-001"))
             .andExpect(jsonPath("$.items[0].status").value("SUCCESS"))
             .andExpect(jsonPath("$.items[0].fetchedCount").value(12))
