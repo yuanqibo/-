@@ -4853,44 +4853,92 @@ button.asset-code-rule-field-name {
 }
 
 .legacy-sync-history-meta {
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   flex-wrap: wrap;
 }
 
+.el-dialog.legacy-sync-history-dialog {
+  height: min(560px, calc(100vh - 36px));
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.legacy-sync-history-dialog .el-dialog__header {
+  flex: 0 0 auto;
+  padding: 14px 16px 8px;
+  margin-right: 0;
+}
+
+.legacy-sync-history-dialog .el-dialog__title {
+  font-size: 16px;
+}
+
+.legacy-sync-history-dialog .el-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 16px 12px;
+}
+
+.legacy-sync-history-dialog .legacy-sync-history-table {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.legacy-sync-history-table th,
+.legacy-sync-history-table td {
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.legacy-sync-history-table .tag {
+  min-height: 20px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
 .legacy-sync-history-pagination {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  min-height: 42px;
-  padding-top: 10px;
+  min-height: 30px;
+  padding-top: 6px;
 }
 
 .legacy-sync-history-pagination-controls.el-pagination {
-  --el-pagination-font-size: 13px;
-  --el-pagination-button-width: 30px;
-  --el-pagination-button-height: 30px;
+  --el-pagination-font-size: 12px;
+  --el-pagination-button-width: 24px;
+  --el-pagination-button-height: 24px;
   margin: 0;
   padding: 0;
 }
 
 .legacy-sync-history-page-size {
-  width: 96px;
+  width: 82px;
 }
 
 .legacy-sync-history-page-size .el-select__wrapper {
-  min-height: 30px;
+  min-height: 24px;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .legacy-sync-error {
   min-width: 220px;
   max-width: 360px;
-  white-space: normal;
-  word-break: break-word;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .employee-directory-panel .panel-header {

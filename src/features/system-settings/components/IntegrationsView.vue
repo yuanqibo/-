@@ -173,7 +173,7 @@ watch(historyOpen, (open) => {
 
     <el-alert v-if="state.errorMessage" type="error" :title="state.errorMessage" show-icon :closable="false" />
 
-    <el-dialog v-model="historyOpen" title="老系统资产同步记录" width="min(1080px, 94vw)" append-to-body>
+    <el-dialog v-model="historyOpen" class="legacy-sync-history-dialog" title="老系统资产同步记录" width="min(1080px, 94vw)" align-center append-to-body>
       <div class="legacy-sync-history-meta">
         <span>同步频率：{{ scheduleLabel }}</span>
         <span>时区：{{ sync.status?.timeZone || '-' }}</span>
@@ -200,7 +200,7 @@ watch(historyOpen, (open) => {
               <td>{{ item.fetchedCount }}</td>
               <td>{{ item.appliedCount }}</td>
               <td>{{ item.failedCount }}</td>
-              <td class="legacy-sync-error">{{ item.errorMessage || '-' }}</td>
+              <td class="legacy-sync-error" :title="item.errorMessage || '-'">{{ item.errorMessage || '-' }}</td>
             </tr>
             <tr v-if="!sync.history.length" class="empty-row">
               <td colspan="7">尚无同步执行记录。</td>
