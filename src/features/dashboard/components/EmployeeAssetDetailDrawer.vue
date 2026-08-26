@@ -44,7 +44,7 @@ const modelLabel = (asset: AssetRecord): string => [asset.brand, asset.model].fi
               <span class="device-card-status" :class="{ borrowed: ['借用', '借用中'].includes(asset.status) }">{{ assignmentLabel }}</span>
             </div>
             <dl class="employee-asset-detail-key-fields">
-              <div><dt>资产编码</dt><dd>{{ displayAssetCode(asset) }}</dd></div>
+              <div><dt>资产编码</dt><dd><span class="asset-code-text">{{ displayAssetCode(asset) }}</span></dd></div>
               <div><dt>品牌/型号</dt><dd>{{ modelLabel(asset) }}</dd></div>
             </dl>
           </div>

@@ -14959,8 +14959,22 @@ body.is-resizing-column * {
 }
 
 .asset-code-text {
-  color: #1296db;
+  color: #6f91ad;
   font-weight: 500;
+}
+
+td .asset-code-text {
+  color: #6f91ad;
+}
+
+.asset-code-text:hover,
+.asset-code-text:focus-visible {
+  color: #537b9b;
+}
+
+.handover-asset-card strong.asset-code-text,
+.handover-selected-card strong.asset-code-text {
+  color: #6f91ad;
 }
 
 .asset-picker-footer {

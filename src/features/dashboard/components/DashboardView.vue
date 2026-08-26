@@ -212,7 +212,7 @@ const exactMetricLabel = (value: number, mode: CategoryMetricMode = 'count'): st
                 <span class="device-card-status" :class="{ borrowed: ['借用', '借用中'].includes(item.status) }">{{ assetAssignmentLabel(item) }}</span>
               </div>
               <dl class="device-card-fields">
-                <div><dt>资产编码</dt><dd><button class="device-card-code" type="button" :title="`查看资产 ${displayAssetCode(item)} 详情`" :aria-label="`查看资产 ${displayAssetCode(item)} 详情`" @click="employeeAssetDetail = item">{{ displayAssetCode(item) }}</button></dd></div>
+                <div><dt>资产编码</dt><dd><button class="device-card-code asset-code-text" type="button" :title="`查看资产 ${displayAssetCode(item)} 详情`" :aria-label="`查看资产 ${displayAssetCode(item)} 详情`" @click="employeeAssetDetail = item">{{ displayAssetCode(item) }}</button></dd></div>
                 <div><dt>品牌/型号</dt><dd :title="assetModelLabel(item)">{{ assetModelLabel(item) }}</dd></div>
                 <div><dt>管理员</dt><dd :title="assetCustodian(item)">{{ assetCustodian(item) }}</dd></div>
                 <div><dt>{{ assetAssignmentDateLabel(item) }}</dt><dd :title="assetAssignmentDate(item)">{{ assetAssignmentDate(item) }}</dd></div>

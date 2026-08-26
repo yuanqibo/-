@@ -467,7 +467,7 @@ watch(() => [props.modelValue, props.type, props.preselectedAssetId] as const, (
           <div class="handover-asset-list">
             <label v-for="item in filteredRequestAssets" :key="item.id" class="handover-asset-card" :class="{ selected: form.assetIds.includes(item.id) }">
               <el-checkbox :model-value="form.assetIds.includes(item.id)" :aria-label="`选择资产 ${displayAssetCode(item)}`" @change="setAssetSelected(item.id, Boolean($event))" />
-              <span><strong>{{ displayAssetCode(item) }}</strong><em>{{ item.name }}</em><small>{{ assetMeta(item) }}</small></span>
+              <span><strong class="asset-code-text">{{ displayAssetCode(item) }}</strong><em>{{ item.name }}</em><small>{{ assetMeta(item) }}</small></span>
             </label>
             <div v-if="!filteredRequestAssets.length" class="handover-asset-empty">{{ isSelfReceive ? '当前分类没有可领用的空闲资产' : isSelfBorrow ? '当前分类没有可借用的空闲资产' : isSelfGiveBack ? '没有可归还的本人借用资产' : isSelfReturn ? '没有可退还的本人领用资产' : '没有符合条件的本人资产' }}</div>
           </div>
@@ -475,7 +475,7 @@ watch(() => [props.modelValue, props.type, props.preselectedAssetId] as const, (
         <div class="handover-asset-column selected-column">
           <div class="handover-asset-column-head"><strong>已选择资产 {{ selectedAssets.length }}</strong><el-button v-if="selectedAssets.length" link type="danger" @click="form.assetIds = []">清空</el-button></div>
           <div class="handover-asset-list">
-            <article v-for="item in selectedAssets" :key="item.id" class="handover-selected-card"><span><strong>{{ displayAssetCode(item) }}</strong><em>{{ item.name }}</em><small>{{ assetMeta(item) }}</small></span><el-button circle text :icon="Close" :aria-label="`移除资产 ${displayAssetCode(item)}`" @click="setAssetSelected(item.id, false)" /></article>
+            <article v-for="item in selectedAssets" :key="item.id" class="handover-selected-card"><span><strong class="asset-code-text">{{ displayAssetCode(item) }}</strong><em>{{ item.name }}</em><small>{{ assetMeta(item) }}</small></span><el-button circle text :icon="Close" :aria-label="`移除资产 ${displayAssetCode(item)}`" @click="setAssetSelected(item.id, false)" /></article>
             <div v-if="!selectedAssets.length" class="handover-asset-empty">尚未选择资产</div>
           </div>
         </div>
