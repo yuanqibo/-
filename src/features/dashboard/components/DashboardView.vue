@@ -112,6 +112,8 @@ const statusRows = computed(() => {
     { status: '借用', key: 'borrow', label: '借用', color: '#f59e0b' },
     { status: '维修中', key: 'repair', label: '维修中', color: '#e1a235' },
     { status: '调拨中', key: 'transfer', label: '调拨中', color: '#2e9f99' },
+    { status: '流程中', key: 'workflow', label: '流程中', color: '#6f7d8c' },
+    { status: '状态待确认', key: 'unconfirmed', label: '状态待确认', color: '#a66a3f' },
     { status: '处置中', key: 'disposing', label: '处置中', color: '#df7b45' },
     { status: '已处置', key: 'disposed', label: '已处置', color: '#f45f63' },
     { status: '已报废', key: 'scrapped', label: '已报废', color: '#8d99ae' }

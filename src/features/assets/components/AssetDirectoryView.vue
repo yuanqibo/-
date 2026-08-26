@@ -8,7 +8,7 @@ import { searchDirectoryPeople } from '../api/assets.api'
 import { buildManagedCatalogTree, flattenManagedCatalog, managedCatalogNames, type ManagedCatalogOption, type ManagedCatalogTreeOption } from '../composables/managedCatalog'
 import type { AssetImportMode } from '../composables/parseAssetWorkbook'
 import { useAssets } from '../composables/useAssets'
-import { displayAssetCode, type AssetCommand, type AssetDraft, type AssetImportRow, type AssetOperationRecord, type AssetRecord, type DirectoryPerson } from '../types/assets'
+import { displayAssetCode, displayAssetStatus, type AssetCommand, type AssetDraft, type AssetImportRow, type AssetOperationRecord, type AssetRecord, type DirectoryPerson } from '../types/assets'
 import { hasPortalPermission } from '../../../authz/permission-aliases'
 import { matchesPinyinSearch } from '../../../shared/search/pinyin-search'
 import type { AssetOrderPrintKind } from './AssetOrderPrintPreview.vue'
@@ -577,7 +577,7 @@ const listCellValue = (item: AssetRecord, key: ListColumnKey): string | number =
   if (key === 'date') return String(item.receiveDate || '-')
   if (key === 'purchase') return String(item.purchaseMethod || '-')
   if (key === 'rent') return Number(item.rent || 0)
-  if (key === 'status') return assetStatusLabel(item.status)
+  if (key === 'status') return displayAssetStatus(item)
   if (key === 'owner') return listOwnerValue(item.owner)
   const value = item[key]
   return value === undefined || value === null || value === '' ? '-' : String(value)
@@ -1420,7 +1420,7 @@ onMounted(() => {
               <tr v-for="item in displayedRows" :key="item.id">
                 <td class="asset-list-select-cell"><input type="checkbox" :aria-label="`选择${item.id}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td>
                 <td v-for="column in listDisplayedColumns" :key="column.key">
-                  <span v-if="column.key === 'status'" class="asset-status-pill" :class="assetStatusClass(item.status)">{{ assetStatusLabel(item.status) }}</span>
+                  <span v-if="column.key === 'status'" class="asset-status-pill" :class="assetStatusClass(item.status)">{{ displayAssetStatus(item) }}</span>
                   <button v-else-if="column.key === 'code'" class="link" type="button" @click="detail = item">{{ displayAssetCode(item) }}</button>
                   <template v-else>{{ listCellValue(item, column.key) }}</template>
                 </td>
@@ -1619,7 +1619,7 @@ onMounted(() => {
     <el-drawer :model-value="Boolean(detail)" class="asset-detail-drawer" aria-label="资产详情" title="资产详情" size="min(1120px, 96vw)" append-to-body @close="detail = null">
       <div v-if="detail" class="asset-detail-page">
         <div class="asset-detail-content">
-          <div class="asset-detail-title-row"><h3>资产详情</h3><el-tag :type="statusType(detail.status)">{{ assetStatusLabel(detail.status) }}</el-tag></div>
+          <div class="asset-detail-title-row"><h3>资产详情</h3><el-tag :type="statusType(detail.status)">{{ displayAssetStatus(detail) }}</el-tag></div>
           <section class="asset-detail-section"><h3>领用信息</h3><div class="asset-detail-form-grid">
             <label class="asset-detail-form-item"><span>人员姓名：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.owner === '未分配' ? '' : detail.owner) }}</strong></div></label>
             <label class="asset-detail-form-item"><span>使用公司：</span><div class="asset-detail-readonly"><strong>{{ detailText(hasCurrentUsage(detail) ? detail.company : '') }}</strong></div></label>
@@ -1627,7 +1627,7 @@ onMounted(() => {
             <label class="asset-detail-form-item"><span>领用/借用日期：</span><div class="asset-detail-readonly"><strong>{{ detailText(hasCurrentUsage(detail) ? detail.receiveDate || detail.borrowDate : '') }}</strong></div></label>
           </div></section>
           <section class="asset-detail-section"><h3>基本信息</h3><div class="asset-detail-form-grid">
-            <label v-for="field in ([['资产编码', displayAssetCode(detail)], ['资产名称', detail.name], ['资产分类', detail.category || detail.type], ['管理员', detail.custodian], ['品牌', detail.brand], ['型号', detail.model], ['所属/承租公司', detail.ownerCompany || detail.company], ['资产状况', assetStatusLabel(detail.condition || detail.status)], ['所在位置', detail.location], ['购置/起租日期', detail.purchaseDate], ['订单号', detail.orderNo], ['计量单位', detail.unit], ['购置方式', detail.purchaseMethod]] as Array<[string, unknown]>)" :key="field[0]" class="asset-detail-form-item"><span>{{ field[0] }}：</span><div class="asset-detail-readonly"><strong>{{ detailText(field[1]) }}</strong></div></label>
+            <label v-for="field in ([['资产编码', displayAssetCode(detail)], ['资产名称', detail.name], ['资产分类', detail.category || detail.type], ['管理员', detail.custodian], ['品牌', detail.brand], ['型号', detail.model], ['所属/承租公司', detail.ownerCompany || detail.company], ['资产状况', displayAssetStatus(detail)], ['老系统状态码', detail.legacyAssetStatus], ['老系统单据状态码', detail.legacyQuoteStatus], ['状态核验', detail.legacyStatusVerified === false ? '待确认' : '已确认'], ['所在位置', detail.location], ['购置/起租日期', detail.purchaseDate], ['订单号', detail.orderNo], ['计量单位', detail.unit], ['购置方式', detail.purchaseMethod]] as Array<[string, unknown]>)" :key="field[0]" class="asset-detail-form-item"><span>{{ field[0] }}：</span><div class="asset-detail-readonly"><strong>{{ detailText(field[1]) }}</strong></div></label>
             <label class="asset-detail-form-item"><span>使用期限：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.usageMonths) }}</strong><em>月</em></div></label>
             <label class="asset-detail-form-item"><span>金额：</span><div class="asset-detail-readonly"><strong>{{ Number(detail.price || 0).toLocaleString('zh-CN') }}</strong><em>元</em></div></label>
             <label class="asset-detail-form-item wide"><span>备注：</span><div class="asset-detail-readonly tall"><strong>{{ detailText(detail.note) }}</strong></div></label>
@@ -1659,7 +1659,7 @@ onMounted(() => {
     <el-dialog v-model="pickerOpen" :title="`选择${actionLabel(pickerAction)}资产`" width="min(980px, 94vw)" append-to-body>
       <div class="asset-picker-toolbar"><span>共 {{ pickerCandidates.length }} 项可选资产</span></div>
       <el-table ref="pickerTableRef" :data="pickerCandidates" max-height="460" row-key="id" @selection-change="pickerSelection = $event">
-        <el-table-column type="selection" width="48" /><el-table-column label="资产编码" min-width="130"><template #default="{ row }">{{ displayAssetCode(row) }}</template></el-table-column><el-table-column prop="name" label="资产名称" min-width="160" /><el-table-column prop="category" label="资产分类" min-width="120" /><el-table-column prop="status" label="状态" width="90"><template #default="{ row }">{{ assetStatusLabel(row.status) }}</template></el-table-column><el-table-column prop="owner" label="使用人" width="110" /><el-table-column prop="location" label="所在位置" min-width="140" />
+        <el-table-column type="selection" width="48" /><el-table-column label="资产编码" min-width="130"><template #default="{ row }">{{ displayAssetCode(row) }}</template></el-table-column><el-table-column prop="name" label="资产名称" min-width="160" /><el-table-column prop="category" label="资产分类" min-width="120" /><el-table-column prop="status" label="状态" min-width="160"><template #default="{ row }">{{ displayAssetStatus(row) }}</template></el-table-column><el-table-column prop="owner" label="使用人" width="110" /><el-table-column prop="location" label="所在位置" min-width="140" />
       </el-table>
       <template #footer><el-button @click="pickerOpen = false">取消</el-button><el-button type="primary" @click="confirmAssetPicker">下一步</el-button></template>
     </el-dialog>

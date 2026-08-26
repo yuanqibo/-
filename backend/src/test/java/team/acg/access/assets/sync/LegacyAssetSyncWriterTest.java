@@ -44,6 +44,9 @@ class LegacyAssetSyncWriterTest {
         assertThat(mapped.path("legacyAssetCode").asText()).isEqualTo("PC-007");
         assertThat(mapped.path("sourceSystem").asText()).isEqualTo("bear-rental-ams");
         assertThat(mapped.path("status").asText()).isEqualTo("借用");
+        assertThat(mapped.path("legacyStatusDisplay").asText()).isEqualTo("借用");
+        assertThat(mapped.path("legacyStatusVerified").asBoolean()).isTrue();
+        assertThat(mapped.path("legacySourcePayload").path("assetStatus").asInt()).isEqualTo(9);
         assertThat(mapped.path("owner").asText()).isEqualTo("李雷");
         verify(assets).appendAudit("legacy-asset-7", "LEGACY_SYNC", "", "借用", syncedAt);
     }
@@ -63,21 +66,21 @@ class LegacyAssetSyncWriterTest {
     }
 
     @Test
-    void mapsEveryStatusPresentInTheLegacySnapshot() {
+    void mapsEveryKnownStatusAndMarksUndocumentedValuesAsUnconfirmed() {
         List<StatusCase> cases = List.of(
             new StatusCase(1, 1, "空闲"),
             new StatusCase(1, 2, "维修中"),
             new StatusCase(5, 1, "领用"),
             new StatusCase(5, 2, "领用"),
-            new StatusCase(8, 1, "空闲"),
+            new StatusCase(8, 1, "状态待确认"),
             new StatusCase(9, 1, "借用"),
             new StatusCase(13, 1, "调拨中"),
             new StatusCase(15, 1, "处置中"),
             new StatusCase(17, 1, "已处置"),
             new StatusCase(17, 2, "已处置"),
             new StatusCase(21, 1, "维修中"),
-            new StatusCase(24, 1, "空闲"),
-            new StatusCase(25, 1, "空闲"),
+            new StatusCase(24, 1, "状态待确认"),
+            new StatusCase(25, 1, "状态待确认"),
             new StatusCase(0, 3, "维修中"),
             new StatusCase(0, 5, "处置中")
         );
@@ -101,6 +104,39 @@ class LegacyAssetSyncWriterTest {
             assertThat(mapped.path("legacyAssetCode").asText()).isEqualTo("CODE-" + (100 + index));
             assertThat(mapped.path("status").asText()).isEqualTo(cases.get(index).expectedStatus());
         }
+    }
+
+    @Test
+    void givesDocumentedQuoteStatusPriorityOverTheBaseAssetStatus() {
+        when(assets.find("legacy-asset-42")).thenReturn(null);
+        JsonNode source = mapper.createObjectNode().put("assetId", 42).put("assetStatus", 5)
+            .put("useStatus", 1).put("quoteStatus", 1);
+
+        writer.upsert(source, syncedAt);
+
+        var captured = org.mockito.ArgumentCaptor.forClass(JsonNode.class);
+        verify(assets).upsertFromSync(captured.capture(), eq(syncedAt));
+        JsonNode mapped = captured.getValue();
+        assertThat(mapped.path("status").asText()).isEqualTo("流程中");
+        assertThat(mapped.path("legacyStatusDisplay").asText()).isEqualTo("交接中（老系统状态码 5）");
+        assertThat(mapped.path("legacyQuoteStatus").asInt()).isEqualTo(1);
+        assertThat(mapped.path("legacyStatusKind").asText()).isEqualTo("WORKFLOW");
+    }
+
+    @Test
+    void neverTurnsAnUnknownQuoteStatusIntoAnAvailableAsset() {
+        when(assets.find("legacy-asset-43")).thenReturn(null);
+        JsonNode source = mapper.createObjectNode().put("assetId", 43).put("assetStatus", 24)
+            .put("useStatus", 1).put("quoteStatus", 99);
+
+        writer.upsert(source, syncedAt);
+
+        var captured = org.mockito.ArgumentCaptor.forClass(JsonNode.class);
+        verify(assets).upsertFromSync(captured.capture(), eq(syncedAt));
+        JsonNode mapped = captured.getValue();
+        assertThat(mapped.path("status").asText()).isEqualTo("状态待确认");
+        assertThat(mapped.path("legacyStatusVerified").asBoolean()).isFalse();
+        assertThat(mapped.path("legacyStatusDisplay").asText()).contains("单据状态码 99");
     }
 
     @Test

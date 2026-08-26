@@ -30,6 +30,7 @@ class LegacyAmsClientHttpTest {
     private LegacyAssetSyncProperties properties;
     private LegacyAmsClient client;
     private volatile boolean expireFirstChange;
+    private volatile boolean rejectNextPageRequest;
 
     @BeforeEach
     void startServer() throws IOException {
@@ -56,12 +57,15 @@ class LegacyAmsClientHttpTest {
             respond(exchange, envelope(data));
         });
         server.createContext("/openApi/asset/pageAsset", exchange -> {
-            if (pageRequests.incrementAndGet() == 1) {
+            pageRequests.incrementAndGet();
+            if (rejectNextPageRequest) {
+                rejectNextPageRequest = false;
                 respond(exchange, 468, "rate limited");
                 return;
             }
             ObjectNode data = mapper.createObjectNode().put("hasNextPage", false);
-            data.putArray("list").addObject().put("assetId", 7);
+            data.putArray("list").addObject().put("assetId", 7).put("quoteStatus", 1);
+            lastPageBody = readBody(exchange);
             respond(exchange, envelope(data));
         });
         server.start();
@@ -73,10 +77,13 @@ class LegacyAmsClientHttpTest {
         properties.setRequestInterval(Duration.ZERO);
         client = new LegacyAmsClient(mapper, properties);
         lastChangeBody = null;
+        lastPageBody = null;
         expireFirstChange = false;
+        rejectNextPageRequest = false;
     }
 
     private JsonNode lastChangeBody;
+    private JsonNode lastPageBody;
 
     @AfterEach
     void stopServer() {
@@ -90,9 +97,12 @@ class LegacyAmsClientHttpTest {
 
         assertThat(client.queryAssetChanges(start, end)).hasSize(1);
         assertThat(client.queryAssetDetail(7).path("assetId").asInt()).isEqualTo(7);
+        assertThat(client.queryAssetSnapshot(7).path("quoteStatus").asInt()).isEqualTo(1);
         assertThat(client.queryAssetChanges(start, end)).hasSize(1);
         assertThat(tokenRequests).hasValue(1);
         assertThat(detailRequests).hasValue(1);
+        assertThat(pageRequests).hasValue(1);
+        assertThat(mapper.readTree(lastPageBody.path("param").asText()).path("assetIdList").get(0).asInt()).isEqualTo(7);
 
         String param = lastChangeBody.path("param").asText();
         assertThat(mapper.readTree(param).path("startTime").asText()).isEqualTo("2026-08-24 08:00:00");
@@ -123,6 +133,8 @@ class LegacyAmsClientHttpTest {
 
     @Test
     void stopsImmediatelyWhenVendorSafeLineReturns468() {
+        rejectNextPageRequest = true;
+
         assertThatThrownBy(() -> client.pageAssets(1, 1, true))
             .hasMessageContaining("SafeLine blocked this run");
         assertThat(pageRequests).hasValue(1);

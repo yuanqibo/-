@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { createQrGraphic, type QrGraphic } from '../composables/qrGraphic'
-import { displayAssetCode, type AssetRecord } from '../types/assets'
+import { displayAssetCode, displayAssetStatus, type AssetRecord } from '../types/assets'
 
 type LabelSettings = {
   templateKey: string
@@ -127,7 +127,7 @@ const normalizedSettings = computed<LabelSettings>(() => {
 
 const fieldValue = (asset: AssetRecord, key: string): string => {
   const values: Record<string, unknown> = {
-    id: displayAssetCode(asset), name: asset.name, category: asset.category, status: asset.status, owner: asset.owner,
+    id: displayAssetCode(asset), name: asset.name, category: asset.category, status: displayAssetStatus(asset), owner: asset.owner,
     employeeCode: asset.employeeCode, department: asset.department, location: asset.location, brand: asset.brand, model: asset.model,
     sn: asset.sn, phone: asset.phone, email: asset.email, receiveDate: asset.receiveDate, assetTag: asset.assetTag,
     price: asset.price ? `¥${Number(asset.price).toLocaleString('zh-CN')}` : '', supplier: asset.supplier,

@@ -51,6 +51,24 @@ public class LegacyAmsClient {
         return post("/openApi/asset/queryAssetDetail", mapper.createObjectNode().put("assetId", assetId));
     }
 
+    /**
+     * pageAsset is the documented source for quoteStatus, unlike queryAssetDetail.
+     * Use it for changed rows as well as full snapshots so workflow markers do not disappear.
+     */
+    JsonNode queryAssetSnapshot(long assetId) {
+        ObjectNode param = mapper.createObjectNode()
+            .put("pageNum", 1)
+            .put("pageSize", 1)
+            .put("isDispose", 1);
+        param.putArray("assetIdList").add(assetId);
+        JsonNode items = post("/openApi/asset/pageAsset", param).path("list");
+        if (!items.isArray()) throw new LegacyAmsException("Legacy AMS pageAsset response has no list");
+        for (JsonNode item : items) {
+            if (item.path("assetId").asLong(0) == assetId) return item;
+        }
+        throw new LegacyAmsException("Legacy AMS pageAsset response has no requested asset: " + assetId);
+    }
+
     JsonNode pageAssets(int page, int size, boolean includeDisposed) {
         ObjectNode param = mapper.createObjectNode()
             .put("pageNum", page)

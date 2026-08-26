@@ -3,6 +3,13 @@ export type AssetRecord = {
   /** Stable target primary key; assetCode is the human-readable source code when available. */
   assetCode?: string
   legacyAssetCode?: string
+  sourceSystem?: string
+  legacyAssetStatus?: number
+  legacyUseStatus?: number
+  legacyQuoteStatus?: number | null
+  legacyStatusDisplay?: string
+  legacyStatusKind?: 'STABLE' | 'WORKFLOW' | 'UNMAPPED' | 'SOURCE_DELETED' | string
+  legacyStatusVerified?: boolean
   name: string
   status: string
   category: string
@@ -39,6 +46,14 @@ export type AssetRecord = {
 export const displayAssetCode = (asset: Pick<AssetRecord, 'id' | 'assetCode' | 'legacyAssetCode'> | null | undefined): string => {
   const code = String(asset?.assetCode || asset?.legacyAssetCode || '').trim()
   return code || String(asset?.id || '').trim() || '-'
+}
+
+/** The source label takes precedence when a synced asset is in an external workflow. */
+export const displayAssetStatus = (asset: Pick<AssetRecord, 'status' | 'legacyStatusDisplay'> | null | undefined): string => {
+  const sourceStatus = String(asset?.legacyStatusDisplay || '').trim()
+  if (sourceStatus) return sourceStatus
+  const status = String(asset?.status || '').trim()
+  return status === '借用中' ? '借用' : status || '-'
 }
 
 export type BusinessRecord = {

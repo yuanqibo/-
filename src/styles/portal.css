@@ -4819,6 +4819,10 @@ button.asset-code-rule-field-name {
   font-size: 12px;
 }
 
+.integration-table td:last-child .btn + .btn {
+  margin-left: 6px;
+}
+
 .integration-table th:last-child,
 .integration-table tbody tr:not(.empty-row) td:last-child {
   position: sticky;

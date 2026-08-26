@@ -78,4 +78,11 @@ public class LegacyAssetSyncController {
         service.run();
         return status();
     }
+
+    @PostMapping("/full-sync")
+    @RequirePermission(permissions = "asset:integration:update")
+    public Map<String, Object> runFullSnapshot() {
+        service.runFullSnapshot();
+        return status();
+    }
 }

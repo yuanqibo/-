@@ -55,7 +55,7 @@ class LegacyAssetSyncServiceTest {
         changes.addObject().put("assetId", 8).put("assetCode", "PC-008").put("changeType", 3);
         when(client.queryAssetChanges(any(), any())).thenReturn(changes);
         JsonNode detail = mapper.createObjectNode().put("assetId", 7).put("assetCode", "PC-007");
-        when(client.queryAssetDetail(7)).thenReturn(detail);
+        when(client.queryAssetSnapshot(7)).thenReturn(detail);
 
         service.run();
 
@@ -77,7 +77,7 @@ class LegacyAssetSyncServiceTest {
         ArrayNode changes = mapper.createArrayNode();
         changes.addObject().put("assetId", 7).put("assetCode", "PC-007").put("changeType", 1);
         when(client.queryAssetChanges(any(), any())).thenReturn(changes);
-        when(client.queryAssetDetail(7)).thenReturn(mapper.createObjectNode().put("assetId", 7));
+        when(client.queryAssetSnapshot(7)).thenReturn(mapper.createObjectNode().put("assetId", 7));
         doThrow(new IllegalStateException("target database unavailable"))
             .when(writer).upsert(any(), any());
 
@@ -112,7 +112,7 @@ class LegacyAssetSyncServiceTest {
         service.run();
 
         verify(writer).upsert(eq(summary), any());
-        verify(client, never()).queryAssetDetail(anyInt());
+        verify(client, never()).queryAssetSnapshot(anyInt());
         verify(sync).complete(eq("bootstrap-1"), any(), eq(1), eq(1), eq(0));
         verify(assets).reconcileSourceSnapshot(eq("bear-rental-ams"), eq(java.util.Set.of("legacy-asset-7")));
     }
@@ -144,6 +144,24 @@ class LegacyAssetSyncServiceTest {
     }
 
     @Test
+    void fullSnapshotReappliesExistingSourceRowsAfterAMappingChange() {
+        when(sync.tryAcquireLock(anyString(), any())).thenReturn(true);
+        when(sync.startRun(any(), any())).thenReturn("full-status-refresh");
+        when(sync.eventExists(anyString())).thenReturn(true);
+        JsonNode summary = mapper.createObjectNode().put("assetId", 24).put("assetCode", "PC-024").put("assetStatus", 24);
+        JsonNode page = mapper.createObjectNode().put("hasNextPage", false).set("list", mapper.createArrayNode().add(summary));
+        when(client.pageAssets(anyInt(), anyInt(), eq(true))).thenReturn(page);
+
+        service.runFullSnapshot();
+
+        verify(writer).upsert(eq(summary), any());
+        verify(client, never()).queryAssetChanges(any(), any());
+        verify(sync, never()).recordEvent(anyString(), anyString(), anyInt(), anyString(), anyString());
+        verify(sync).complete(eq("full-status-refresh"), any(), eq(1), eq(1), eq(0));
+        verify(assets).reconcileSourceSnapshot(eq("bear-rental-ams"), eq(java.util.Set.of("legacy-asset-24")));
+    }
+
+    @Test
     void doesNotReconcileAnIncompleteSnapshotWithDuplicateAssetIds() {
         properties.setBootstrapEnabled(true);
         when(sync.tryAcquireLock(anyString(), any())).thenReturn(true);
@@ -160,7 +178,8 @@ class LegacyAssetSyncServiceTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(service::run)
             .hasMessageContaining("duplicate or invalid asset IDs");
 
+        verify(writer, never()).upsert(any(), any());
         verify(assets, never()).reconcileSourceSnapshot(anyString(), any());
-        verify(sync).fail(eq("bootstrap-duplicate"), anyString(), eq(2), eq(2), eq(1));
+        verify(sync).fail(eq("bootstrap-duplicate"), anyString(), eq(2), eq(0), eq(1));
     }
 }

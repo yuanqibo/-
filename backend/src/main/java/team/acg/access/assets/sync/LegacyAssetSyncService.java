@@ -9,8 +9,10 @@ import team.acg.access.assets.asset.AssetRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,6 +42,15 @@ public class LegacyAssetSyncService {
     }
 
     void run() {
+        run(false);
+    }
+
+    /** Re-reads every source asset after a mapping change without resetting the incremental cursor. */
+    void runFullSnapshot() {
+        run(true);
+    }
+
+    private void run(boolean fullSnapshot) {
         if (!running.compareAndSet(false, true)) return;
         if (!sync.tryAcquireLock(ownerId, Instant.now().plusSeconds(21_600))) {
             running.set(false);
@@ -48,13 +59,17 @@ public class LegacyAssetSyncService {
         try {
             assets.lockForWrite();
             assets.backfillLegacyAssetCodes(SOURCE_SYSTEM, Instant.now());
-            Instant cursor = sync.cursor().orElse(properties.getInitialCursor());
             Instant end = Instant.now().minus(properties.getSafetyDelay());
+            if (fullSnapshot) {
+                bootstrap(end, true);
+                return;
+            }
+            Instant cursor = sync.cursor().orElse(properties.getInitialCursor());
             if (cursor == null) {
                 if (!properties.isBootstrapEnabled()) {
                     throw new IllegalStateException("Legacy asset sync initial cursor is not configured");
                 }
-                bootstrap(end);
+                bootstrap(end, false);
                 return;
             }
             Instant start = cursor.minus(properties.getOverlap());
@@ -74,7 +89,7 @@ public class LegacyAssetSyncService {
                     try {
                         long sourceAssetId = Long.parseLong(sourceId);
                         assets.lockForWrite();
-                        JsonNode detail = changeType == 3 ? null : client.queryAssetDetail(sourceAssetId);
+                        JsonNode detail = changeType == 3 ? null : client.queryAssetSnapshot(sourceAssetId);
                         String hash = hash(detail == null ? change : detail);
                         eventKey = sourceId + ":" + changeType + ":" + hash;
                         if (sync.eventExists(eventKey)) {
@@ -106,13 +121,14 @@ public class LegacyAssetSyncService {
         }
     }
 
-    private void bootstrap(Instant syncedAt) {
+    private void bootstrap(Instant syncedAt, boolean forceApply) {
         String runId = sync.startRun(syncedAt, syncedAt);
         int fetched = 0;
         int applied = 0;
         int failed = 0;
         Set<String> snapshotAssetIds = new LinkedHashSet<>();
         try {
+            List<JsonNode> snapshot = new ArrayList<>();
             for (int page = 1; ; page++) {
                 JsonNode result = client.pageAssets(page, Math.max(1, Math.min(properties.getPageSize(), 500)), true);
                 JsonNode items = result.path("list");
@@ -120,32 +136,34 @@ public class LegacyAssetSyncService {
                 for (JsonNode summary : items) {
                     fetched++;
                     String sourceId = summary.path("assetId").asText("");
-                    String eventBaseKey = "bootstrap:" + sourceId;
-                    String eventKey = eventBaseKey;
-                    try {
-                        if (sourceId.isBlank()) throw new IllegalArgumentException("Legacy asset page item has no assetId");
-                        snapshotAssetIds.add("legacy-asset-" + sourceId);
-                        // pageAsset already contains the full asset snapshot needed by the target model.
-                        String hash = hash(summary);
-                        eventKey = eventKey + ":" + hash;
-                        if (sync.eventExists(eventKey)) {
-                            sync.resolveDeadLetters(eventBaseKey);
-                            continue;
-                        }
-                        assets.lockForWrite();
-                        writer.upsert(summary, syncedAt);
-                        sync.recordEvent(eventKey, sourceId, 1, hash, runId);
-                        sync.resolveDeadLetters(eventBaseKey);
-                        applied++;
-                    } catch (RuntimeException error) {
-                        failed++;
-                        sync.recordDeadLetter(eventBaseKey, sourceId, error.getMessage());
-                    }
+                    if (sourceId.isBlank()) throw new IllegalArgumentException("Legacy asset page item has no assetId");
+                    snapshotAssetIds.add("legacy-asset-" + sourceId);
+                    snapshot.add(summary);
                 }
                 if (!result.path("hasNextPage").asBoolean(false)) break;
             }
-            if (failed == 0 && snapshotAssetIds.size() != fetched) {
+            if (snapshotAssetIds.size() != fetched) {
                 throw new IllegalStateException("Legacy AMS pageAsset snapshot contains duplicate or invalid asset IDs");
+            }
+            for (JsonNode summary : snapshot) {
+                String sourceId = summary.path("assetId").asText();
+                String eventBaseKey = "bootstrap:" + sourceId;
+                try {
+                    String hash = hash(summary);
+                    String eventKey = eventBaseKey + ":" + hash;
+                    if (!forceApply && sync.eventExists(eventKey)) {
+                        sync.resolveDeadLetters(eventBaseKey);
+                        continue;
+                    }
+                    assets.lockForWrite();
+                    writer.upsert(summary, syncedAt);
+                    if (!forceApply) sync.recordEvent(eventKey, sourceId, 1, hash, runId);
+                    sync.resolveDeadLetters(eventBaseKey);
+                    applied++;
+                } catch (RuntimeException error) {
+                    failed++;
+                    sync.recordDeadLetter(eventBaseKey, sourceId, error.getMessage());
+                }
             }
             if (failed == 0) {
                 assets.lockForWrite();

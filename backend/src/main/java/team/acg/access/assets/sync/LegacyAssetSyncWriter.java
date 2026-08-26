@@ -39,6 +39,9 @@ public class LegacyAssetSyncWriter {
         if (!asset.hasNonNull("category")) asset.put("category", "未分类");
         asset.put("type", asset.path("category").asText("未分类"));
         asset.put("status", "已处置");
+        asset.put("legacyStatusDisplay", "已处置（老系统已删除）");
+        asset.put("legacyStatusKind", "SOURCE_DELETED");
+        asset.put("legacyStatusVerified", true);
         asset.put("sourceDeleted", true);
         asset.put("sourceSystem", "bear-rental-ams");
         asset.put("legacyAssetId", sourceAssetId);
@@ -60,11 +63,16 @@ public class LegacyAssetSyncWriter {
         asset.put("assetCode", assetCode);
         asset.put("legacyAssetCode", assetCode);
         asset.put("sourceSystem", "bear-rental-ams");
+        asset.put("sourceDeleted", false);
         asset.put("name", textOr(source, "assetName", "资产-" + sourceAssetId));
         String category = textOr(source, "assetsCategoryName", "未分类");
         asset.put("category", category);
         asset.put("type", category);
-        asset.put("status", status(source));
+        StatusState status = status(source);
+        asset.put("status", status.operationalStatus());
+        asset.put("legacyStatusDisplay", status.displayStatus());
+        asset.put("legacyStatusKind", status.kind());
+        asset.put("legacyStatusVerified", status.verified());
         asset.put("brand", textOr(source, "brand", ""));
         asset.put("model", textOr(source, "model", ""));
         asset.put("sn", textOr(source, "assetSequenceNo", ""));
@@ -81,6 +89,10 @@ public class LegacyAssetSyncWriter {
         asset.put("note", textOr(source, "remark", ""));
         asset.put("legacyUseStatus", source.path("useStatus").asInt(0));
         asset.put("legacyAssetStatus", source.path("assetStatus").asInt(0));
+        if (source.hasNonNull("quoteStatus")) asset.put("legacyQuoteStatus", source.path("quoteStatus").asInt());
+        else asset.putNull("legacyQuoteStatus");
+        // Keep the vendor response intact so undocumented status fields remain auditable.
+        asset.set("legacySourcePayload", source.deepCopy());
         asset.put("syncedAt", syncedAt.toString());
         JsonNode extendInfo = source.get("extendInfo");
         if (extendInfo != null) asset.set("legacyExtendInfo", extendInfo);
@@ -92,21 +104,55 @@ public class LegacyAssetSyncWriter {
         return value.isEmpty() ? fallback : value;
     }
 
-    private String status(JsonNode source) {
-        return switch (source.path("assetStatus").asInt(0)) {
-            case 5 -> "领用";
-            case 9 -> "借用";
-            case 13 -> "调拨中";
-            case 15 -> "处置中";
-            case 17 -> "已处置";
-            case 21 -> "维修中";
-            default -> switch (source.path("useStatus").asInt(0)) {
-                case 2, 3, 4 -> "维修中";
-                case 5, 6 -> "处置中";
-                default -> "空闲";
+    private StatusState status(JsonNode source) {
+        int assetStatus = source.path("assetStatus").asInt(0);
+        int useStatus = source.path("useStatus").asInt(0);
+        if (source.hasNonNull("quoteStatus")) {
+            String workflow = switch (source.path("quoteStatus").asInt()) {
+                case 1 -> "交接中";
+                case 2 -> "退还中";
+                case 3 -> "领用中";
+                case 4 -> "借用中";
+                default -> "状态待确认";
+            };
+            boolean verified = !"状态待确认".equals(workflow);
+            String display = verified
+                ? workflow + "（老系统状态码 " + assetStatus + "）"
+                : "状态待确认（老系统状态码 " + assetStatus + "，单据状态码 "
+                    + source.path("quoteStatus").asInt() + "）";
+            return new StatusState(verified ? "流程中" : "状态待确认", display,
+                verified ? "WORKFLOW" : "UNMAPPED", verified);
+        }
+        return switch (assetStatus) {
+            case 1 -> conditionStatus(useStatus, "空闲");
+            case 5 -> stableStatus("领用");
+            case 9 -> stableStatus("借用");
+            case 13 -> stableStatus("调拨中");
+            case 15 -> stableStatus("处置中");
+            case 17 -> stableStatus("已处置");
+            case 21 -> stableStatus("维修中");
+            default -> switch (useStatus) {
+                case 2, 3, 4 -> stableStatus("维修中");
+                case 5, 6 -> stableStatus("处置中");
+                default -> new StatusState("状态待确认", "状态待确认（老系统状态码 " + assetStatus + "）",
+                    "UNMAPPED", false);
             };
         };
     }
 
+    private StatusState stableStatus(String value) {
+        return new StatusState(value, value, "STABLE", true);
+    }
+
+    private StatusState conditionStatus(int useStatus, String fallback) {
+        return switch (useStatus) {
+            case 2, 3, 4 -> stableStatus("维修中");
+            case 5, 6 -> stableStatus("处置中");
+            default -> stableStatus(fallback);
+        };
+    }
+
     private String targetId(long sourceAssetId) { return "legacy-asset-" + sourceAssetId; }
+
+    private record StatusState(String operationalStatus, String displayStatus, String kind, boolean verified) {}
 }

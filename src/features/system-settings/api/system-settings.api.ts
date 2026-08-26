@@ -15,6 +15,9 @@ export const fetchLegacyAssetSyncStatus = (): Promise<LegacyAssetSyncStatus> =>
 export const fetchLegacyAssetSyncHistory = (page = 1, pageSize = 10): Promise<LegacyAssetSyncHistoryPage> =>
   apiRequest<LegacyAssetSyncHistoryPage>(`/api/system/legacy-asset-sync/history?page=${page}&pageSize=${pageSize}`)
 
+export const runLegacyAssetFullSync = (): Promise<LegacyAssetSyncStatus> =>
+  apiRequest<LegacyAssetSyncStatus>('/api/system/legacy-asset-sync/full-sync', { method: 'POST' })
+
 export const fetchForms = async (): Promise<SystemFormDefinition[]> =>
   (await apiRequest<{ items: SystemFormDefinition[] }>('/api/system/forms')).items || []
 

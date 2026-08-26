@@ -35,7 +35,8 @@ public class AssetService {
     private static final Set<String> ALLOWED_STATUS = Set.of(
         "空闲", "闲置", "上架", "待验收", "领用", "借用", "借用中", "维修中", "审批中",
         "领用审批中", "交接审批中", "退库审批中", "调拨中",
-        "领用待签字", "借用待签字", "交接待签字", "处置中", "已处置", "已报废");
+        "领用待签字", "借用待签字", "交接待签字", "流程中", "状态待确认",
+        "处置中", "已处置", "已报废");
     private static final Set<String> UNASSIGNED = Set.of("空闲", "闲置", "上架", "待验收");
     private static final Set<String> ASSIGNABLE = Set.of("空闲");
     private static final Set<String> PENDING_SIGNATURE_STATUSES = Set.of("领用待签字", "借用待签字", "交接待签字");
@@ -1147,6 +1148,7 @@ public class AssetService {
             case "交接待签字" -> Set.of("领用", "借用", "借用中").contains(after);
             case "领用待签字" -> Set.of("空闲", "闲置", "上架", "待验收", "领用").contains(after);
             case "借用待签字" -> Set.of("空闲", "闲置", "上架", "待验收", "借用", "借用中").contains(after);
+            case "流程中", "状态待确认" -> Set.of("空闲", "领用", "借用", "借用中", "调拨中", "维修中", "处置中", "已处置").contains(after);
             case "处置中" -> Set.of("空闲", "已处置").contains(after);
             case "已处置" -> "空闲".equals(after);
             case "已报废" -> false;

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Refresh } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ApiError } from '../../../shared/api/http'
-import { fetchLegacyAssetSyncHistory, fetchLegacyAssetSyncStatus } from '../api/system-settings.api'
+import { fetchLegacyAssetSyncHistory, fetchLegacyAssetSyncStatus, runLegacyAssetFullSync } from '../api/system-settings.api'
 import { useSystemSettings } from '../composables/useSystemSettings'
 import type { LegacyAssetSyncRun, LegacyAssetSyncStatus, SystemIntegration } from '../types/system-settings'
 import { usePortalSession } from '../../../core/auth/portal-session'
@@ -16,6 +16,7 @@ const historyOpen = ref(false)
 const submitting = ref(false)
 const historyPage = ref(1)
 const historyPageSize = ref(10)
+const fullSyncing = ref(false)
 const sync = reactive({
   status: null as LegacyAssetSyncStatus | null,
   history: [] as LegacyAssetSyncRun[],
@@ -77,6 +78,28 @@ const changeHistoryPageSize = (pageSize: number): void => {
   historyPageSize.value = pageSize
   historyPage.value = 1
   void loadLegacyAssetSync()
+}
+
+const runFullSync = async (): Promise<void> => {
+  try {
+    await ElMessageBox.confirm('将重新读取老系统全部资产，仅更新当前系统展示数据，不会回写老系统。', '全量复核', {
+      type: 'warning',
+      confirmButtonText: '开始复核',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+  fullSyncing.value = true
+  try {
+    sync.status = await runLegacyAssetFullSync()
+    ElMessage.success('全量复核已完成')
+    await loadLegacyAssetSync()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '全量复核失败')
+  } finally {
+    fullSyncing.value = false
+  }
 }
 
 const integrationCount = computed(() => integrations.value.length + (sync.status ? 1 : 0))
@@ -150,7 +173,7 @@ watch(historyOpen, (open) => {
               <td><span class="tag">服务器已配置</span></td>
               <td><span class="tag blue">运行配置</span></td>
               <td>{{ formatTimestamp(latestSyncTime) }}</td>
-              <td><button class="btn" type="button" @click="historyOpen = true">同步记录</button></td>
+              <td><button class="btn" type="button" @click="historyOpen = true">同步记录</button><button v-if="permissions.has('asset:integration:update')" class="btn" type="button" :disabled="fullSyncing || sync.loading" @click="runFullSync">{{ fullSyncing ? '复核中...' : '全量复核' }}</button></td>
             </tr>
             <tr v-for="item in integrations" :key="item.id">
               <td><code>{{ item.code }}</code></td>
