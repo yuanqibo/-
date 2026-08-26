@@ -12128,28 +12128,30 @@ body.is-resizing-column * {
   font-size: 12px;
 }
 
-/* Keep search values quieter than their field labels while retaining a clear focus state. */
+/* Keep every search control value quieter than its field label while retaining a clear focus state. */
 .el-drawer.asset-advanced-search-drawer .advanced-filter-field input {
-  color: #64748b;
+  color: #7c8aa0;
 }
 
 .el-drawer.asset-advanced-search-drawer .advanced-filter-field input::placeholder {
-  color: #a3adbb;
+  color: #aab4c2;
   opacity: 1;
 }
 
 .el-drawer.asset-advanced-search-drawer .advanced-filter-field > .el-select {
-  --el-text-color-regular: #64748b;
-  --el-text-color-placeholder: #a3adbb;
+  --el-text-color-regular: #7c8aa0;
+  --el-text-color-placeholder: #aab4c2;
 }
 
 .el-drawer.asset-advanced-search-drawer .advanced-filter-field > .el-select .el-select__selected-item,
+.el-drawer.asset-advanced-search-drawer .advanced-filter-field > .el-select .el-select__input,
+.el-drawer.asset-advanced-search-drawer .advanced-filter-field > .el-select .el-select__caret,
 .el-drawer.asset-advanced-search-drawer .advanced-filter-field > .el-select .el-select__placeholder {
-  color: #64748b;
+  color: #7c8aa0 !important;
 }
 
 .el-drawer.asset-advanced-search-drawer .advanced-filter-field > .el-select .el-select__placeholder {
-  color: #a3adbb;
+  color: #aab4c2 !important;
 }
 
 .asset-status-multiselect.el-select {
@@ -12165,7 +12167,7 @@ body.is-resizing-column * {
 .asset-status-multiselect.el-select .el-tag {
   --el-tag-bg-color: #f8fafc;
   --el-tag-border-color: #dbe4ef;
-  --el-tag-text-color: #64748b;
+  --el-tag-text-color: #7c8aa0;
   font-size: 12px;
 }
 
