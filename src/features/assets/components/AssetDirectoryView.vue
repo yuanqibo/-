@@ -366,7 +366,7 @@ const assetAdvancedOptions = computed(() => ({
   risks: uniqueStrings(assets.value.map((item) => item.risk)),
   tags: uniqueStrings(assets.value.flatMap((item) => item.tags || []))
 }))
-const defaultAssetAdvanced = () => ({ status: '', id: '', name: '', category: '', type: '', model: '', sn: '', owner: '', department: '', location: '', supplier: '', risk: '', tag: '' })
+const defaultAssetAdvanced = () => ({ status: [] as string[], id: '', name: '', category: '', type: '', model: '', sn: '', owner: '', department: '', location: '', supplier: '', risk: '', tag: '' })
 const defaultInboundAdvanced = () => ({ status: '', id: '', type: '', dateRange: null as DateRange, operator: '', purchaser: '', company: '' })
 const defaultReceiveAdvanced = () => ({ status: '', id: '', dateRange: null as DateRange, handler: '', receiver: '', company: '', department: '', location: '', note: '', assetId: '', assetName: '', brand: '', model: '', sn: '', owner: '', manager: '', ownerCompany: '' })
 const defaultBorrowAdvanced = () => ({ status: '', id: '', handler: '', borrower: '', borrowDateRange: null as DateRange, expectedReturnDateRange: null as DateRange, assetId: '', sn: '', company: '', department: '', employeeCode: '', phone: '', email: '', location: '' })
@@ -381,6 +381,7 @@ const borrowAdvancedDraft = reactive(defaultBorrowAdvanced())
 const searchable = (item: AssetRecord): unknown[] => [displayAssetCode(item), item.id, item.name, item.assetTag, item.owner, item.department, item.location, item.model, item.sn]
 const contains = (value: unknown, expected: string): boolean => matchesPinyinSearch([value], expected)
 const equals = (value: unknown, expected: string): boolean => !expected || String(value || '').trim() === expected.trim()
+const matchesAny = (value: unknown, expected: readonly string[]): boolean => !expected.length || expected.includes(String(value || '').trim())
 const dateInRange = (value: unknown, range: DateRange): boolean => {
   if (!range) return true
   const current = String(value || '')
@@ -399,7 +400,7 @@ const filteredAssets = computed(() => {
       && matchesPinyinSearch(searchable(item), keyword)
       && (status.value === '全部' || item.status === status.value)
       && (category.value === '全部' || item.category === category.value)
-      && equals(item.status, assetAdvanced.status) && equals(item.category, assetAdvanced.category)
+      && matchesAny(item.status, assetAdvanced.status) && equals(item.category, assetAdvanced.category)
       && contains(displayAssetCode(item), assetAdvanced.id) && contains(item.name, assetAdvanced.name)
       && equals(item.type, assetAdvanced.type)
       && contains(item.model, assetAdvanced.model) && contains(item.sn, assetAdvanced.sn) && contains(item.owner, assetAdvanced.owner)
@@ -721,7 +722,7 @@ const updateAdvancedDateRange = (range: DateRange, index: 0 | 1, value: string):
   return next[0] || next[1] ? next : null
 }
 const syncAdvancedDraft = (): void => {
-  if (props.mode === 'list') Object.assign(assetAdvancedDraft, assetAdvanced)
+  if (props.mode === 'list') Object.assign(assetAdvancedDraft, assetAdvanced, { status: [...assetAdvanced.status] })
   else if (props.mode === 'inbound') Object.assign(inboundAdvancedDraft, inboundAdvanced, { dateRange: cloneDateRange(inboundAdvanced.dateRange) })
   else if (isReceiveFlowMode.value) Object.assign(receiveAdvancedDraft, receiveAdvanced, { dateRange: cloneDateRange(receiveAdvanced.dateRange) })
   else Object.assign(borrowAdvancedDraft, borrowAdvanced, { borrowDateRange: cloneDateRange(borrowAdvanced.borrowDateRange), expectedReturnDateRange: cloneDateRange(borrowAdvanced.expectedReturnDateRange) })
@@ -744,7 +745,7 @@ const setAllListColumns = (checked: boolean): void => {
   else listVisibleColumns.value = [listColumnKeys[0]]
 }
 const applyAdvanced = (): void => {
-  if (props.mode === 'list') Object.assign(assetAdvanced, assetAdvancedDraft)
+  if (props.mode === 'list') Object.assign(assetAdvanced, assetAdvancedDraft, { status: [...assetAdvancedDraft.status] })
   else if (props.mode === 'inbound') Object.assign(inboundAdvanced, inboundAdvancedDraft, { dateRange: cloneDateRange(inboundAdvancedDraft.dateRange) })
   else if (isReceiveFlowMode.value) Object.assign(receiveAdvanced, receiveAdvancedDraft, { dateRange: cloneDateRange(receiveAdvancedDraft.dateRange) })
   else Object.assign(borrowAdvanced, borrowAdvancedDraft, { borrowDateRange: cloneDateRange(borrowAdvancedDraft.borrowDateRange), expectedReturnDateRange: cloneDateRange(borrowAdvancedDraft.expectedReturnDateRange) })
@@ -1540,7 +1541,7 @@ onMounted(() => {
           <template v-if="mode === 'list'">
             <p class="advanced-search-hint">系统支持多种字段组合筛选，选择要精确匹配的字段后点击查询。</p>
             <div class="advanced-filter-section">
-              <label class="advanced-filter-field"><span>资产状态</span><el-select v-model="assetAdvancedDraft.status" aria-label="资产状态" placeholder="全部"><el-option label="全部" value="" /><el-option v-for="item in assetAdvancedOptions.statuses" :key="item" :label="assetStatusLabel(item)" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>资产状态</span><el-select v-model="assetAdvancedDraft.status" class="asset-status-multiselect" multiple clearable aria-label="资产状态" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.statuses" :key="item" :label="assetStatusLabel(item)" :value="item" /></el-select></label>
               <label class="advanced-filter-field"><span>资产编码</span><input v-model="assetAdvancedDraft.id" placeholder="例如 AST-0001"></label>
               <label class="advanced-filter-field"><span>资产名称</span><input v-model="assetAdvancedDraft.name" placeholder="例如 测试笔记本"></label>
               <label class="advanced-filter-field"><span>资产分类</span><el-select v-model="assetAdvancedDraft.category" aria-label="资产分类" placeholder="全部"><el-option label="全部" value="" /><el-option v-for="item in assetAdvancedOptions.categories" :key="item" :label="item" :value="item" /></el-select></label>

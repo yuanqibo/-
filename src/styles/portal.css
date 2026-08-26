@@ -12128,6 +12128,47 @@ body.is-resizing-column * {
   font-size: 12px;
 }
 
+/* Keep search values quieter than their field labels while retaining a clear focus state. */
+.el-drawer.asset-advanced-search-drawer .advanced-filter-field input {
+  color: #64748b;
+}
+
+.el-drawer.asset-advanced-search-drawer .advanced-filter-field input::placeholder {
+  color: #a3adbb;
+  opacity: 1;
+}
+
+.el-drawer.asset-advanced-search-drawer .advanced-filter-field > .el-select {
+  --el-text-color-regular: #64748b;
+  --el-text-color-placeholder: #a3adbb;
+}
+
+.el-drawer.asset-advanced-search-drawer .advanced-filter-field > .el-select .el-select__selected-item,
+.el-drawer.asset-advanced-search-drawer .advanced-filter-field > .el-select .el-select__placeholder {
+  color: #64748b;
+}
+
+.el-drawer.asset-advanced-search-drawer .advanced-filter-field > .el-select .el-select__placeholder {
+  color: #a3adbb;
+}
+
+.asset-status-multiselect.el-select {
+  height: auto;
+  min-height: 32px;
+}
+
+.asset-status-multiselect.el-select .el-select__wrapper {
+  min-height: 32px;
+  padding: 3px 10px;
+}
+
+.asset-status-multiselect.el-select .el-tag {
+  --el-tag-bg-color: #f8fafc;
+  --el-tag-border-color: #dbe4ef;
+  --el-tag-text-color: #64748b;
+  font-size: 12px;
+}
+
 .inbound-advanced-fields .advanced-filter-field input,
 .borrow-return-advanced-fields .advanced-filter-field input,
 .receive-return-advanced-fields .advanced-filter-field input {
