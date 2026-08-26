@@ -11,6 +11,7 @@ import EmployeeAssetDetailDrawer from './EmployeeAssetDetailDrawer.vue'
 type DistributionMode = 'organization' | 'location'
 type CategoryMetricMode = 'count' | 'amount'
 type ChartRow = { key: string; label: string; title: string; count: number; amount: number }
+type StatusDefinition = { status: string; groupedStatuses?: string[]; key: string; label: string; color: string }
 type DashboardTooltip = {
   visible: boolean
   compact: boolean
@@ -106,11 +107,9 @@ const openEmployeeRequest = (action: 'return' | 'handover', item: AssetRecord): 
 }
 
 const statusRows = computed(() => {
-  const definitions = [
-    { status: '领用', key: 'receive', label: '领用', color: '#7c5cf6' },
-    { status: '交接审批中', key: 'handover-approval', label: '交接审批中', color: '#a21caf' },
-    { status: '交接待签字', key: 'handover-signature', label: '交接待签字', color: '#b91c1c' },
-    { status: '退库审批中', key: 'return-approval', label: '退库审批中', color: '#b45309' },
+  const definitions: StatusDefinition[] = [
+    // Match the legacy dashboard: active return and handover workflows count as claimed.
+    { status: '领用', groupedStatuses: ['领用', '交接审批中', '交接待签字', '退库审批中'], key: 'receive', label: '领用', color: '#7c5cf6' },
     { status: '空闲', key: 'idle', label: '空闲', color: '#20a7dc' },
     { status: '借用', key: 'borrow', label: '借用', color: '#f59e0b' },
     { status: '维修中', key: 'repair', label: '维修中', color: '#e1a235' },
@@ -121,14 +120,14 @@ const statusRows = computed(() => {
     { status: '已处置', key: 'disposed', label: '已处置', color: '#f45f63' },
     { status: '已报废', key: 'scrapped', label: '已报废', color: '#8d99ae' }
   ]
-  const knownStatuses = new Set(definitions.map((item) => item.status))
-  const extraDefinitions = Array.from(new Set(assets.value.map((item) => item.status).filter((status) => !knownStatuses.has(status))))
+  const knownStatuses = new Set(definitions.flatMap((item) => item.groupedStatuses || [item.status]))
+  const extraDefinitions: StatusDefinition[] = Array.from(new Set(assets.value.map((item) => item.status).filter((status) => !knownStatuses.has(status))))
     .map((status, index) => ({ status, key: `other-${index}`, label: status || '未标注', color: '#6f7d8c' }))
   return [...definitions, ...extraDefinitions].map((definition) => ({
     ...definition,
     count: definition.status === '已处置'
       ? disposedCount.value
-      : assets.value.filter((item) => item.status === definition.status).length
+      : assets.value.filter((item) => (definition.groupedStatuses || [definition.status]).includes(item.status)).length
   })).filter((item) => item.count > 0)
 })
 
