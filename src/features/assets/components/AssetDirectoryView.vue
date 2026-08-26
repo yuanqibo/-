@@ -1560,7 +1560,7 @@ onMounted(() => {
           <template v-else-if="mode === 'inbound'">
             <p class="advanced-search-hint">入库搜索只筛选当前入库板块，可按入库单据字段组合查询。</p>
             <div class="advanced-filter-section inbound-advanced-fields">
-              <label class="advanced-filter-field"><span>入库状态</span><el-select v-model="inboundAdvancedDraft.status" aria-label="入库状态" placeholder="入库状态"><el-option label="全部" value="" /><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>入库状态</span><el-select v-model="inboundAdvancedDraft.status" class="advanced-filter-default-select" aria-label="入库状态" placeholder="全部"><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></label>
               <label class="advanced-filter-field"><span>入库单号</span><input v-model="inboundAdvancedDraft.id" placeholder="请输入"></label>
               <label class="advanced-filter-field"><span>入库类型</span><input v-model="inboundAdvancedDraft.type" placeholder="入库类型"></label>
               <label class="advanced-filter-field advanced-filter-date-range"><span>入库日期</span><div class="advanced-date-range-control"><input type="date" :value="inboundAdvancedDraft.dateRange?.[0] || ''" aria-label="入库日期开始日期" @input="inboundAdvancedDraft.dateRange = updateAdvancedDateRange(inboundAdvancedDraft.dateRange, 0, ($event.target as HTMLInputElement).value)"><span>→</span><input type="date" :value="inboundAdvancedDraft.dateRange?.[1] || ''" aria-label="入库日期结束日期" @input="inboundAdvancedDraft.dateRange = updateAdvancedDateRange(inboundAdvancedDraft.dateRange, 1, ($event.target as HTMLInputElement).value)"></div></label>
@@ -1572,14 +1572,14 @@ onMounted(() => {
 
           <template v-else-if="isReceiveFlowMode">
             <div class="advanced-filter-section receive-return-advanced-fields">
-              <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.status }}</span><el-select v-model="receiveAdvancedDraft.status" :aria-label="receiveAdvancedLabels.status" :placeholder="receiveAdvancedLabels.status"><el-option label="全部" value="" /><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.status }}</span><el-select v-model="receiveAdvancedDraft.status" class="advanced-filter-default-select" :aria-label="receiveAdvancedLabels.status" placeholder="全部"><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></label>
               <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.order }}</span><input v-model="receiveAdvancedDraft.id" placeholder="请输入"></label>
               <label class="advanced-filter-field advanced-filter-date-range"><span>{{ receiveAdvancedLabels.date }}</span><div class="advanced-date-range-control"><input type="date" :value="receiveAdvancedDraft.dateRange?.[0] || ''" :aria-label="`${receiveAdvancedLabels.date}开始日期`" @input="receiveAdvancedDraft.dateRange = updateAdvancedDateRange(receiveAdvancedDraft.dateRange, 0, ($event.target as HTMLInputElement).value)"><span>→</span><input type="date" :value="receiveAdvancedDraft.dateRange?.[1] || ''" :aria-label="`${receiveAdvancedLabels.date}结束日期`" @input="receiveAdvancedDraft.dateRange = updateAdvancedDateRange(receiveAdvancedDraft.dateRange, 1, ($event.target as HTMLInputElement).value)"></div></label>
               <label class="advanced-filter-field"><span>经办人</span><input v-model="receiveAdvancedDraft.handler" placeholder="请输入"></label>
               <label class="advanced-filter-field"><span>{{ receiveReturnTab === 'handover' ? '接收人' : '领用人' }}</span><input v-model="receiveAdvancedDraft.receiver" placeholder="请输入"></label>
               <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.company }}</span><input v-model="receiveAdvancedDraft.company" placeholder="默认公司"></label>
               <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.department }}</span><input v-model="receiveAdvancedDraft.department" placeholder="默认部门"></label>
-              <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.location }}</span><el-select v-model="receiveAdvancedDraft.location" :aria-label="receiveAdvancedLabels.location" placeholder="所在位置"><el-option label="全部" value="" /><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+              <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.location }}</span><el-select v-model="receiveAdvancedDraft.location" class="advanced-filter-default-select" :aria-label="receiveAdvancedLabels.location" placeholder="全部"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
               <label class="advanced-filter-field"><span>{{ receiveAdvancedLabels.note }}</span><input v-model="receiveAdvancedDraft.note" placeholder="请输入"></label>
               <label class="advanced-filter-field"><span>资产编码</span><input v-model="receiveAdvancedDraft.assetId" placeholder="请输入"></label>
               <label class="advanced-filter-field"><span>资产名称</span><input v-model="receiveAdvancedDraft.assetName" placeholder="请输入"></label>
@@ -1594,7 +1594,7 @@ onMounted(() => {
 
           <template v-else>
             <div class="advanced-filter-section borrow-return-advanced-fields">
-              <label class="advanced-filter-field"><span>借用状态</span><el-select v-model="borrowAdvancedDraft.status" aria-label="借用状态" placeholder="借用状态"><el-option label="全部" value="" /><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>借用状态</span><el-select v-model="borrowAdvancedDraft.status" class="advanced-filter-default-select" aria-label="借用状态" placeholder="全部"><el-option v-for="item in workflowStatuses" :key="item" :label="item" :value="item" /></el-select></label>
               <label class="advanced-filter-field"><span>借用单号</span><input v-model="borrowAdvancedDraft.id" placeholder="请输入"></label>
               <label class="advanced-filter-field"><span>经办人</span><input v-model="borrowAdvancedDraft.handler" placeholder="经办人"></label>
               <label class="advanced-filter-field"><span>借用人</span><input v-model="borrowAdvancedDraft.borrower" placeholder="请输入"></label>
@@ -1607,7 +1607,7 @@ onMounted(() => {
               <label class="advanced-filter-field"><span>工号</span><input v-model="borrowAdvancedDraft.employeeCode" placeholder="请输入"></label>
               <label class="advanced-filter-field"><span>手机号</span><input v-model="borrowAdvancedDraft.phone" placeholder="请输入"></label>
               <label class="advanced-filter-field"><span>邮箱</span><input v-model="borrowAdvancedDraft.email" placeholder="请输入"></label>
-              <label class="advanced-filter-field"><span>借用后位置</span><el-select v-model="borrowAdvancedDraft.location" aria-label="借用后位置" placeholder="借用后位置"><el-option label="全部" value="" /><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+              <label class="advanced-filter-field"><span>借用后位置</span><el-select v-model="borrowAdvancedDraft.location" class="advanced-filter-default-select" aria-label="借用后位置" placeholder="全部"><el-option v-for="item in managedLocations" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
             </div>
           </template>
 

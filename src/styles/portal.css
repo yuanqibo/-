@@ -11152,6 +11152,12 @@ body.is-resizing-column * {
   box-shadow: 0 0 0 1px #d8dce2 inset;
 }
 
+.employee-request-advanced-fields .el-select__placeholder,
+.employee-request-advanced-fields .el-input__inner::placeholder {
+  color: #aab4c2 !important;
+  -webkit-text-fill-color: #aab4c2 !important;
+}
+
 .employee-request-card-list {
   flex: 1 1 auto;
   min-height: 0;
