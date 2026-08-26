@@ -14959,22 +14959,22 @@ body.is-resizing-column * {
 }
 
 .asset-code-text {
-  color: #6f91ad;
+  color: #00a0e9;
   font-weight: 500;
 }
 
 td .asset-code-text {
-  color: #6f91ad;
+  color: #00a0e9;
 }
 
 .asset-code-text:hover,
 .asset-code-text:focus-visible {
-  color: #537b9b;
+  color: #008dcc;
 }
 
 .handover-asset-card strong.asset-code-text,
 .handover-selected-card strong.asset-code-text {
-  color: #6f91ad;
+  color: #00a0e9;
 }
 
 .asset-picker-footer {
