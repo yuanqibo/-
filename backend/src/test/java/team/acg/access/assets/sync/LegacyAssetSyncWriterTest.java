@@ -52,7 +52,7 @@ class LegacyAssetSyncWriterTest {
     }
 
     @Test
-    void mapsTransferAndFaultStatusesWithoutTreatingThemAsIdle() {
+    void retainsIdleLifecycleStatusWhenTheAssetConditionIsRepairing() {
         when(assets.find("legacy-asset-8")).thenReturn(null);
         writer.upsert(mapper.createObjectNode().put("assetId", 8).put("assetStatus", 13), syncedAt);
         var transfer = org.mockito.ArgumentCaptor.forClass(JsonNode.class);
@@ -62,25 +62,33 @@ class LegacyAssetSyncWriterTest {
         verify(assets, times(2)).upsertFromSync(transfer.capture(), eq(syncedAt));
         List<JsonNode> mapped = transfer.getAllValues();
         assertThat(mapped.get(0).path("status").asText()).isEqualTo("调拨中");
-        assertThat(mapped.get(1).path("status").asText()).isEqualTo("维修中");
+        assertThat(mapped.get(1).path("status").asText()).isEqualTo("空闲");
     }
 
     @Test
     void mapsEveryKnownStatusAndMarksUndocumentedValuesAsUnconfirmed() {
         List<StatusCase> cases = List.of(
             new StatusCase(1, 1, "空闲"),
-            new StatusCase(1, 2, "维修中"),
+            new StatusCase(1, 2, "空闲"),
             new StatusCase(5, 1, "领用"),
             new StatusCase(5, 2, "领用"),
-            new StatusCase(8, 1, "状态待确认"),
+            new StatusCase(6, 1, "领用审批中"),
+            new StatusCase(7, 1, "领用待签字"),
+            new StatusCase(8, 1, "退库审批中"),
             new StatusCase(9, 1, "借用"),
+            new StatusCase(10, 1, "借用审批中"),
+            new StatusCase(11, 1, "借用待签字"),
             new StatusCase(13, 1, "调拨中"),
+            new StatusCase(14, 1, "调拨待签字"),
             new StatusCase(15, 1, "处置中"),
             new StatusCase(17, 1, "已处置"),
             new StatusCase(17, 2, "已处置"),
             new StatusCase(21, 1, "维修中"),
-            new StatusCase(24, 1, "状态待确认"),
-            new StatusCase(25, 1, "状态待确认"),
+            new StatusCase(22, 1, "维修待签字"),
+            new StatusCase(23, 1, "归还审批中"),
+            new StatusCase(24, 1, "交接审批中"),
+            new StatusCase(25, 1, "交接待签字"),
+            new StatusCase(26, 1, "维修审批中"),
             new StatusCase(0, 3, "维修中"),
             new StatusCase(0, 5, "处置中")
         );

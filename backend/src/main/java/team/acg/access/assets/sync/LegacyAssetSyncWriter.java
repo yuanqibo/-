@@ -124,13 +124,26 @@ public class LegacyAssetSyncWriter {
                 verified ? "WORKFLOW" : "UNMAPPED", verified);
         }
         return switch (assetStatus) {
-            case 1 -> conditionStatus(useStatus, "空闲");
+            // The legacy web client defines assetStatus=1 as idle. useStatus is the
+            // condition (normal/fault/repair), not the lifecycle status.
+            case 1 -> stableStatus("空闲");
             case 5 -> stableStatus("领用");
+            case 6 -> stableStatus("领用审批中");
+            case 7 -> stableStatus("领用待签字");
+            case 8 -> stableStatus("退库审批中");
             case 9 -> stableStatus("借用");
+            case 10 -> stableStatus("借用审批中");
+            case 11 -> stableStatus("借用待签字");
             case 13 -> stableStatus("调拨中");
+            case 14 -> stableStatus("调拨待签字");
             case 15 -> stableStatus("处置中");
             case 17 -> stableStatus("已处置");
             case 21 -> stableStatus("维修中");
+            case 22 -> stableStatus("维修待签字");
+            case 23 -> stableStatus("归还审批中");
+            case 24 -> stableStatus("交接审批中");
+            case 25 -> stableStatus("交接待签字");
+            case 26 -> stableStatus("维修审批中");
             default -> switch (useStatus) {
                 case 2, 3, 4 -> stableStatus("维修中");
                 case 5, 6 -> stableStatus("处置中");
@@ -142,14 +155,6 @@ public class LegacyAssetSyncWriter {
 
     private StatusState stableStatus(String value) {
         return new StatusState(value, value, "STABLE", true);
-    }
-
-    private StatusState conditionStatus(int useStatus, String fallback) {
-        return switch (useStatus) {
-            case 2, 3, 4 -> stableStatus("维修中");
-            case 5, 6 -> stableStatus("处置中");
-            default -> stableStatus(fallback);
-        };
     }
 
     private String targetId(long sourceAssetId) { return "legacy-asset-" + sourceAssetId; }
