@@ -4,7 +4,7 @@ import { PictureFilled } from '@element-plus/icons-vue'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { useDashboard } from '../composables/useDashboard'
-import { displayAssetCode, type AssetRecord } from '../../assets/types/assets'
+import { displayAssetCode, isClaimedAssetStatus, type AssetRecord } from '../../assets/types/assets'
 import AssetRequestDialog from '../../approvals/components/AssetRequestDialog.vue'
 import EmployeeAssetDetailDrawer from './EmployeeAssetDetailDrawer.vue'
 
@@ -72,7 +72,7 @@ const showDashboardTooltip = (
 const hideDashboardTooltip = (): void => { dashboardTooltip.visible = false }
 
 const totalValue = computed(() => assets.value.reduce((sum, item) => sum + Number(item.price || 0), 0))
-const activeCount = computed(() => assets.value.filter((item) => item.status === '领用').length)
+const activeCount = computed(() => assets.value.filter((item) => isClaimedAssetStatus(item.status)).length)
 const pendingCount = computed(() => requests.value.filter((item) => ['审批中', '待审批', '待执行'].includes(item.status)).length)
 const employeeAssets = computed(() => {
   const assigned = assets.value.filter((item) => ['领用', '领用中', '借用', '借用中'].includes(item.status))
@@ -108,6 +108,9 @@ const openEmployeeRequest = (action: 'return' | 'handover', item: AssetRecord): 
 const statusRows = computed(() => {
   const definitions = [
     { status: '领用', key: 'receive', label: '领用', color: '#7c5cf6' },
+    { status: '交接审批中', key: 'handover-approval', label: '交接审批中', color: '#a21caf' },
+    { status: '交接待签字', key: 'handover-signature', label: '交接待签字', color: '#b91c1c' },
+    { status: '退库审批中', key: 'return-approval', label: '退库审批中', color: '#b45309' },
     { status: '空闲', key: 'idle', label: '空闲', color: '#20a7dc' },
     { status: '借用', key: 'borrow', label: '借用', color: '#f59e0b' },
     { status: '维修中', key: 'repair', label: '维修中', color: '#e1a235' },
@@ -165,7 +168,7 @@ const categoryRowsFor = (rows: AssetRecord[]): ChartRow[] => {
   const result = groupAssets(rows, (item) => String(item.category || item.type || '其他'))
   return result.length ? result : [{ key: 'empty', label: '暂无分类', title: '暂无分类', count: 0, amount: 0 }]
 }
-const activeAssetRows = computed(() => categoryRowsFor(assets.value.filter((item) => item.status === '领用')))
+const activeAssetRows = computed(() => categoryRowsFor(assets.value.filter((item) => isClaimedAssetStatus(item.status))))
 const categoryRows = computed(() => categoryRowsFor(assets.value))
 
 const chartScale = (maximum: number): { max: number; ticks: number[] } => {

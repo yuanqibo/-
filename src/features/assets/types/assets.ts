@@ -56,6 +56,11 @@ export const displayAssetStatus = (asset: Pick<AssetRecord, 'status' | 'legacySt
   return status === '借用中' ? '借用' : status || '-'
 }
 
+/** Legacy AMS counts active return and handover workflows as claimed assets. */
+export const isClaimedAssetStatus = (value: unknown): boolean => [
+  '领用', '退库审批中', '交接审批中', '交接待签字'
+].includes(String(value ?? '').trim())
+
 export type BusinessRecord = {
   id: string
   type?: string
