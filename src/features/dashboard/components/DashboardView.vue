@@ -22,7 +22,7 @@ type DashboardTooltip = {
   color: string
 }
 
-const { state, assets, requests, load } = useDashboard()
+const { state, assets, disposedCount, requests, load } = useDashboard()
 const { user } = usePortalSession()
 const { isEmployeeTerminal } = useTerminalMode()
 const distributionMode = ref<DistributionMode>('organization')
@@ -121,7 +121,9 @@ const statusRows = computed(() => {
     .map((status, index) => ({ status, key: `other-${index}`, label: status || '未标注', color: '#6f7d8c' }))
   return [...definitions, ...extraDefinitions].map((definition) => ({
     ...definition,
-    count: assets.value.filter((item) => item.status === definition.status).length
+    count: definition.status === '已处置'
+      ? disposedCount.value
+      : assets.value.filter((item) => item.status === definition.status).length
   })).filter((item) => item.count > 0)
 })
 

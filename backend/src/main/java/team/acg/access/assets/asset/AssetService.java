@@ -73,7 +73,7 @@ public class AssetService {
 
     public List<JsonNode> list() {
         repository.normalizeLegacyBorrowStatuses(Instant.now());
-        return repository.findAll().stream()
+        return repository.findActive().stream()
             .map(this::normalizeStatusAliases)
             .toList();
     }
@@ -96,7 +96,6 @@ public class AssetService {
         if (identity.manager()) return list();
         boolean canCreateRequest = identity.hasPermission("asset:request:create");
         return list().stream().filter(asset -> {
-            if ("已处置".equals(asset.path("status").asText())) return false;
             String ownerSubject = asset.path("ownerSubject").asText();
             boolean owned = (!identity.subject().isBlank() && identity.subject().equals(ownerSubject))
                 || (!identity.directorySubject().isBlank() && identity.directorySubject().equals(ownerSubject));
