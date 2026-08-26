@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { createQrGraphic, type QrGraphic } from '../composables/qrGraphic'
-import type { AssetRecord } from '../types/assets'
+import { displayAssetCode, type AssetRecord } from '../types/assets'
 
 type LabelSettings = {
   templateKey: string
@@ -127,7 +127,7 @@ const normalizedSettings = computed<LabelSettings>(() => {
 
 const fieldValue = (asset: AssetRecord, key: string): string => {
   const values: Record<string, unknown> = {
-    id: asset.id, name: asset.name, category: asset.category, status: asset.status, owner: asset.owner,
+    id: displayAssetCode(asset), name: asset.name, category: asset.category, status: asset.status, owner: asset.owner,
     employeeCode: asset.employeeCode, department: asset.department, location: asset.location, brand: asset.brand, model: asset.model,
     sn: asset.sn, phone: asset.phone, email: asset.email, receiveDate: asset.receiveDate, assetTag: asset.assetTag,
     price: asset.price ? `¥${Number(asset.price).toLocaleString('zh-CN')}` : '', supplier: asset.supplier,
@@ -158,7 +158,7 @@ const rowsFor = (asset: AssetRecord, settings: LabelSettings): LabelRow[] => [
 const scanTextFor = (asset: AssetRecord, settings: LabelSettings): string => {
   const rows = settings.scanFields.map((key) => `${fieldLabels[key] || key}:${fieldValue(asset, key)}`)
   customFields(settings.customFields).forEach((field) => rows.push(`${field.label}:${customValue(asset, field.source)}`))
-  return rows.filter(Boolean).join('\n') || `资产编码:${asset.id}`
+  return rows.filter(Boolean).join('\n') || `资产编码:${displayAssetCode(asset)}`
 }
 
 const entries = computed<LabelEntry[]>(() => props.assets.map((asset) => {
@@ -229,7 +229,7 @@ const templateRows = (entry: LabelEntry, count: number): LabelRow[] => {
                 <div class="asset-label-main">
                   <header class="asset-label-header">
                     <span v-if="normalizedSettings.showLogo" class="asset-label-logo" :class="{ 'has-image': normalizedSettings.logoImage }"><img v-if="normalizedSettings.logoImage" :src="normalizedSettings.logoImage" :alt="normalizedSettings.logoText || 'Logo'"><template v-else>{{ normalizedSettings.logoText || 'AM' }}</template></span>
-                    <strong>{{ entry.asset.id }}</strong>
+                    <strong>{{ displayAssetCode(entry.asset) }}</strong>
                   </header>
                   <div class="asset-label-name">{{ entry.asset.name || '-' }}</div>
                   <div class="asset-label-fields"><div v-for="row in entry.rows" :key="row.label" :style="{ '--label-row-font-size': `${row.fontSize}px` }"><span>{{ row.label }}</span><strong>{{ row.value }}</strong></div></div>

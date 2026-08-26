@@ -68,4 +68,16 @@ class AssetRepositoryVersionTest {
         assertThat(repository.reconcileSourceSnapshot("bear-rental-ams", Set.of("legacy-asset-1"))).isEqualTo(2);
         assertThat(repository.findAllRecords()).containsKey("legacy-asset-1").doesNotContainKeys("LOCAL-1", "legacy-asset-2");
     }
+
+    @Test
+    void backfillsStandardAssetCodesFromEarlierLegacySyncRecords() throws Exception {
+        var legacy = mapper.readTree("{\"id\":\"legacy-asset-1\",\"sourceSystem\":\"bear-rental-ams\",\"status\":\"领用\",\"legacyAssetCode\":\"PC-001\"}");
+        var local = mapper.readTree("{\"id\":\"LOCAL-1\",\"status\":\"空闲\",\"legacyAssetCode\":\"LOCAL-CODE\"}");
+        repository.replaceAll(List.of(legacy, local), Map.of(), Instant.now());
+
+        assertThat(repository.backfillLegacyAssetCodes("bear-rental-ams", Instant.now())).isEqualTo(1);
+        assertThat(repository.find("legacy-asset-1").path("assetCode").asText()).isEqualTo("PC-001");
+        assertThat(repository.find("LOCAL-1").path("assetCode").asText()).isEmpty();
+        assertThat(repository.backfillLegacyAssetCodes("bear-rental-ams", Instant.now())).isZero();
+    }
 }

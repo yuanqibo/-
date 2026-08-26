@@ -40,6 +40,7 @@ class LegacyAssetSyncWriterTest {
         JsonNode mapped = captured.getValue();
         assertThat(mapped.path("id").asText()).isEqualTo("legacy-asset-7");
         assertThat(mapped.path("legacyAssetId").asLong()).isEqualTo(7);
+        assertThat(mapped.path("assetCode").asText()).isEqualTo("PC-007");
         assertThat(mapped.path("legacyAssetCode").asText()).isEqualTo("PC-007");
         assertThat(mapped.path("sourceSystem").asText()).isEqualTo("bear-rental-ams");
         assertThat(mapped.path("status").asText()).isEqualTo("借用");
@@ -59,6 +60,47 @@ class LegacyAssetSyncWriterTest {
         List<JsonNode> mapped = transfer.getAllValues();
         assertThat(mapped.get(0).path("status").asText()).isEqualTo("调拨中");
         assertThat(mapped.get(1).path("status").asText()).isEqualTo("维修中");
+    }
+
+    @Test
+    void mapsEveryStatusPresentInTheLegacySnapshot() {
+        List<StatusCase> cases = List.of(
+            new StatusCase(1, 1, "空闲"),
+            new StatusCase(1, 2, "维修中"),
+            new StatusCase(5, 1, "领用"),
+            new StatusCase(5, 2, "领用"),
+            new StatusCase(8, 1, "空闲"),
+            new StatusCase(9, 1, "借用"),
+            new StatusCase(13, 1, "调拨中"),
+            new StatusCase(15, 1, "处置中"),
+            new StatusCase(17, 1, "已处置"),
+            new StatusCase(17, 2, "已处置"),
+            new StatusCase(21, 1, "维修中"),
+            new StatusCase(24, 1, "空闲"),
+            new StatusCase(25, 1, "空闲"),
+            new StatusCase(0, 3, "维修中"),
+            new StatusCase(0, 5, "处置中")
+        );
+        var captured = org.mockito.ArgumentCaptor.forClass(JsonNode.class);
+
+        for (int index = 0; index < cases.size(); index++) {
+            StatusCase status = cases.get(index);
+            long assetId = 100 + index;
+            when(assets.find("legacy-asset-" + assetId)).thenReturn(null);
+            writer.upsert(mapper.createObjectNode()
+                .put("assetId", assetId)
+                .put("assetCode", "CODE-" + assetId)
+                .put("assetStatus", status.assetStatus())
+                .put("useStatus", status.useStatus()), syncedAt);
+        }
+
+        verify(assets, times(cases.size())).upsertFromSync(captured.capture(), eq(syncedAt));
+        for (int index = 0; index < cases.size(); index++) {
+            JsonNode mapped = captured.getAllValues().get(index);
+            assertThat(mapped.path("assetCode").asText()).isEqualTo("CODE-" + (100 + index));
+            assertThat(mapped.path("legacyAssetCode").asText()).isEqualTo("CODE-" + (100 + index));
+            assertThat(mapped.path("status").asText()).isEqualTo(cases.get(index).expectedStatus());
+        }
     }
 
     @Test
@@ -93,7 +135,10 @@ class LegacyAssetSyncWriterTest {
         JsonNode deleted = captured.getValue();
         assertThat(deleted.path("status").asText()).isEqualTo("已处置");
         assertThat(deleted.path("sourceDeleted").asBoolean()).isTrue();
+        assertThat(deleted.path("assetCode").asText()).isEqualTo("PC-007");
         assertThat(deleted.path("legacyAssetCode").asText()).isEqualTo("PC-007");
         assertThat(deleted.path("lifecycle").toString()).isEqualTo("[\"existing-operation\"]");
     }
+
+    private record StatusCase(int assetStatus, int useStatus, String expectedStatus) {}
 }

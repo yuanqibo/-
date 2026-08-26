@@ -2,6 +2,7 @@ package team.acg.access.assets.asset;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.PostConstruct;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.dao.DuplicateKeyException;
@@ -121,6 +122,26 @@ public class AssetRepository {
             .toList();
         removed.forEach(id -> jdbc.update("DELETE FROM asset_record WHERE asset_id = ?", id));
         return removed.size();
+    }
+
+    /** Migrates source codes saved by earlier sync versions into the standard display field. */
+    public int backfillLegacyAssetCodes(String sourceSystem, Instant now) {
+        int updated = 0;
+        for (Map.Entry<String, AssetRecord> entry : findAllRecords().entrySet()) {
+            AssetRecord record = entry.getValue();
+            JsonNode document = record.document();
+            if (!sourceSystem.equals(document.path("sourceSystem").asText())
+                || document.path("assetCode").asText("").trim().length() > 0) continue;
+            String legacyAssetCode = document.path("legacyAssetCode").asText("").trim();
+            if (legacyAssetCode.isEmpty() || !document.isObject()) continue;
+            ObjectNode next = document.deepCopy();
+            next.put("assetCode", legacyAssetCode);
+            int changed = jdbc.update("UPDATE asset_record SET document = ?, version = ?, updated_at = ? WHERE asset_id = ? AND version = ?",
+                next.toString(), record.version() + 1, Timestamp.from(now), entry.getKey(), record.version());
+            if (changed != 1) throw conflict(entry.getKey());
+            updated++;
+        }
+        return updated;
     }
 
     /** Reconciles a completed source snapshot, removing local and stale source records. */

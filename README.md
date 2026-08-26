@@ -97,7 +97,7 @@ DATABASE_PASSWORD=...
 
 `LEGACY_ASSET_SYNC_REQUEST_INTERVAL` 控制老系统资产接口调用间隔，默认 `250ms`，用于避免首次全量同步时触发供应方限流。若供应方返回 SafeLine `468` 频率保护，当前任务会立即停止且不自动重试，避免延长冷却时间；等待下一次调度即可。
 
-首次全量同步使用 `pageAsset` 分页返回的完整资产快照，避免逐条补查详情；每日增量仅对 `queryAssetChange` 返回的变更资产调用 `queryAssetDetail`。
+首次全量同步使用 `pageAsset` 分页返回的完整资产快照，完成所有页面后才校准本地资产集合；若分页结果包含重复或无效资产 ID，任务会失败且不会替换本地快照。后续每 30 分钟增量同步仅对 `queryAssetChange` 返回的变更资产调用 `queryAssetDetail`。
 
 `ECP_TENANT_ID` 是可选租户白名单；配置后 Java 会拒绝其他租户的有效令牌，不配置则按 ECP 会话本身解析用户与权限。`ECP_SDK_PERMISSION_SNAPSHOT_SIGNING_SECRET` 只在显式开启 `ECP_SDK_PERMISSION_ENABLED=true`、需要 SDK 签名快照权限切面时提供。默认生产模式使用 Java 后端基于 ECP session context 的 Bearer 权限守卫。
 

@@ -42,7 +42,9 @@ public class LegacyAssetSyncWriter {
         asset.put("sourceDeleted", true);
         asset.put("sourceSystem", "bear-rental-ams");
         asset.put("legacyAssetId", sourceAssetId);
-        asset.put("legacyAssetCode", assetCode == null ? "" : assetCode);
+        String normalizedAssetCode = assetCode == null ? "" : assetCode.trim();
+        asset.put("assetCode", normalizedAssetCode);
+        asset.put("legacyAssetCode", normalizedAssetCode);
         asset.put("syncedAt", syncedAt.toString());
         if (!asset.has("lifecycle")) asset.set("lifecycle", mapper.createArrayNode());
         assets.upsertFromSync(asset, syncedAt);
@@ -54,7 +56,9 @@ public class LegacyAssetSyncWriter {
         ObjectNode asset = mapper.createObjectNode();
         asset.put("id", targetId(sourceAssetId));
         asset.put("legacyAssetId", sourceAssetId);
-        asset.put("legacyAssetCode", source.path("assetCode").asText(""));
+        String assetCode = source.path("assetCode").asText("").trim();
+        asset.put("assetCode", assetCode);
+        asset.put("legacyAssetCode", assetCode);
         asset.put("sourceSystem", "bear-rental-ams");
         asset.put("name", textOr(source, "assetName", "资产-" + sourceAssetId));
         String category = textOr(source, "assetsCategoryName", "未分类");

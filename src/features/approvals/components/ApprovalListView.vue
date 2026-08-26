@@ -7,7 +7,7 @@ import { useRoute } from 'vue-router'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useTerminalMode } from '../../../core/auth/terminal-mode'
 import { useAssets } from '../../assets/composables/useAssets'
-import type { AssetRecord } from '../../assets/types/assets'
+import { displayAssetCode, type AssetRecord } from '../../assets/types/assets'
 import { useApprovals } from '../composables/useApprovals'
 import type { ApprovalDecision, ApprovalRecord } from '../types/approval'
 import AssetRequestDialog from './AssetRequestDialog.vue'
@@ -114,7 +114,7 @@ const requestAssetIds = (item: ApprovalRecord): string[] => {
   const explicit = Array.isArray(item.assetIds) ? item.assetIds.map(String).filter(Boolean) : []
   if (explicit.length) return explicit
   const description = String(item.asset || '')
-  return assets.value.filter((asset) => description.includes(asset.id) || description === asset.name).map((asset) => asset.id)
+  return assets.value.filter((asset) => description.includes(displayAssetCode(asset)) || description.includes(asset.id) || description === asset.name).map((asset) => asset.id)
 }
 const approvalAssets = (item: ApprovalRecord): ApprovalAssetRow[] => {
   const byId = new Map(assets.value.map((asset) => [asset.id, asset]))
@@ -357,7 +357,7 @@ watch(canReview, () => {
         </section>
         <section class="approval-detail-section">
           <div class="approval-detail-section-head"><h3>申请明细</h3><span>共 {{ detailAssets.length || detail.assetCount || 0 }} 项</span></div>
-          <div class="approval-detail-assets-wrap"><table v-resizable-columns="`approvals:detail:${detail.type}`" class="approval-detail-assets-table"><thead><tr><th>图片</th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌</th><th>型号</th><th>设备序列号</th><th>所属/承租公司</th><th>所在位置</th><th>资产状态</th></tr></thead><tbody><tr v-for="asset in detailAssets" :key="asset.id"><td><img v-if="asset.image" :src="String(asset.image)" :alt="asset.name"><span v-else>-</span></td><td>{{ asset.id }}</td><td>{{ asset.category || '-' }}</td><td>{{ asset.name || '-' }}</td><td>{{ asset.brand || '-' }}</td><td>{{ asset.model || '-' }}</td><td>{{ asset.sn || '-' }}</td><td>{{ asset.ownerCompany || asset.company || '-' }}</td><td>{{ asset.location || '-' }}</td><td>{{ asset.status || '-' }}</td></tr><tr v-if="!detailAssets.length" class="empty-row"><td colspan="10">该申请未关联可读取的资产明细。</td></tr></tbody></table></div>
+          <div class="approval-detail-assets-wrap"><table v-resizable-columns="`approvals:detail:${detail.type}`" class="approval-detail-assets-table"><thead><tr><th>图片</th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌</th><th>型号</th><th>设备序列号</th><th>所属/承租公司</th><th>所在位置</th><th>资产状态</th></tr></thead><tbody><tr v-for="asset in detailAssets" :key="asset.id"><td><img v-if="asset.image" :src="String(asset.image)" :alt="asset.name"><span v-else>-</span></td><td>{{ displayAssetCode(asset) }}</td><td>{{ asset.category || '-' }}</td><td>{{ asset.name || '-' }}</td><td>{{ asset.brand || '-' }}</td><td>{{ asset.model || '-' }}</td><td>{{ asset.sn || '-' }}</td><td>{{ asset.ownerCompany || asset.company || '-' }}</td><td>{{ asset.location || '-' }}</td><td>{{ asset.status || '-' }}</td></tr><tr v-if="!detailAssets.length" class="empty-row"><td colspan="10">该申请未关联可读取的资产明细。</td></tr></tbody></table></div>
         </section>
         <section class="approval-detail-section">
           <h3>审批信息</h3>

@@ -7,7 +7,7 @@ import { usePortalSession } from '../../../core/auth/portal-session'
 import { searchDirectoryPeople } from '../../assets/api/assets.api'
 import { useAssets } from '../../assets/composables/useAssets'
 import type { ApprovalRecord } from '../types/approval'
-import type { AssetRecord, CatalogNode, DirectoryPerson } from '../../assets/types/assets'
+import { displayAssetCode, type AssetRecord, type CatalogNode, type DirectoryPerson } from '../../assets/types/assets'
 import { fetchRequestOperators, type RequestOperator } from '../api/approvals.api'
 import { useApprovals } from '../composables/useApprovals'
 import { matchesPinyinSearch } from '../../../shared/search/pinyin-search'
@@ -154,7 +154,7 @@ const requestAssets = computed(() => assets.value.filter((item) => {
 const filteredRequestAssets = computed(() => {
   return requestAssets.value.filter((item) => {
     const categoryMatch = !isAvailableSelfService.value || !selectedCategory.value || item.category === selectedCategory.value
-    const keywordMatch = matchesPinyinSearch([item.id, item.name, item.brand, item.model, item.sn, item.assetTag], assetQuery.value)
+    const keywordMatch = matchesPinyinSearch([displayAssetCode(item), item.id, item.name, item.brand, item.model, item.sn, item.assetTag], assetQuery.value)
     return categoryMatch && keywordMatch
   })
 })
@@ -258,13 +258,13 @@ const toggleScan = async (): Promise<void> => {
 const selectScannedAsset = (): void => {
   const code = scanCode.value.trim().toLowerCase()
   if (!code) { ElMessage.warning('请扫描资产编码、序列号或资产标签'); return }
-  const item = requestAssets.value.find((asset) => [asset.id, asset.sn, asset.assetTag]
+  const item = requestAssets.value.find((asset) => [displayAssetCode(asset), asset.id, asset.sn, asset.assetTag]
     .some((value) => String(value || '').trim().toLowerCase() === code))
   if (!item) { ElMessage.warning(`未找到符合${isSelfBorrow.value ? '借用' : '领用'}范围的空闲资产`); return }
   selectedCategory.value = item.category
   setAssetSelected(item.id, true)
   scanCode.value = ''
-  ElMessage.success(`已选择资产 ${item.id}`)
+  ElMessage.success(`已选择资产 ${displayAssetCode(item)}`)
   void nextTick(() => scanInput.value?.focus())
 }
 const assetModel = (item: AssetRecord): string => [item.brand, item.model].filter(Boolean).join(' ') || '-'
@@ -334,7 +334,7 @@ const submit = async (): Promise<void> => {
       applicant: user.value?.name || '',
       asset: isDeviceRequest.value
         ? form.deviceItems.map((item) => `${item.name.trim()} x${item.quantity}`).join('、')
-        : selectedAssets.value.map((asset) => `${asset.id} ${asset.name}`).join('、'),
+    : selectedAssets.value.map((asset) => `${displayAssetCode(asset)} ${asset.name}`).join('、'),
       reason: form.reason,
       details
     })
@@ -466,8 +466,8 @@ watch(() => [props.modelValue, props.type, props.preselectedAssetId] as const, (
           </div>
           <div class="handover-asset-list">
             <label v-for="item in filteredRequestAssets" :key="item.id" class="handover-asset-card" :class="{ selected: form.assetIds.includes(item.id) }">
-              <el-checkbox :model-value="form.assetIds.includes(item.id)" :aria-label="`选择资产 ${item.id}`" @change="setAssetSelected(item.id, Boolean($event))" />
-              <span><strong>{{ item.id }}</strong><em>{{ item.name }}</em><small>{{ assetMeta(item) }}</small></span>
+              <el-checkbox :model-value="form.assetIds.includes(item.id)" :aria-label="`选择资产 ${displayAssetCode(item)}`" @change="setAssetSelected(item.id, Boolean($event))" />
+              <span><strong>{{ displayAssetCode(item) }}</strong><em>{{ item.name }}</em><small>{{ assetMeta(item) }}</small></span>
             </label>
             <div v-if="!filteredRequestAssets.length" class="handover-asset-empty">{{ isSelfReceive ? '当前分类没有可领用的空闲资产' : isSelfBorrow ? '当前分类没有可借用的空闲资产' : isSelfGiveBack ? '没有可归还的本人借用资产' : isSelfReturn ? '没有可退还的本人领用资产' : '没有符合条件的本人资产' }}</div>
           </div>
@@ -475,7 +475,7 @@ watch(() => [props.modelValue, props.type, props.preselectedAssetId] as const, (
         <div class="handover-asset-column selected-column">
           <div class="handover-asset-column-head"><strong>已选择资产 {{ selectedAssets.length }}</strong><el-button v-if="selectedAssets.length" link type="danger" @click="form.assetIds = []">清空</el-button></div>
           <div class="handover-asset-list">
-            <article v-for="item in selectedAssets" :key="item.id" class="handover-selected-card"><span><strong>{{ item.id }}</strong><em>{{ item.name }}</em><small>{{ assetMeta(item) }}</small></span><el-button circle text :icon="Close" :aria-label="`移除资产 ${item.id}`" @click="setAssetSelected(item.id, false)" /></article>
+            <article v-for="item in selectedAssets" :key="item.id" class="handover-selected-card"><span><strong>{{ displayAssetCode(item) }}</strong><em>{{ item.name }}</em><small>{{ assetMeta(item) }}</small></span><el-button circle text :icon="Close" :aria-label="`移除资产 ${displayAssetCode(item)}`" @click="setAssetSelected(item.id, false)" /></article>
             <div v-if="!selectedAssets.length" class="handover-asset-empty">尚未选择资产</div>
           </div>
         </div>
@@ -505,7 +505,7 @@ watch(() => [props.modelValue, props.type, props.preselectedAssetId] as const, (
       <el-form-item label="申领备注" :required="remarkRequired"><el-input v-model="form.reason" type="textarea" :rows="3" maxlength="500" show-word-limit :placeholder="remarkPlaceholder" /></el-form-item>
     </el-form>
     <el-form v-else label-position="top" class="standard-form-grid">
-      <el-form-item label="选择资产" class="standard-form-span" required><el-select v-model="form.assetIds" multiple filterable collapse-tags placeholder="搜索并选择资产" style="width: 100%"><el-option v-for="item in requestAssets" :key="item.id" :label="`${item.id} · ${item.name}`" :value="item.id" /></el-select></el-form-item>
+      <el-form-item label="选择资产" class="standard-form-span" required><el-select v-model="form.assetIds" multiple filterable collapse-tags placeholder="搜索并选择资产" style="width: 100%"><el-option v-for="item in requestAssets" :key="item.id" :label="`${displayAssetCode(item)} · ${item.name}`" :value="item.id" /></el-select></el-form-item>
       <el-form-item label="资产位置" required><el-select v-model="form.location" filterable placeholder="选择资产位置" style="width: 100%"><el-option v-for="location in locationOptions" :key="location" :label="location" :value="location" /></el-select></el-form-item>
       <el-form-item label="申请日期"><el-date-picker v-model="form.date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
       <el-form-item v-if="form.type === '资产借用'" label="预计归还日期" required><el-date-picker v-model="form.expectedReturnDate" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>

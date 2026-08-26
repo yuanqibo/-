@@ -116,4 +116,51 @@ class LegacyAssetSyncServiceTest {
         verify(sync).complete(eq("bootstrap-1"), any(), eq(1), eq(1), eq(0));
         verify(assets).reconcileSourceSnapshot(eq("bear-rental-ams"), eq(java.util.Set.of("legacy-asset-7")));
     }
+
+    @Test
+    void bootstrapsEveryPageBeforeReconcilingTheSourceSnapshot() {
+        properties.setBootstrapEnabled(true);
+        when(sync.tryAcquireLock(anyString(), any())).thenReturn(true);
+        when(sync.cursor()).thenReturn(Optional.empty());
+        when(sync.startRun(any(), any())).thenReturn("bootstrap-pages");
+        when(sync.eventExists(anyString())).thenReturn(false);
+        JsonNode first = mapper.createObjectNode().put("assetId", 7).put("assetCode", "PC-007");
+        JsonNode second = mapper.createObjectNode().put("assetId", 8).put("assetCode", "PC-008");
+        JsonNode firstPage = mapper.createObjectNode().put("hasNextPage", true)
+            .set("list", mapper.createArrayNode().add(first));
+        JsonNode secondPage = mapper.createObjectNode().put("hasNextPage", false)
+            .set("list", mapper.createArrayNode().add(second));
+        when(client.pageAssets(anyInt(), anyInt(), eq(true))).thenReturn(firstPage, secondPage);
+
+        service.run();
+
+        verify(client).pageAssets(eq(1), anyInt(), eq(true));
+        verify(client).pageAssets(eq(2), anyInt(), eq(true));
+        verify(writer).upsert(eq(first), any());
+        verify(writer).upsert(eq(second), any());
+        verify(sync).complete(eq("bootstrap-pages"), any(), eq(2), eq(2), eq(0));
+        verify(assets).reconcileSourceSnapshot(eq("bear-rental-ams"),
+            eq(java.util.Set.of("legacy-asset-7", "legacy-asset-8")));
+    }
+
+    @Test
+    void doesNotReconcileAnIncompleteSnapshotWithDuplicateAssetIds() {
+        properties.setBootstrapEnabled(true);
+        when(sync.tryAcquireLock(anyString(), any())).thenReturn(true);
+        when(sync.cursor()).thenReturn(Optional.empty());
+        when(sync.startRun(any(), any())).thenReturn("bootstrap-duplicate");
+        when(sync.eventExists(anyString())).thenReturn(false);
+        JsonNode duplicate = mapper.createObjectNode().put("assetId", 7).put("assetCode", "PC-007");
+        JsonNode firstPage = mapper.createObjectNode().put("hasNextPage", true)
+            .set("list", mapper.createArrayNode().add(duplicate));
+        JsonNode secondPage = mapper.createObjectNode().put("hasNextPage", false)
+            .set("list", mapper.createArrayNode().add(duplicate));
+        when(client.pageAssets(anyInt(), anyInt(), eq(true))).thenReturn(firstPage, secondPage);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(service::run)
+            .hasMessageContaining("duplicate or invalid asset IDs");
+
+        verify(assets, never()).reconcileSourceSnapshot(anyString(), any());
+        verify(sync).fail(eq("bootstrap-duplicate"), anyString(), eq(2), eq(2), eq(1));
+    }
 }

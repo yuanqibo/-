@@ -46,6 +46,8 @@ public class LegacyAssetSyncService {
             return;
         }
         try {
+            assets.lockForWrite();
+            assets.backfillLegacyAssetCodes(SOURCE_SYSTEM, Instant.now());
             Instant cursor = sync.cursor().orElse(properties.getInitialCursor());
             Instant end = Instant.now().minus(properties.getSafetyDelay());
             if (cursor == null) {
@@ -141,6 +143,9 @@ public class LegacyAssetSyncService {
                     }
                 }
                 if (!result.path("hasNextPage").asBoolean(false)) break;
+            }
+            if (failed == 0 && snapshotAssetIds.size() != fetched) {
+                throw new IllegalStateException("Legacy AMS pageAsset snapshot contains duplicate or invalid asset IDs");
             }
             if (failed == 0) {
                 assets.lockForWrite();

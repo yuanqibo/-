@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { AssetRecord } from '../types/assets'
+import { displayAssetCode, type AssetRecord } from '../types/assets'
 
 export type AssetOrderPrintKind = 'inbound' | 'receive' | 'return' | 'employee' | 'handover'
 
@@ -52,8 +52,8 @@ const summary = computed(() => {
         </thead>
         <tbody>
           <tr v-for="row in rows" :key="`${orderNumber(row)}-${row.id}`">
-            <template v-if="isInbound"><td>{{ orderNumber(row) }}</td><td>{{ text(row.status) }}</td><td>{{ row.id }}</td><td>{{ text(row.name) }}</td><td>{{ text(row.category) }}</td><td>{{ operationDate(row) }}</td><td>{{ operator(row) }}</td><td>{{ money(row.price) }}</td></template>
-            <template v-else><td>{{ orderNumber(row) }}</td><td>{{ text(row.status) }}</td><td>{{ operationDate(row) }}</td><td>{{ operator(row) }}</td><td>{{ text(row.owner) }}</td><td>{{ row.id }}</td><td>{{ text(row.name) }}</td></template>
+            <template v-if="isInbound"><td>{{ orderNumber(row) }}</td><td>{{ text(row.status) }}</td><td>{{ displayAssetCode(row) }}</td><td>{{ text(row.name) }}</td><td>{{ text(row.category) }}</td><td>{{ operationDate(row) }}</td><td>{{ operator(row) }}</td><td>{{ money(row.price) }}</td></template>
+            <template v-else><td>{{ orderNumber(row) }}</td><td>{{ text(row.status) }}</td><td>{{ operationDate(row) }}</td><td>{{ operator(row) }}</td><td>{{ text(row.owner) }}</td><td>{{ displayAssetCode(row) }}</td><td>{{ text(row.name) }}</td></template>
           </tr>
         </tbody>
       </table>

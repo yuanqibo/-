@@ -1,5 +1,8 @@
 export type AssetRecord = {
   id: string
+  /** Stable target primary key; assetCode is the human-readable source code when available. */
+  assetCode?: string
+  legacyAssetCode?: string
   name: string
   status: string
   category: string
@@ -30,6 +33,12 @@ export type AssetRecord = {
   tags?: string[]
   lifecycle?: Array<[string, string, string]>
   [key: string]: unknown
+}
+
+/** Use the source asset code for display while retaining id for internal relations and commands. */
+export const displayAssetCode = (asset: Pick<AssetRecord, 'id' | 'assetCode' | 'legacyAssetCode'> | null | undefined): string => {
+  const code = String(asset?.assetCode || asset?.legacyAssetCode || '').trim()
+  return code || String(asset?.id || '').trim() || '-'
 }
 
 export type BusinessRecord = {

@@ -4,7 +4,7 @@ import { Delete, Search, Upload } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { usePortalSession } from '../../../core/auth/portal-session'
 import { useAssets } from '../../assets/composables/useAssets'
-import type { AssetRecord } from '../../assets/types/assets'
+import { displayAssetCode, type AssetRecord } from '../../assets/types/assets'
 import { useDisposals } from '../composables/useDisposals'
 import type { DisposalDraft, DisposalRecord } from '../types/disposal'
 import { matchesPinyinSearch } from '../../../shared/search/pinyin-search'
@@ -46,7 +46,7 @@ const selectedAssets = computed(() => availableAssets.value.filter((asset) => se
 const selectedSubmissionAssetIds = computed(() => selectedAssetIds.value.filter((id) => selectedAssetRowIds.value.includes(id)))
 const pickerAssets = computed(() => {
   return availableAssets.value.filter((asset) => matchesPinyinSearch(
-    [asset.id, asset.name, asset.category, asset.brand, asset.model, asset.sn, asset.supplier, asset.location], pickerQuery.value))
+    [displayAssetCode(asset), asset.id, asset.name, asset.category, asset.brand, asset.model, asset.sn, asset.supplier, asset.location], pickerQuery.value))
 })
 const allPickerAssetsSelected = computed(() => pickerAssets.value.length > 0
   && pickerAssets.value.every((asset) => pickerAssetIds.value.includes(asset.id)))
@@ -193,7 +193,7 @@ const submitCreate = async (): Promise<void> => {
       </div>
       <div class="disposal-picker-table selected-assets-table">
         <table><thead><tr><th class="check-cell"><input type="checkbox" :checked="allSelectedRowsMarked" aria-label="全选已加入资产" @change="toggleAllSelectedAssetRows(($event.target as HTMLInputElement).checked)"></th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌 / 型号</th><th>设备序列号</th><th>供应商</th><th>所在位置</th></tr></thead>
-          <tbody><tr v-for="asset in selectedAssets" :key="asset.id"><td class="check-cell"><input type="checkbox" :checked="selectedAssetRowIds.includes(asset.id)" :aria-label="`选择${asset.id}`" @change="toggleSelectedAssetRow(asset.id, ($event.target as HTMLInputElement).checked)"></td><td>{{ asset.id }}</td><td>{{ asset.category }}</td><td>{{ asset.name }}</td><td>{{ [asset.brand, asset.model].filter(Boolean).join(' / ') || '-' }}</td><td>{{ asset.sn || '-' }}</td><td>{{ asset.supplier || '-' }}</td><td>{{ asset.location || '-' }}</td></tr><tr v-if="!selectedAssets.length"><td colspan="8"><el-empty description="尚未选择资产" :image-size="56" /></td></tr></tbody>
+          <tbody><tr v-for="asset in selectedAssets" :key="asset.id"><td class="check-cell"><input type="checkbox" :checked="selectedAssetRowIds.includes(asset.id)" :aria-label="`选择${displayAssetCode(asset)}`" @change="toggleSelectedAssetRow(asset.id, ($event.target as HTMLInputElement).checked)"></td><td>{{ displayAssetCode(asset) }}</td><td>{{ asset.category }}</td><td>{{ asset.name }}</td><td>{{ [asset.brand, asset.model].filter(Boolean).join(' / ') || '-' }}</td><td>{{ asset.sn || '-' }}</td><td>{{ asset.supplier || '-' }}</td><td>{{ asset.location || '-' }}</td></tr><tr v-if="!selectedAssets.length"><td colspan="8"><el-empty description="尚未选择资产" :image-size="56" /></td></tr></tbody>
         </table>
       </div>
     </section>
@@ -204,7 +204,7 @@ const submitCreate = async (): Promise<void> => {
     <div class="disposal-asset-picker-toolbar"><div><strong>空闲资产</strong><span>搜索并勾选需要加入处置单的资产</span></div><el-input v-model="pickerQuery" clearable class="disposal-asset-picker-search" placeholder="搜索编码、名称、分类、品牌或供应商" aria-label="搜索可选资产"><template #prefix><el-icon><Search /></el-icon></template></el-input></div>
     <div class="disposal-picker-table disposal-asset-picker-table">
       <table><thead><tr><th class="check-cell"><input type="checkbox" :checked="allPickerAssetsSelected" aria-label="全选当前资产" @change="toggleAllPickerAssets(($event.target as HTMLInputElement).checked)"></th><th>资产编码</th><th>资产分类</th><th>资产名称</th><th>品牌 / 型号</th><th>设备序列号</th><th>供应商</th><th>所在位置</th></tr></thead>
-        <tbody><tr v-for="asset in pickerAssets" :key="asset.id" :class="{ selected: pickerAssetIds.includes(asset.id) }"><td class="check-cell"><input type="checkbox" :checked="pickerAssetIds.includes(asset.id)" :aria-label="`选择资产${asset.id}`" @change="togglePickerAsset(asset, ($event.target as HTMLInputElement).checked)"></td><td>{{ asset.id }}</td><td>{{ asset.category }}</td><td>{{ asset.name }}</td><td>{{ [asset.brand, asset.model].filter(Boolean).join(' / ') || '-' }}</td><td>{{ asset.sn || '-' }}</td><td>{{ asset.supplier || '-' }}</td><td>{{ asset.location || '-' }}</td></tr><tr v-if="!pickerAssets.length"><td colspan="8"><el-empty description="没有符合条件的空闲资产" :image-size="64" /></td></tr></tbody>
+        <tbody><tr v-for="asset in pickerAssets" :key="asset.id" :class="{ selected: pickerAssetIds.includes(asset.id) }"><td class="check-cell"><input type="checkbox" :checked="pickerAssetIds.includes(asset.id)" :aria-label="`选择资产${displayAssetCode(asset)}`" @change="togglePickerAsset(asset, ($event.target as HTMLInputElement).checked)"></td><td>{{ displayAssetCode(asset) }}</td><td>{{ asset.category }}</td><td>{{ asset.name }}</td><td>{{ [asset.brand, asset.model].filter(Boolean).join(' / ') || '-' }}</td><td>{{ asset.sn || '-' }}</td><td>{{ asset.supplier || '-' }}</td><td>{{ asset.location || '-' }}</td></tr><tr v-if="!pickerAssets.length"><td colspan="8"><el-empty description="没有符合条件的空闲资产" :image-size="64" /></td></tr></tbody>
       </table>
     </div>
     <template #footer><div class="disposal-asset-picker-footer"><span>已选择 {{ pickerAssetIds.length }} 项</span><div><el-button @click="assetPickerOpen = false">取消</el-button><el-button type="primary" @click="confirmAssetPicker">确认选择</el-button></div></div></template>
