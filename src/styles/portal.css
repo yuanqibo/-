@@ -10205,8 +10205,8 @@ td .link {
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-available {
-  color: #0f766e;
-  background: #ccfbf1;
+  color: #20a5d4;
+  background: #e3f5fb;
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-idle {
@@ -10225,8 +10225,8 @@ td .link {
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-received {
-  color: #9333ea;
-  background: #f3e8ff;
+  color: #875cfa;
+  background: #eeeaff;
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-receive-in-progress {
@@ -10235,8 +10235,8 @@ td .link {
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-borrowed {
-  color: #0369a1;
-  background: #e0f2fe;
+  color: #ff9700;
+  background: #fff3df;
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-borrow-in-progress {
@@ -10245,8 +10245,8 @@ td .link {
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-maintenance {
-  color: #c2410c;
-  background: #ffedd5;
+  color: #e9a126;
+  background: #fdf1d8;
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-transfer {
@@ -10325,18 +10325,18 @@ td .link {
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-unconfirmed {
-  color: #dc2626;
-  background: #fee2e2;
+  color: #a96139;
+  background: #f6e9e0;
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-disposal {
-  color: #92400e;
-  background: #fef3c7;
+  color: #e6753c;
+  background: #fff0e7;
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-disposed {
-  color: #64748b;
-  background: #e2e8f0;
+  color: #f9555e;
+  background: #ffe8ea;
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-scrapped {
