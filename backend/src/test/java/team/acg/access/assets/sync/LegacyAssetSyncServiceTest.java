@@ -114,5 +114,6 @@ class LegacyAssetSyncServiceTest {
         verify(writer).upsert(eq(summary), any());
         verify(client, never()).queryAssetDetail(anyInt());
         verify(sync).complete(eq("bootstrap-1"), any(), eq(1), eq(1), eq(0));
+        verify(assets).reconcileSourceSnapshot(eq("bear-rental-ams"), eq(java.util.Set.of("legacy-asset-7")));
     }
 }

@@ -113,6 +113,27 @@ public class AssetRepository {
             asset.path("status").asText(), asset.toString(), versions.get(0) + 1, Timestamp.from(now), id);
     }
 
+    /** Removes records that do not belong to the configured source system. */
+    public int removeAssetsOutsideSource(String sourceSystem) {
+        List<String> removed = findAllRecords().entrySet().stream()
+            .filter(entry -> !sourceSystem.equals(entry.getValue().document().path("sourceSystem").asText()))
+            .map(Map.Entry::getKey)
+            .toList();
+        removed.forEach(id -> jdbc.update("DELETE FROM asset_record WHERE asset_id = ?", id));
+        return removed.size();
+    }
+
+    /** Reconciles a completed source snapshot, removing local and stale source records. */
+    public int reconcileSourceSnapshot(String sourceSystem, Set<String> sourceAssetIds) {
+        List<String> removed = findAllRecords().entrySet().stream()
+            .filter(entry -> !sourceSystem.equals(entry.getValue().document().path("sourceSystem").asText())
+                || !sourceAssetIds.contains(entry.getKey()))
+            .map(Map.Entry::getKey)
+            .toList();
+        removed.forEach(id -> jdbc.update("DELETE FROM asset_record WHERE asset_id = ?", id));
+        return removed.size();
+    }
+
     public void lockForWrite() {
         jdbc.queryForObject("SELECT version FROM asset_write_guard WHERE guard_id = 1 FOR UPDATE", Long.class);
     }

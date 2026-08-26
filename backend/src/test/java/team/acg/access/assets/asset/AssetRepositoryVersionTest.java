@@ -12,6 +12,7 @@ import org.springframework.test.context.TestPropertySource;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -55,5 +56,16 @@ class AssetRepositoryVersionTest {
         repository.replaceAll(List.of(asset.deepCopy()), current, Instant.now());
 
         assertThat(repository.findAllRecords().get("A-1").version()).isEqualTo(1);
+    }
+
+    @Test
+    void sourceSnapshotRemovesLocalAndStaleSourceRows() throws Exception {
+        var local = mapper.readTree("{\"id\":\"LOCAL-1\",\"status\":\"空闲\"}");
+        var currentLegacy = mapper.readTree("{\"id\":\"legacy-asset-1\",\"sourceSystem\":\"bear-rental-ams\",\"status\":\"空闲\"}");
+        var staleLegacy = mapper.readTree("{\"id\":\"legacy-asset-2\",\"sourceSystem\":\"bear-rental-ams\",\"status\":\"已处置\"}");
+        repository.replaceAll(List.of(local, currentLegacy, staleLegacy), Map.of(), Instant.now());
+
+        assertThat(repository.reconcileSourceSnapshot("bear-rental-ams", Set.of("legacy-asset-1"))).isEqualTo(2);
+        assertThat(repository.findAllRecords()).containsKey("legacy-asset-1").doesNotContainKeys("LOCAL-1", "legacy-asset-2");
     }
 }

@@ -10,12 +10,15 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 @ConditionalOnProperty(prefix = "asset-portal.legacy-asset-sync", name = "enabled", havingValue = "true")
 public class LegacyAssetSyncService {
+    private static final String SOURCE_SYSTEM = "bear-rental-ams";
     private final LegacyAmsClient client;
     private final LegacyAssetSyncProperties properties;
     private final LegacyAssetSyncRepository sync;
@@ -86,6 +89,10 @@ public class LegacyAssetSyncService {
                         sync.recordDeadLetter(eventBaseKey, sourceId, error.getMessage());
                     }
                 }
+                if (failed == 0) {
+                    assets.lockForWrite();
+                    assets.removeAssetsOutsideSource(SOURCE_SYSTEM);
+                }
                 sync.complete(runId, end, fetched, applied, failed);
             } catch (RuntimeException error) {
                 sync.fail(runId, error.getMessage(), fetched, applied, failed + 1);
@@ -102,6 +109,7 @@ public class LegacyAssetSyncService {
         int fetched = 0;
         int applied = 0;
         int failed = 0;
+        Set<String> snapshotAssetIds = new LinkedHashSet<>();
         try {
             for (int page = 1; ; page++) {
                 JsonNode result = client.pageAssets(page, Math.max(1, Math.min(properties.getPageSize(), 500)), true);
@@ -114,6 +122,7 @@ public class LegacyAssetSyncService {
                     String eventKey = eventBaseKey;
                     try {
                         if (sourceId.isBlank()) throw new IllegalArgumentException("Legacy asset page item has no assetId");
+                        snapshotAssetIds.add("legacy-asset-" + sourceId);
                         // pageAsset already contains the full asset snapshot needed by the target model.
                         String hash = hash(summary);
                         eventKey = eventKey + ":" + hash;
@@ -132,6 +141,10 @@ public class LegacyAssetSyncService {
                     }
                 }
                 if (!result.path("hasNextPage").asBoolean(false)) break;
+            }
+            if (failed == 0) {
+                assets.lockForWrite();
+                assets.reconcileSourceSnapshot(SOURCE_SYSTEM, snapshotAssetIds);
             }
             sync.complete(runId, syncedAt, fetched, applied, failed);
         } catch (RuntimeException error) {
