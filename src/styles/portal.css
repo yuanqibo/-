@@ -10325,8 +10325,8 @@ td .link {
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-unconfirmed {
-  color: #c026d3;
-  background: #fae8ff;
+  color: #dc2626;
+  background: #fee2e2;
 }
 
 :is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-disposal {
