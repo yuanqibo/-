@@ -22,7 +22,7 @@ type DashboardTooltip = {
   color: string
 }
 
-const { state, assets, disposedCount, requests, load } = useDashboard()
+const { state, assets, requests, load } = useDashboard()
 const { user } = usePortalSession()
 const { isEmployeeTerminal } = useTerminalMode()
 const distributionMode = ref<DistributionMode>('organization')
@@ -106,18 +106,26 @@ const openEmployeeRequest = (action: 'return' | 'handover', item: AssetRecord): 
 }
 
 const statusRows = computed(() => {
-  const receiveCount = assets.value.filter((item) => item.status === '领用').length
-  const borrowCount = assets.value.filter((item) => ['借用', '借用中'].includes(item.status)).length
-  const idleCount = Math.max(assets.value.length - receiveCount - borrowCount, 0)
-  return [
-    { key: 'receive', label: '领用', count: receiveCount, color: '#7c5cf6' },
-    { key: 'idle', label: '空闲', count: idleCount, color: '#20a7dc' },
-    { key: 'disposed', label: '已处置', count: disposedCount.value, color: '#f45f63' },
-    { key: 'borrow', label: '借用', count: borrowCount, color: '#f59e0b' }
+  const definitions = [
+    { status: '领用', key: 'receive', label: '领用', color: '#7c5cf6' },
+    { status: '空闲', key: 'idle', label: '空闲', color: '#20a7dc' },
+    { status: '借用', key: 'borrow', label: '借用', color: '#f59e0b' },
+    { status: '维修中', key: 'repair', label: '维修中', color: '#e1a235' },
+    { status: '调拨中', key: 'transfer', label: '调拨中', color: '#2e9f99' },
+    { status: '处置中', key: 'disposing', label: '处置中', color: '#df7b45' },
+    { status: '已处置', key: 'disposed', label: '已处置', color: '#f45f63' },
+    { status: '已报废', key: 'scrapped', label: '已报废', color: '#8d99ae' }
   ]
+  const knownStatuses = new Set(definitions.map((item) => item.status))
+  const extraDefinitions = Array.from(new Set(assets.value.map((item) => item.status).filter((status) => !knownStatuses.has(status))))
+    .map((status, index) => ({ status, key: `other-${index}`, label: status || '未标注', color: '#6f7d8c' }))
+  return [...definitions, ...extraDefinitions].map((definition) => ({
+    ...definition,
+    count: assets.value.filter((item) => item.status === definition.status).length
+  })).filter((item) => item.count > 0)
 })
 
-const statusTotal = computed(() => assets.value.length + disposedCount.value)
+const statusTotal = computed(() => statusRows.value.reduce((sum, row) => sum + row.count, 0))
 
 const statusSegments = computed(() => {
   const circumference = 213.6
