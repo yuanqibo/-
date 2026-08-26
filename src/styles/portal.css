@@ -12073,39 +12073,19 @@ body.is-resizing-column * {
 
 .advanced-filter-section {
   display: grid;
-  gap: 10px;
-  padding: 10px 18px 18px;
-}
-
-.inbound-advanced-fields,
-.borrow-return-advanced-fields,
-.receive-return-advanced-fields {
   gap: 14px;
   padding: 18px 18px 22px;
 }
 
 .advanced-filter-field {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-}
-
-.inbound-advanced-fields .advanced-filter-field,
-.borrow-return-advanced-fields .advanced-filter-field,
-.receive-return-advanced-fields .advanced-filter-field {
   grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
   gap: 14px;
 }
 
 .advanced-filter-field span {
   color: #475569;
-  font-size: 12px;
-}
-
-.inbound-advanced-fields .advanced-filter-field > span,
-.borrow-return-advanced-fields .advanced-filter-field > span,
-.receive-return-advanced-fields .advanced-filter-field > span {
   font-size: 14px;
   line-height: 1.4;
   white-space: nowrap;
@@ -12113,25 +12093,25 @@ body.is-resizing-column * {
 
 .advanced-filter-field input {
   width: 100%;
-  height: 32px;
+  height: 40px;
   border: 1px solid #dbe4ef;
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 0 10px;
   color: #334155;
   background: #ffffff;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .advanced-filter-field > .el-select {
   width: 100%;
-  height: 32px;
+  height: 40px;
 }
 
 .advanced-filter-field > .el-select .el-select__wrapper {
-  min-height: 32px;
-  border-radius: 5px;
+  min-height: 40px;
+  border-radius: 6px;
   box-shadow: 0 0 0 1px #dbe4ef inset;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 /* Keep every search control value quieter than its field label while retaining a clear focus state. */
@@ -12176,11 +12156,11 @@ body.is-resizing-column * {
 
 .asset-status-multiselect.el-select {
   height: auto;
-  min-height: 32px;
+  min-height: 40px;
 }
 
 .asset-status-multiselect.el-select .el-select__wrapper {
-  min-height: 32px;
+  min-height: 40px;
   padding: 3px 10px;
 }
 
@@ -12189,28 +12169,6 @@ body.is-resizing-column * {
   --el-tag-border-color: #dbe4ef;
   --el-tag-text-color: #7c8aa0;
   font-size: 12px;
-}
-
-.inbound-advanced-fields .advanced-filter-field input,
-.borrow-return-advanced-fields .advanced-filter-field input,
-.receive-return-advanced-fields .advanced-filter-field input {
-  height: 40px;
-  border-radius: 6px;
-  font-size: 13px;
-}
-
-.inbound-advanced-fields .advanced-filter-field > .el-select,
-.borrow-return-advanced-fields .advanced-filter-field > .el-select,
-.receive-return-advanced-fields .advanced-filter-field > .el-select {
-  height: 40px;
-}
-
-.inbound-advanced-fields .advanced-filter-field > .el-select .el-select__wrapper,
-.borrow-return-advanced-fields .advanced-filter-field > .el-select .el-select__wrapper,
-.receive-return-advanced-fields .advanced-filter-field > .el-select .el-select__wrapper {
-  min-height: 40px;
-  border-radius: 6px;
-  font-size: 13px;
 }
 
 .advanced-filter-field input:focus {
@@ -12223,31 +12181,18 @@ body.is-resizing-column * {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr);
   align-items: center;
-  height: 32px;
+  height: 40px;
   border: 1px solid #dbe4ef;
-  border-radius: 5px;
+  border-radius: 6px;
   background: #ffffff;
   overflow: hidden;
 }
 
-.inbound-advanced-fields .advanced-date-range-control,
-.borrow-return-advanced-fields .advanced-date-range-control,
-.receive-return-advanced-fields .advanced-date-range-control {
-  height: 40px;
-  border-radius: 6px;
-}
-
 .advanced-date-range-control input {
-  height: 30px;
+  height: 38px;
   border: 0;
   border-radius: 0;
   box-shadow: none;
-}
-
-.inbound-advanced-fields .advanced-date-range-control input,
-.borrow-return-advanced-fields .advanced-date-range-control input,
-.receive-return-advanced-fields .advanced-date-range-control input {
-  height: 38px;
 }
 
 .advanced-date-range-control span {
