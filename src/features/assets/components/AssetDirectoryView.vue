@@ -582,12 +582,42 @@ const listCellValue = (item: AssetRecord, key: ListColumnKey): string | number =
   const value = item[key]
   return value === undefined || value === null || value === '' ? '-' : String(value)
 }
-const assetStatusClass = (value: string): string => {
-  const status = String(value || '')
-  if (status.includes('审批')) return 'green'
-  if (status === '空闲' || status === '闲置') return 'blue'
-  if (status === '交接待签字') return 'red'
-  return 'violet'
+const statusColorClass: Record<string, string> = {
+  空闲: 'status-available',
+  闲置: 'status-idle',
+  上架: 'status-listed',
+  待验收: 'status-pending-acceptance',
+  领用: 'status-received',
+  领用中: 'status-receive-in-progress',
+  借用: 'status-borrowed',
+  借用中: 'status-borrow-in-progress',
+  维修中: 'status-maintenance',
+  调拨中: 'status-transfer',
+  审批中: 'status-approval',
+  领用审批中: 'status-receive-approval',
+  借用审批中: 'status-borrow-approval',
+  交接审批中: 'status-handover-approval',
+  退库审批中: 'status-return-approval',
+  领用待签字: 'status-receive-signature',
+  借用待签字: 'status-borrow-signature',
+  交接待签字: 'status-handover-signature',
+  流程中: 'status-workflow',
+  退还中: 'status-returning',
+  待归还: 'status-pending-return',
+  已归还: 'status-returned',
+  已入库: 'status-inbound',
+  已取消: 'status-cancelled',
+  处置中: 'status-disposal',
+  已处置: 'status-disposed',
+  已报废: 'status-scrapped'
+}
+
+const assetStatusClass = (value: unknown): string => {
+  const status = String(value ?? '').trim()
+  if (status.startsWith('状态待确认')) return 'status-unconfirmed'
+  if (status.startsWith('已处置')) return 'status-disposed'
+  const label = status.replace(/（.*$/, '').trim()
+  return statusColorClass[label] || 'status-other'
 }
 function padTimePart(value: number): string { return String(value).padStart(2, '0') }
 function isPreciseOperationTime(value: unknown): boolean {
@@ -1208,12 +1238,6 @@ const printNow = (): void => {
 }
 const printOrderNow = (): void => window.print()
 
-const statusType = (value: string): 'success' | 'warning' | 'info' | 'danger' => {
-  if (value === '领用') return 'success'
-  if (value === '借用' || value === '借用中') return 'warning'
-  if (value === '维修中') return 'danger'
-  return 'info'
-}
 const detailText = (value: unknown): string => String(value ?? '').trim() || '-'
 const operationTypeForLifecycle = (action: string): AssetOperationRecord['type'] | '' => {
   if (action.includes('入库') || action.includes('清单替换')) return 'INBOUND'
@@ -1420,7 +1444,7 @@ onMounted(() => {
               <tr v-for="item in displayedRows" :key="item.id">
                 <td class="asset-list-select-cell"><input type="checkbox" :aria-label="`选择${item.id}`" :checked="selectedIds.has(item.id)" @change="toggleAssetSelection(item, ($event.target as HTMLInputElement).checked)"></td>
                 <td v-for="column in listDisplayedColumns" :key="column.key">
-                  <span v-if="column.key === 'status'" class="asset-status-pill" :class="assetStatusClass(item.status)">{{ displayAssetStatus(item) }}</span>
+                  <span v-if="column.key === 'status'" class="asset-status-pill" :class="assetStatusClass(displayAssetStatus(item))">{{ displayAssetStatus(item) }}</span>
                   <button v-else-if="column.key === 'code'" class="link" type="button" @click="detail = item">{{ displayAssetCode(item) }}</button>
                   <template v-else>{{ listCellValue(item, column.key) }}</template>
                 </td>
@@ -1619,7 +1643,7 @@ onMounted(() => {
     <el-drawer :model-value="Boolean(detail)" class="asset-detail-drawer" aria-label="资产详情" title="资产详情" size="min(1120px, 96vw)" append-to-body @close="detail = null">
       <div v-if="detail" class="asset-detail-page">
         <div class="asset-detail-content">
-          <div class="asset-detail-title-row"><h3>资产详情</h3><el-tag :type="statusType(detail.status)">{{ displayAssetStatus(detail) }}</el-tag></div>
+          <div class="asset-detail-title-row"><h3>资产详情</h3><el-tag class="asset-status-pill asset-status-detail" :class="assetStatusClass(displayAssetStatus(detail))">{{ displayAssetStatus(detail) }}</el-tag></div>
           <section class="asset-detail-section"><h3>领用信息</h3><div class="asset-detail-form-grid">
             <label class="asset-detail-form-item"><span>人员姓名：</span><div class="asset-detail-readonly"><strong>{{ detailText(detail.owner === '未分配' ? '' : detail.owner) }}</strong></div></label>
             <label class="asset-detail-form-item"><span>使用公司：</span><div class="asset-detail-readonly"><strong>{{ detailText(hasCurrentUsage(detail) ? detail.company : '') }}</strong></div></label>

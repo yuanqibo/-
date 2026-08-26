@@ -10200,24 +10200,153 @@ td .link {
   font-size: 12px;
 }
 
-.asset-status-pill.violet {
-  color: #7c3aed;
+.asset-status-detail {
+  border: 0;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-available {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-idle {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-listed {
+  color: #4d7c0f;
+  background: #ecfccb;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-pending-acceptance {
+  color: #6d28d9;
   background: #ede9fe;
 }
 
-.asset-status-pill.green {
-  color: #059669;
-  background: #dcfce7;
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-received {
+  color: #9333ea;
+  background: #f3e8ff;
 }
 
-.asset-status-pill.blue {
-  color: #0284c7;
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-receive-in-progress {
+  color: #7e22ce;
+  background: #fae8ff;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-borrowed {
+  color: #0369a1;
   background: #e0f2fe;
 }
 
-.asset-status-pill.red {
-  color: #f97316;
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-borrow-in-progress {
+  color: #0e7490;
+  background: #cffafe;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-maintenance {
+  color: #c2410c;
   background: #ffedd5;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-transfer {
+  color: #047857;
+  background: #d1fae5;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-approval {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-receive-approval {
+  color: #a16207;
+  background: #fef9c3;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-borrow-approval {
+  color: #be123c;
+  background: #ffe4e6;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-handover-approval {
+  color: #a21caf;
+  background: #fae8ff;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-return-approval {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-receive-signature {
+  color: #9d174d;
+  background: #fce7f3;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-borrow-signature {
+  color: #c026d3;
+  background: #fdf4ff;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-handover-signature {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-workflow {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-returning {
+  color: #4338ca;
+  background: #e0e7ff;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-pending-return {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-returned {
+  color: #166534;
+  background: #dcfce7;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-inbound {
+  color: #075985;
+  background: #e0f2fe;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-cancelled {
+  color: #6b7280;
+  background: #f3f4f6;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-unconfirmed {
+  color: #c026d3;
+  background: #fae8ff;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-disposal {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-disposed {
+  color: #64748b;
+  background: #e2e8f0;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-scrapped {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+:is(.asset-status-pill, .inbound-status-pill, .receive-return-status-pill).status-other {
+  color: #334155;
+  background: #f1f5f9;
 }
 
 .asset-list-pagination {
