@@ -1541,19 +1541,19 @@ onMounted(() => {
           <template v-if="mode === 'list'">
             <p class="advanced-search-hint">系统支持多种字段组合筛选，选择要精确匹配的字段后点击查询。</p>
             <div class="advanced-filter-section">
-              <label class="advanced-filter-field"><span>资产状态</span><el-select v-model="assetAdvancedDraft.status" class="asset-status-multiselect" multiple clearable aria-label="资产状态" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.statuses" :key="item" :label="assetStatusLabel(item)" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>资产状态</span><el-select v-model="assetAdvancedDraft.status" class="asset-status-multiselect advanced-filter-default-select" multiple clearable aria-label="资产状态" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.statuses" :key="item" :label="assetStatusLabel(item)" :value="item" /></el-select></label>
               <label class="advanced-filter-field"><span>资产编码</span><input v-model="assetAdvancedDraft.id" placeholder="例如 AST-0001"></label>
               <label class="advanced-filter-field"><span>资产名称</span><input v-model="assetAdvancedDraft.name" placeholder="例如 测试笔记本"></label>
-              <label class="advanced-filter-field"><span>资产分类</span><el-select v-model="assetAdvancedDraft.category" aria-label="资产分类" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.categories" :key="item" :label="item" :value="item" /></el-select></label>
-              <label class="advanced-filter-field"><span>品牌/类型</span><el-select v-model="assetAdvancedDraft.type" aria-label="品牌/类型" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.types" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>资产分类</span><el-select v-model="assetAdvancedDraft.category" class="advanced-filter-default-select" aria-label="资产分类" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.categories" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>品牌/类型</span><el-select v-model="assetAdvancedDraft.type" class="advanced-filter-default-select" aria-label="品牌/类型" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.types" :key="item" :label="item" :value="item" /></el-select></label>
               <label class="advanced-filter-field"><span>型号</span><input v-model="assetAdvancedDraft.model" placeholder="例如 X1 Carbon"></label>
               <label class="advanced-filter-field"><span>设备序列号</span><input v-model="assetAdvancedDraft.sn" placeholder="SN / 序列号"></label>
               <label class="advanced-filter-field"><span>使用人</span><input v-model="assetAdvancedDraft.owner" placeholder="姓名或未分配"></label>
-              <label class="advanced-filter-field"><span>所属部门</span><el-select v-model="assetAdvancedDraft.department" aria-label="所属部门" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.departments" :key="item" :label="item" :value="item" /></el-select></label>
-              <label class="advanced-filter-field"><span>所在位置</span><el-select v-model="assetAdvancedDraft.location" aria-label="所在位置" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.locations" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>所属部门</span><el-select v-model="assetAdvancedDraft.department" class="advanced-filter-default-select" aria-label="所属部门" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.departments" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>所在位置</span><el-select v-model="assetAdvancedDraft.location" class="advanced-filter-default-select" aria-label="所在位置" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.locations" :key="item" :label="item" :value="item" /></el-select></label>
               <label class="advanced-filter-field"><span>供应商</span><input v-model="assetAdvancedDraft.supplier" placeholder="采购或租赁供应商"></label>
-              <label class="advanced-filter-field"><span>风险状态</span><el-select v-model="assetAdvancedDraft.risk" aria-label="风险状态" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.risks" :key="item" :label="item" :value="item" /></el-select></label>
-              <label class="advanced-filter-field"><span>资产标签</span><el-select v-model="assetAdvancedDraft.tag" aria-label="资产标签" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.tags" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>风险状态</span><el-select v-model="assetAdvancedDraft.risk" class="advanced-filter-default-select" aria-label="风险状态" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.risks" :key="item" :label="item" :value="item" /></el-select></label>
+              <label class="advanced-filter-field"><span>资产标签</span><el-select v-model="assetAdvancedDraft.tag" class="advanced-filter-default-select" aria-label="资产标签" placeholder="全部"><el-option v-for="item in assetAdvancedOptions.tags" :key="item" :label="item" :value="item" /></el-select></label>
             </div>
           </template>
 

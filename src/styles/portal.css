@@ -12154,6 +12154,20 @@ body.is-resizing-column * {
   color: #aab4c2 !important;
 }
 
+/* The empty-state label is rendered by Element Plus inside a nested span. */
+.advanced-filter-default-select {
+  --el-input-text-color: #aab4c2;
+  --el-text-color-regular: #aab4c2;
+}
+
+.advanced-filter-default-select .el-select__placeholder,
+.advanced-filter-default-select .el-select__placeholder *,
+.advanced-filter-default-select .el-select__selected-item:has(.el-select__placeholder),
+.advanced-filter-default-select .el-select__selected-item:has(.el-select__placeholder) * {
+  color: #aab4c2 !important;
+  -webkit-text-fill-color: #aab4c2 !important;
+}
+
 .asset-status-multiselect.el-select {
   height: auto;
   min-height: 32px;
