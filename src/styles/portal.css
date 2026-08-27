@@ -2690,7 +2690,7 @@ button.asset-code-rule-field-name {
 }
 
 .access-template-preview-content {
-  --access-gap: 0.6mm;
+  --access-gap: 0.3mm;
   width: 100%;
   height: 100%;
   box-sizing: border-box;
@@ -3125,7 +3125,7 @@ button.asset-code-rule-field-name {
 }
 
 .access-label-preview-card {
-  --access-gap: 0.6mm;
+  --access-gap: 0.3mm;
   position: relative;
   width: var(--label-width, 60mm);
   height: var(--label-height, 40mm);
@@ -14235,7 +14235,7 @@ body.is-resizing-column * {
 }
 
 .access-template-print-content {
-  --access-gap: 0.6mm;
+  --access-gap: 0.3mm;
   width: 100%;
   height: 100%;
   box-sizing: border-box;
