@@ -181,7 +181,8 @@ const accessFontSize = (value: string, baseMm: number, widthMm: number, minMm: n
     measuredWidthMm = 0
   }
   const estimatedWidthMm = measuredWidthMm || accessTextUnits(text) * baseMm
-  return Math.round(Math.max(minMm, Math.min(baseMm, baseMm * widthMm / estimatedWidthMm)) * 100) / 100
+  const safeWidthMm = Math.max(1, widthMm - 0.8)
+  return Math.round(Math.max(minMm, Math.min(baseMm, baseMm * safeWidthMm / estimatedWidthMm)) * 100) / 100
 }
 const rowsFor = (asset: AssetRecord, settings: LabelSettings): LabelRow[] => [
   ...settings.fields.map((key, index) => ({ label: fieldLabels[key] || key, value: fieldValue(asset, key), fontSize: rowFontSize(settings, index) })),
@@ -271,7 +272,7 @@ const templateRows = (entry: LabelEntry, count: number): LabelRow[] => {
                   <div class="access-template-svg-overlay">
                     <div class="access-template-svg-qr"><svg class="asset-label-qr" :viewBox="entry.accessQr.viewBox" role="img" :aria-label="entry.accessQr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.accessQr.path" fill="#000"/></svg></div>
                     <strong class="access-template-svg-code" :style="{ fontSize: `${accessFontSize(displayAssetCode(entry.asset), 4, 35.1, 2.4)}mm` }">{{ displayAssetCode(entry.asset) }}</strong>
-                    <strong class="access-template-svg-name" :style="{ fontSize: `${accessFontSize(entry.asset.model || '-', 3.8, 35.1, 2.2)}mm` }">{{ entry.asset.model || '-' }}</strong>
+                    <strong class="access-template-svg-name" :style="{ fontSize: `${accessFontSize(entry.asset.name || '-', 3.8, 35.1, 2.2)}mm` }">{{ entry.asset.name || '-' }}</strong>
                     <span class="access-template-svg-owner" :style="{ fontSize: `${accessFontSize(normalizedSettings.ownershipText || '', 3.3, 53.8, 2)}mm` }">{{ normalizedSettings.ownershipText }}</span>
                   </div>
                 </div>
