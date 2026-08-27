@@ -82,7 +82,7 @@ const changeHistoryPageSize = (pageSize: number): void => {
 
 const runFullSync = async (): Promise<void> => {
   try {
-    await ElMessageBox.confirm('将重新读取老系统全部资产，仅更新当前系统展示数据，不会回写老系统。', '全量复核', {
+    await ElMessageBox.confirm('将重新读取 AMS 全部资产，仅更新当前系统展示数据，不会回写 AMS。', '全量复核', {
       type: 'warning',
       confirmButtonText: '开始复核',
       cancelButtonText: '取消'
@@ -168,7 +168,7 @@ watch(historyOpen, (open) => {
                 <span class="legacy-sync-schedule">{{ scheduleLabel }} · {{ sync.status.timeZone }}</span>
               </td>
               <td>Bear Rental AMS</td>
-              <td>老系统 → 当前系统</td>
+              <td>{{ sync.status.baseUrl || 'https://ams.bearrental.com' }}</td>
               <td><span class="tag" :class="syncStatusTone(sync.status.status)">{{ syncStatusLabel(sync.status.status) }}</span></td>
               <td><span class="tag">服务器已配置</span></td>
               <td><span class="tag blue">运行配置</span></td>
@@ -200,7 +200,7 @@ watch(historyOpen, (open) => {
       <div class="legacy-sync-history-meta">
         <span>同步频率：{{ scheduleLabel }}</span>
         <span>时区：{{ sync.status?.timeZone || '-' }}</span>
-        <span>同步方向：老系统 → 当前系统</span>
+        <span>同步方向：AMS → 当前系统</span>
       </div>
       <div v-loading="sync.loading" class="table-wrap legacy-sync-history-table">
         <table>

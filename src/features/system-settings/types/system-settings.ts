@@ -14,6 +14,7 @@ export type SystemIntegration = {
 export type LegacyAssetSyncStatus = {
   sourceSystem: string
   sourceOfTruth: string
+  baseUrl?: string
   readOnly: boolean
   schedule: string
   timeZone: string

@@ -35,6 +35,7 @@ public class LegacyAssetSyncController {
         Map<String, Object> status = new LinkedHashMap<>(repository.status());
         status.put("sourceSystem", "bear-rental-ams");
         status.put("sourceOfTruth", "legacy-ams");
+        status.put("baseUrl", properties.getBaseUrl());
         status.put("readOnly", properties.isReadOnly());
         status.put("schedule", properties.getCron());
         status.put("timeZone", properties.getZone());
