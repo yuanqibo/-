@@ -67,7 +67,7 @@ const presets: Record<string, Omit<LabelSettings, 'templateKey' | 'fieldFontSize
   access: {
     labelWidth: 60, labelHeight: 40, logoWidth: 0, logoHeight: 0, logoScale: 100, logoText: '', logoImage: '', qrSize: 17,
     qrTextGap: 0, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 10, columns: 1, rows: 1, columnGap: 0, rowGap: 0,
-    fields: ['id', 'name'], scanFields: [], customFields: '', showLogo: false, ownershipText: '此资产归Access集团所有'
+    fields: ['id', 'model'], scanFields: [], customFields: '', showLogo: false, ownershipText: '此资产归Access集团所有'
   }
 }
 
@@ -237,7 +237,7 @@ const templateRows = (entry: LabelEntry, count: number): LabelRow[] => {
                 <div class="access-template-print-content">
                   <div class="access-template-print-qr"><svg class="asset-label-qr" :viewBox="entry.qr.viewBox" role="img" :aria-label="entry.qr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.qr.path" fill="#000"/></svg></div>
                   <strong class="access-template-print-code">{{ displayAssetCode(entry.asset) }}</strong>
-                  <strong class="access-template-print-name">{{ entry.asset.name || '-' }}</strong>
+                  <strong class="access-template-print-name">{{ entry.asset.model || '-' }}</strong>
                   <span class="access-template-print-owner">{{ normalizedSettings.ownershipText }}</span>
                 </div>
               </template>

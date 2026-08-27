@@ -2719,7 +2719,7 @@ button.asset-code-rule-field-name {
 .access-template-preview-code,
 .access-template-preview-name {
   position: absolute;
-  left: 19.3mm;
+  left: 18.9mm;
   width: 38.9mm;
   height: 11.5mm;
   box-sizing: border-box;
@@ -2742,14 +2742,14 @@ button.asset-code-rule-field-name {
 }
 
 .access-template-preview-name {
-  top: 12.9mm;
+  top: 12.5mm;
   font-size: 3.8mm;
 }
 
 .access-template-preview-owner {
   position: absolute;
   left: 0.6mm;
-  top: 25mm;
+  top: 24.6mm;
   width: 57.6mm;
   height: 13mm;
   box-sizing: border-box;
@@ -3168,7 +3168,7 @@ button.asset-code-rule-field-name {
 .access-label-preview-code,
 .access-label-preview-name {
   position: absolute;
-  left: 19.3mm;
+  left: 18.9mm;
   width: 38.9mm;
   height: 11.5mm;
   box-sizing: border-box;
@@ -3191,14 +3191,14 @@ button.asset-code-rule-field-name {
 }
 
 .access-label-preview-name {
-  top: 12.9mm;
+  top: 12.5mm;
   font-size: 3.8mm;
 }
 
 .access-label-preview-owner {
   position: absolute;
   left: 0.6mm;
-  top: 25mm;
+  top: 24.6mm;
   width: 57.6mm;
   height: 13mm;
   box-sizing: border-box;
@@ -14276,7 +14276,7 @@ body.is-resizing-column * {
 .access-template-print-code,
 .access-template-print-name {
   position: absolute;
-  left: 19.3mm;
+  left: 18.9mm;
   width: 38.9mm;
   height: 11.5mm;
   box-sizing: border-box;
@@ -14299,14 +14299,14 @@ body.is-resizing-column * {
 }
 
 .access-template-print-name {
-  top: 12.9mm;
+  top: 12.5mm;
   font-size: 3.8mm;
 }
 
 .access-template-print-owner {
   position: absolute;
   left: 0.6mm;
-  top: 25mm;
+  top: 24.6mm;
   width: 57.6mm;
   height: 13mm;
   box-sizing: border-box;
