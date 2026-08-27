@@ -27,6 +27,7 @@ type LabelSettings = {
   scanFields: string[]
   customFields: string
   showLogo: boolean
+  ownershipText?: string
 }
 
 type LabelRow = { label: string; value: string; fontSize: number }
@@ -62,6 +63,11 @@ const presets: Record<string, Omit<LabelSettings, 'templateKey' | 'fieldFontSize
     labelWidth: 60, labelHeight: 40, logoWidth: 18, logoHeight: 10, logoScale: 100, logoText: '资产云', logoImage: '', qrSize: 24,
     qrTextGap: 6, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 12, columns: 1, rows: 1, columnGap: 5, rowGap: 5,
     fields: ['name', 'id'], scanFields: [], customFields: '管理员=custodian', showLogo: false
+  },
+  access: {
+    labelWidth: 60, labelHeight: 40, logoWidth: 0, logoHeight: 0, logoScale: 100, logoText: '', logoImage: '', qrSize: 22,
+    qrTextGap: 0, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 10, columns: 1, rows: 1, columnGap: 0, rowGap: 0,
+    fields: ['id', 'name'], scanFields: [], customFields: '', showLogo: false, ownershipText: '此资产归Access集团所有'
   }
 }
 
@@ -121,7 +127,8 @@ const normalizedSettings = computed<LabelSettings>(() => {
     fields,
     scanFields: stringList(source.scanFields, defaults.scanFields),
     customFields: String(source.customFields ?? defaults.customFields).slice(0, 600),
-    showLogo: source.showLogo === undefined ? defaults.showLogo : Boolean(source.showLogo)
+    showLogo: source.showLogo === undefined ? defaults.showLogo : Boolean(source.showLogo),
+    ownershipText: String(source.ownershipText ?? defaults.ownershipText ?? '此资产归Access集团所有').slice(0, 40)
   }
 })
 
@@ -183,7 +190,8 @@ const cssVars = computed<Record<string, string>>(() => {
     '--label-qr-size': `${settings.qrSize}mm`, '--label-print-qr-size': `${printQr}mm`, '--label-qr-text-gap': `${settings.qrTextGap}mm`,
     '--label-font-size': `${settings.fontSize}px`, '--label-content-scale': `${settings.contentScale / 100}`,
     '--label-offset-x': `${settings.offsetX}mm`, '--label-offset-y': `${settings.offsetY}mm`, '--label-columns': `${settings.columns}`,
-    '--label-column-gap': `${settings.columnGap}mm`, '--label-row-gap': `${settings.rowGap}mm`
+    '--label-column-gap': `${settings.columnGap}mm`, '--label-row-gap': `${settings.rowGap}mm`,
+    '--label-access-qr-size': `${Math.min(settings.qrSize, 24)}mm`
   }
 })
 const templateRows = (entry: LabelEntry, count: number): LabelRow[] => {
@@ -223,6 +231,14 @@ const templateRows = (entry: LabelEntry, count: number): LabelRow[] => {
                 <div class="full-template-print-body">
                   <div class="full-template-print-qr"><svg class="asset-label-qr" :viewBox="entry.qr.viewBox" role="img" :aria-label="entry.qr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.qr.path" fill="#000"/></svg></div>
                   <div class="full-template-print-fields"><span v-for="row in templateRows(entry, 2)" :key="row.label" :style="{ '--template-row-font-size': `${row.fontSize}px` }">{{ row.value }}</span></div>
+                </div>
+              </template>
+              <template v-else-if="baseTemplateKey === 'access'">
+                <div class="access-template-print-content">
+                  <div class="access-template-print-qr"><svg class="asset-label-qr" :viewBox="entry.qr.viewBox" role="img" :aria-label="entry.qr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.qr.path" fill="#000"/></svg></div>
+                  <strong class="access-template-print-code">{{ displayAssetCode(entry.asset) }}</strong>
+                  <strong class="access-template-print-name">{{ entry.asset.name || '-' }}</strong>
+                  <span class="access-template-print-owner">{{ normalizedSettings.ownershipText }}</span>
                 </div>
               </template>
               <div v-else class="asset-label-content">
