@@ -2735,7 +2735,7 @@ button.asset-code-rule-field-name {
   font-size: 4mm;
   font-weight: 500;
   line-height: 1;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -14432,7 +14432,7 @@ body.is-resizing-column * {
   font-size: 3.3mm;
   line-height: 1;
   text-align: center;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 

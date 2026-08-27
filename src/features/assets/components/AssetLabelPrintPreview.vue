@@ -160,6 +160,18 @@ const customFields = (text: string): Array<{ label: string; source: string }> =>
 
 const customValue = (asset: AssetRecord, source: string): string => source in fieldLabels || source in asset ? fieldValue(asset, source) : source || '-'
 const rowFontSize = (settings: LabelSettings, index: number): number => Math.round(clampNumber(settings.fieldFontSizes[index], settings.fontSize, 5, 22))
+const accessTextUnits = (value: string): number => Array.from(String(value || '')).reduce((total, character) => {
+  if (/\s/.test(character)) return total + 0.28
+  if (/[A-Z0-9]/.test(character)) return total + 0.62
+  if (/[a-z]/.test(character)) return total + 0.52
+  if (/[^\u0000-\u024f]/.test(character)) return total + 1
+  return total + 0.7
+}, 0)
+const accessFontSize = (value: string, baseMm: number, widthMm: number, minMm: number): number => {
+  const units = accessTextUnits(value)
+  if (!units) return baseMm
+  return Math.round(Math.max(minMm, Math.min(baseMm, widthMm / units)) * 100) / 100
+}
 const rowsFor = (asset: AssetRecord, settings: LabelSettings): LabelRow[] => [
   ...settings.fields.map((key, index) => ({ label: fieldLabels[key] || key, value: fieldValue(asset, key), fontSize: rowFontSize(settings, index) })),
   ...customFields(settings.customFields).map((field, index) => ({ label: field.label, value: customValue(asset, field.source), fontSize: rowFontSize(settings, settings.fields.length + index) }))
@@ -247,9 +259,9 @@ const templateRows = (entry: LabelEntry, count: number): LabelRow[] => {
                   <img class="access-template-svg-art" :src="accessTemplateUrl" alt="">
                   <div class="access-template-svg-overlay">
                     <div class="access-template-svg-qr"><svg class="asset-label-qr" :viewBox="entry.accessQr.viewBox" role="img" :aria-label="entry.accessQr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.accessQr.path" fill="#000"/></svg></div>
-                    <strong class="access-template-svg-code">{{ displayAssetCode(entry.asset) }}</strong>
-                    <strong class="access-template-svg-name">{{ entry.asset.model || '-' }}</strong>
-                    <span class="access-template-svg-owner">{{ normalizedSettings.ownershipText }}</span>
+                    <strong class="access-template-svg-code" :style="{ fontSize: `${accessFontSize(displayAssetCode(entry.asset), 4, 35.1, 2.4)}mm` }">{{ displayAssetCode(entry.asset) }}</strong>
+                    <strong class="access-template-svg-name" :style="{ fontSize: `${accessFontSize(entry.asset.model || '-', 3.8, 35.1, 2.2)}mm` }">{{ entry.asset.model || '-' }}</strong>
+                    <span class="access-template-svg-owner" :style="{ fontSize: `${accessFontSize(normalizedSettings.ownershipText || '', 3.3, 53.8, 2)}mm` }">{{ normalizedSettings.ownershipText }}</span>
                   </div>
                 </div>
               </template>
