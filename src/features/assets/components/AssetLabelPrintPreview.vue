@@ -39,6 +39,8 @@ const props = defineProps<{
   customTemplates: Array<Record<string, unknown>>
 }>()
 
+const accessTemplateUrl = '/assets/asset-code-template.svg'
+
 defineEmits<{ print: [] }>()
 
 const fieldLabels: Record<string, string> = {
@@ -241,11 +243,14 @@ const templateRows = (entry: LabelEntry, count: number): LabelRow[] => {
                 </div>
               </template>
               <template v-else-if="baseTemplateKey === 'access'">
-                <div class="access-template-print-content">
-                  <div class="access-template-print-qr"><svg class="asset-label-qr" :viewBox="entry.accessQr.viewBox" role="img" :aria-label="entry.accessQr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.accessQr.path" fill="#000"/></svg></div>
-                  <strong class="access-template-print-code">{{ displayAssetCode(entry.asset) }}</strong>
-                  <strong class="access-template-print-name">{{ entry.asset.model || '-' }}</strong>
-                  <span class="access-template-print-owner">{{ normalizedSettings.ownershipText }}</span>
+                <div class="access-template-svg-print-content">
+                  <img class="access-template-svg-art" :src="accessTemplateUrl" alt="">
+                  <div class="access-template-svg-overlay">
+                    <div class="access-template-svg-qr"><svg class="asset-label-qr" :viewBox="entry.accessQr.viewBox" role="img" :aria-label="entry.accessQr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.accessQr.path" fill="#000"/></svg></div>
+                    <strong class="access-template-svg-code">{{ displayAssetCode(entry.asset) }}</strong>
+                    <strong class="access-template-svg-name">{{ entry.asset.model || '-' }}</strong>
+                    <span class="access-template-svg-owner">{{ normalizedSettings.ownershipText }}</span>
+                  </div>
                 </div>
               </template>
               <div v-else class="asset-label-content">
