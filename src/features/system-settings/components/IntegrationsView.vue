@@ -196,7 +196,7 @@ watch(historyOpen, (open) => {
 
     <el-alert v-if="state.errorMessage" type="error" :title="state.errorMessage" show-icon :closable="false" />
 
-    <el-dialog v-model="historyOpen" class="legacy-sync-history-dialog" title="老系统资产同步记录" width="min(1080px, 94vw)" align-center append-to-body>
+    <el-dialog v-model="historyOpen" class="legacy-sync-history-dialog" title="AMS资产同步记录" width="min(1080px, 94vw)" align-center append-to-body>
       <div class="legacy-sync-history-meta">
         <span>同步频率：{{ scheduleLabel }}</span>
         <span>时区：{{ sync.status?.timeZone || '-' }}</span>
