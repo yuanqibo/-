@@ -31,7 +31,7 @@ type LabelSettings = {
 }
 
 type LabelRow = { label: string; value: string; fontSize: number }
-type LabelEntry = { asset: AssetRecord; rows: LabelRow[]; scanText: string; qr: QrGraphic }
+type LabelEntry = { asset: AssetRecord; rows: LabelRow[]; scanText: string; qr: QrGraphic; accessQr: QrGraphic }
 
 const props = defineProps<{
   assets: AssetRecord[]
@@ -170,7 +170,13 @@ const scanTextFor = (asset: AssetRecord, settings: LabelSettings): string => {
 
 const entries = computed<LabelEntry[]>(() => props.assets.map((asset) => {
   const scanText = scanTextFor(asset, normalizedSettings.value)
-  return { asset, rows: rowsFor(asset, normalizedSettings.value), scanText, qr: createQrGraphic(scanText) }
+  return {
+    asset,
+    rows: rowsFor(asset, normalizedSettings.value),
+    scanText,
+    qr: createQrGraphic(scanText),
+    accessQr: createQrGraphic(displayAssetCode(asset))
+  }
 }))
 const perPage = computed(() => Math.max(1, normalizedSettings.value.columns * normalizedSettings.value.rows))
 const pages = computed(() => {
@@ -235,7 +241,7 @@ const templateRows = (entry: LabelEntry, count: number): LabelRow[] => {
               </template>
               <template v-else-if="baseTemplateKey === 'access'">
                 <div class="access-template-print-content">
-                  <div class="access-template-print-qr"><svg class="asset-label-qr" :viewBox="entry.qr.viewBox" role="img" :aria-label="entry.qr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.qr.path" fill="#000"/></svg></div>
+                  <div class="access-template-print-qr"><svg class="asset-label-qr" :viewBox="entry.accessQr.viewBox" role="img" :aria-label="entry.accessQr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.accessQr.path" fill="#000"/></svg></div>
                   <strong class="access-template-print-code">{{ displayAssetCode(entry.asset) }}</strong>
                   <strong class="access-template-print-name">{{ entry.asset.model || '-' }}</strong>
                   <span class="access-template-print-owner">{{ normalizedSettings.ownershipText }}</span>

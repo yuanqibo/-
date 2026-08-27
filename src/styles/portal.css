@@ -2690,20 +2690,23 @@ button.asset-code-rule-field-name {
 }
 
 .access-template-preview-content {
-  position: relative;
+  --access-gap: 0.6mm;
   width: 100%;
   height: 100%;
   box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 18.1mm 38.9mm;
+  grid-template-rows: 11.5mm 11.5mm 13mm;
+  gap: var(--access-gap);
+  place-content: center;
   color: #111111;
 }
 
 .access-template-preview-qr {
-  position: absolute;
-  left: 0.6mm;
-  top: 0.8mm;
-  width: 18.1mm;
-  height: 23.6mm;
   box-sizing: border-box;
+  grid-row: 1 / 3;
+  min-width: 0;
+  min-height: 0;
   display: grid;
   place-items: center;
   padding: 0.8mm;
@@ -2718,11 +2721,9 @@ button.asset-code-rule-field-name {
 
 .access-template-preview-code,
 .access-template-preview-name {
-  position: absolute;
-  left: 18.9mm;
-  width: 38.9mm;
-  height: 11.5mm;
   box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -2737,22 +2738,15 @@ button.asset-code-rule-field-name {
   white-space: nowrap;
 }
 
-.access-template-preview-code {
-  top: 0.8mm;
-}
-
 .access-template-preview-name {
-  top: 12.5mm;
   font-size: 3.8mm;
 }
 
 .access-template-preview-owner {
-  position: absolute;
-  left: 0.6mm;
-  top: 24.6mm;
-  width: 57.6mm;
-  height: 13mm;
   box-sizing: border-box;
+  grid-column: 1 / -1;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -3131,11 +3125,17 @@ button.asset-code-rule-field-name {
 }
 
 .access-label-preview-card {
+  --access-gap: 0.6mm;
   position: relative;
   width: var(--label-width, 60mm);
   height: var(--label-height, 40mm);
   box-sizing: border-box;
   overflow: hidden;
+  display: grid;
+  grid-template-columns: 18.1mm 38.9mm;
+  grid-template-rows: 11.5mm 11.5mm 13mm;
+  gap: var(--access-gap);
+  place-content: center;
   background: #ffffff;
   border: 0.4mm solid #111111;
   border-radius: 1.6mm;
@@ -3146,12 +3146,10 @@ button.asset-code-rule-field-name {
 }
 
 .access-label-preview-qr {
-  position: absolute;
-  left: 0.6mm;
-  top: 0.8mm;
-  width: 18.1mm;
-  height: 23.6mm;
   box-sizing: border-box;
+  grid-row: 1 / 3;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -3167,11 +3165,9 @@ button.asset-code-rule-field-name {
 
 .access-label-preview-code,
 .access-label-preview-name {
-  position: absolute;
-  left: 18.9mm;
-  width: 38.9mm;
-  height: 11.5mm;
   box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -3186,22 +3182,15 @@ button.asset-code-rule-field-name {
   white-space: nowrap;
 }
 
-.access-label-preview-code {
-  top: 0.8mm;
-}
-
 .access-label-preview-name {
-  top: 12.5mm;
   font-size: 3.8mm;
 }
 
 .access-label-preview-owner {
-  position: absolute;
-  left: 0.6mm;
-  top: 24.6mm;
-  width: 57.6mm;
-  height: 13mm;
   box-sizing: border-box;
+  grid-column: 1 / -1;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -14243,23 +14232,27 @@ body.is-resizing-column * {
 }
 
 .access-template-print-content {
+  --access-gap: 0.6mm;
   position: relative;
   width: 100%;
   height: 100%;
   box-sizing: border-box;
   overflow: hidden;
+  display: grid;
+  grid-template-columns: 18.1mm 38.9mm;
+  grid-template-rows: 11.5mm 11.5mm 13mm;
+  gap: var(--access-gap);
+  place-content: center;
   color: #111111;
   transform: translate(var(--label-offset-x), var(--label-offset-y)) scale(var(--label-content-scale));
   transform-origin: top left;
 }
 
 .access-template-print-qr {
-  position: absolute;
-  left: 0.6mm;
-  top: 0.8mm;
-  width: 18.1mm;
-  height: 23.6mm;
   box-sizing: border-box;
+  grid-row: 1 / 3;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -14275,11 +14268,9 @@ body.is-resizing-column * {
 
 .access-template-print-code,
 .access-template-print-name {
-  position: absolute;
-  left: 18.9mm;
-  width: 38.9mm;
-  height: 11.5mm;
   box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -14294,22 +14285,15 @@ body.is-resizing-column * {
   white-space: nowrap;
 }
 
-.access-template-print-code {
-  top: 0.8mm;
-}
-
 .access-template-print-name {
-  top: 12.5mm;
   font-size: 3.8mm;
 }
 
 .access-template-print-owner {
-  position: absolute;
-  left: 0.6mm;
-  top: 24.6mm;
-  width: 57.6mm;
-  height: 13mm;
   box-sizing: border-box;
+  grid-column: 1 / -1;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   align-items: center;
