@@ -65,7 +65,7 @@ const presets: Record<string, Omit<LabelSettings, 'templateKey' | 'fieldFontSize
     fields: ['name', 'id'], scanFields: [], customFields: '管理员=custodian', showLogo: false
   },
   access: {
-    labelWidth: 60, labelHeight: 40, logoWidth: 0, logoHeight: 0, logoScale: 100, logoText: '', logoImage: '', qrSize: 22,
+    labelWidth: 60, labelHeight: 40, logoWidth: 0, logoHeight: 0, logoScale: 100, logoText: '', logoImage: '', qrSize: 17,
     qrTextGap: 0, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 10, columns: 1, rows: 1, columnGap: 0, rowGap: 0,
     fields: ['id', 'name'], scanFields: [], customFields: '', showLogo: false, ownershipText: '此资产归Access集团所有'
   }

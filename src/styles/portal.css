@@ -2684,63 +2684,84 @@ button.asset-code-rule-field-name {
 
 .asset-label-template-ticket.is-access {
   overflow: hidden;
-  border: 0.35mm solid #111111;
-  border-radius: 2mm;
+  border: 0.4mm solid #111111;
+  border-radius: 1.6mm;
   color: #111111;
 }
 
 .access-template-preview-content {
+  position: relative;
   width: 100%;
   height: 100%;
-  display: grid;
-  grid-template-columns: 26mm minmax(0, 1fr);
-  grid-template-rows: 1fr 1fr 8mm;
+  box-sizing: border-box;
   color: #111111;
 }
 
 .access-template-preview-qr {
-  min-width: 0;
+  position: absolute;
+  left: 0.6mm;
+  top: 0.8mm;
+  width: 18.1mm;
+  height: 23.6mm;
   box-sizing: border-box;
-  grid-row: 1 / 3;
   display: grid;
   place-items: center;
-  padding: 2mm;
-  border-right: 0.35mm solid #111111;
+  padding: 0.8mm;
+  border: 0.4mm solid #111111;
+  border-radius: 1.6mm;
 }
 
 .access-template-preview-qr .asset-label-qr {
-  width: 20mm;
-  height: 20mm;
+  width: 16.4mm;
+  height: 16.4mm;
 }
 
 .access-template-preview-code,
 .access-template-preview-name {
-  min-width: 0;
+  position: absolute;
+  left: 19.3mm;
+  width: 38.9mm;
+  height: 11.5mm;
+  box-sizing: border-box;
   overflow: hidden;
   display: flex;
   align-items: center;
-  padding: 0 2.2mm;
-  font-size: 3.2mm;
-  font-weight: 700;
+  padding: 0 2mm;
+  border: 0.4mm solid #111111;
+  border-radius: 1.6mm;
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+  font-size: 4mm;
+  font-weight: 500;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .access-template-preview-code {
-  border-bottom: 0.35mm solid #111111;
+  top: 0.8mm;
+}
+
+.access-template-preview-name {
+  top: 12.9mm;
+  font-size: 3.8mm;
 }
 
 .access-template-preview-owner {
-  grid-column: 1 / -1;
-  min-width: 0;
+  position: absolute;
+  left: 0.6mm;
+  top: 25mm;
+  width: 57.6mm;
+  height: 13mm;
+  box-sizing: border-box;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0 2mm;
-  border-top: 0.35mm solid #111111;
-  font-size: 2.2mm;
+  border: 0.4mm solid #111111;
+  border-radius: 1.6mm;
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+  font-size: 3.3mm;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3113,13 +3134,11 @@ button.asset-code-rule-field-name {
   position: relative;
   width: var(--label-width, 60mm);
   height: var(--label-height, 40mm);
+  box-sizing: border-box;
   overflow: hidden;
-  display: grid;
-  grid-template-columns: 26mm minmax(0, 1fr);
-  grid-template-rows: 1fr 1fr 8mm;
   background: #ffffff;
-  border: 0.35mm solid #111111;
-  border-radius: 2mm;
+  border: 0.4mm solid #111111;
+  border-radius: 1.6mm;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.2);
   color: #111111;
   transform: translate(var(--label-offset-x, 0mm), var(--label-offset-y, 0mm)) scale(var(--label-content-scale, 1));
@@ -3127,48 +3146,71 @@ button.asset-code-rule-field-name {
 }
 
 .access-label-preview-qr {
-  min-width: 0;
+  position: absolute;
+  left: 0.6mm;
+  top: 0.8mm;
+  width: 18.1mm;
+  height: 23.6mm;
   box-sizing: border-box;
-  grid-row: 1 / 3;
+  overflow: hidden;
   display: grid;
   place-items: center;
-  padding: 2mm;
-  border-right: 0.35mm solid #111111;
+  padding: 0.8mm;
+  border: 0.4mm solid #111111;
+  border-radius: 1.6mm;
 }
 
 .access-label-preview-qr .asset-label-qr {
-  width: var(--label-qr-size, 22mm);
-  height: var(--label-qr-size, 22mm);
+  width: min(var(--label-qr-size, 17mm), 16.4mm);
+  height: min(var(--label-qr-size, 17mm), 16.4mm);
 }
 
 .access-label-preview-code,
 .access-label-preview-name {
-  min-width: 0;
+  position: absolute;
+  left: 19.3mm;
+  width: 38.9mm;
+  height: 11.5mm;
+  box-sizing: border-box;
   overflow: hidden;
   display: flex;
   align-items: center;
-  padding: 0 2.2mm;
-  font-size: 3.2mm;
-  font-weight: 700;
+  padding: 0 2mm;
+  border: 0.4mm solid #111111;
+  border-radius: 1.6mm;
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+  font-size: 4mm;
+  font-weight: 500;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .access-label-preview-code {
-  border-bottom: 0.35mm solid #111111;
+  top: 0.8mm;
+}
+
+.access-label-preview-name {
+  top: 12.9mm;
+  font-size: 3.8mm;
 }
 
 .access-label-preview-owner {
-  grid-column: 1 / -1;
-  min-width: 0;
+  position: absolute;
+  left: 0.6mm;
+  top: 25mm;
+  width: 57.6mm;
+  height: 13mm;
+  box-sizing: border-box;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0 2mm;
-  border-top: 0.35mm solid #111111;
-  font-size: 2.2mm;
+  border: 0.4mm solid #111111;
+  border-radius: 1.6mm;
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+  font-size: 3.3mm;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -14201,11 +14243,10 @@ body.is-resizing-column * {
 }
 
 .access-template-print-content {
+  position: relative;
   width: 100%;
   height: 100%;
-  display: grid;
-  grid-template-columns: 26mm minmax(0, 1fr);
-  grid-template-rows: 1fr 1fr 8mm;
+  box-sizing: border-box;
   overflow: hidden;
   color: #111111;
   transform: translate(var(--label-offset-x), var(--label-offset-y)) scale(var(--label-content-scale));
@@ -14213,48 +14254,71 @@ body.is-resizing-column * {
 }
 
 .access-template-print-qr {
-  min-width: 0;
+  position: absolute;
+  left: 0.6mm;
+  top: 0.8mm;
+  width: 18.1mm;
+  height: 23.6mm;
   box-sizing: border-box;
-  grid-row: 1 / 3;
+  overflow: hidden;
   display: grid;
   place-items: center;
-  padding: 2mm;
-  border-right: 0.35mm solid #111111;
+  padding: 0.8mm;
+  border: 0.4mm solid #111111;
+  border-radius: 1.6mm;
 }
 
 .access-template-print-qr .asset-label-qr {
-  width: var(--label-access-qr-size, 22mm);
-  height: var(--label-access-qr-size, 22mm);
+  width: min(var(--label-access-qr-size, 17mm), 16.4mm);
+  height: min(var(--label-access-qr-size, 17mm), 16.4mm);
 }
 
 .access-template-print-code,
 .access-template-print-name {
-  min-width: 0;
+  position: absolute;
+  left: 19.3mm;
+  width: 38.9mm;
+  height: 11.5mm;
+  box-sizing: border-box;
   overflow: hidden;
   display: flex;
   align-items: center;
-  padding: 0 2.2mm;
-  font-size: 3.2mm;
-  font-weight: 700;
+  padding: 0 2mm;
+  border: 0.4mm solid #111111;
+  border-radius: 1.6mm;
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+  font-size: 4mm;
+  font-weight: 500;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .access-template-print-code {
-  border-bottom: 0.35mm solid #111111;
+  top: 0.8mm;
+}
+
+.access-template-print-name {
+  top: 12.9mm;
+  font-size: 3.8mm;
 }
 
 .access-template-print-owner {
-  grid-column: 1 / -1;
-  min-width: 0;
+  position: absolute;
+  left: 0.6mm;
+  top: 25mm;
+  width: 57.6mm;
+  height: 13mm;
+  box-sizing: border-box;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0 2mm;
-  border-top: 0.35mm solid #111111;
-  font-size: 2.2mm;
+  border: 0.4mm solid #111111;
+  border-radius: 1.6mm;
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+  font-size: 3.3mm;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -16341,8 +16405,8 @@ td .asset-code-text {
   }
 
   body.printing-asset-labels .asset-print-label.is-access-template {
-    border: 0.35mm solid #111111 !important;
-    border-radius: 2mm !important;
+    border: 0.4mm solid #111111 !important;
+    border-radius: 1.6mm !important;
   }
 
   body.printing-asset-labels .asset-label-logo {
