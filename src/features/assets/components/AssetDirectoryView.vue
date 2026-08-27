@@ -1243,7 +1243,6 @@ const printNow = (options: LabelPrintOptions = {}): void => {
   document.body.classList.add('printing-asset-labels')
   window.addEventListener('afterprint', cleanup, { once: true })
   window.print()
-  window.setTimeout(cleanup, 1000)
 }
 const printOrderNow = (): void => window.print()
 
