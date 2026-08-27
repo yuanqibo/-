@@ -2698,7 +2698,8 @@ button.asset-code-rule-field-name {
   grid-template-columns: 18.1mm 38.9mm;
   grid-template-rows: 11.5mm 11.5mm 13mm;
   gap: var(--access-gap);
-  place-content: center;
+  place-content: start;
+  padding: 0.8mm 0.6mm;
   color: #111111;
 }
 
@@ -3135,7 +3136,8 @@ button.asset-code-rule-field-name {
   grid-template-columns: 18.1mm 38.9mm;
   grid-template-rows: 11.5mm 11.5mm 13mm;
   gap: var(--access-gap);
-  place-content: center;
+  place-content: start;
+  padding: 0.8mm 0.6mm;
   background: #ffffff;
   border: 0.4mm solid #111111;
   border-radius: 1.6mm;
@@ -14244,7 +14246,8 @@ body.is-resizing-column * {
   grid-template-columns: 18.1mm 38.9mm;
   grid-template-rows: 11.5mm 11.5mm 13mm;
   gap: var(--access-gap);
-  place-content: center;
+  place-content: start;
+  padding: 0.8mm 0.6mm;
   color: #111111;
   transform: translate(var(--label-offset-x), var(--label-offset-y)) scale(var(--label-content-scale));
   transform-origin: top left;
