@@ -27,10 +27,11 @@ type LabelSettings = {
   scanFields: string[]
   customFields: string
   showLogo: boolean
+  ownershipText?: string
 }
 
 type LabelRow = { label: string; value: string; fontSize: number }
-type LabelEntry = { asset: AssetRecord; rows: LabelRow[]; scanText: string; qr: QrGraphic }
+type LabelEntry = { asset: AssetRecord; rows: LabelRow[]; scanText: string; qr: QrGraphic; accessQr: QrGraphic }
 
 const props = defineProps<{
   assets: AssetRecord[]
@@ -62,6 +63,11 @@ const presets: Record<string, Omit<LabelSettings, 'templateKey' | 'fieldFontSize
     labelWidth: 60, labelHeight: 40, logoWidth: 18, logoHeight: 10, logoScale: 100, logoText: '资产云', logoImage: '', qrSize: 24,
     qrTextGap: 6, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 12, columns: 1, rows: 1, columnGap: 5, rowGap: 5,
     fields: ['name', 'id'], scanFields: [], customFields: '管理员=custodian', showLogo: false
+  },
+  access: {
+    labelWidth: 60, labelHeight: 40, logoWidth: 0, logoHeight: 0, logoScale: 100, logoText: '', logoImage: '', qrSize: 17,
+    qrTextGap: 0, contentScale: 100, offsetX: 0, offsetY: 0, fontSize: 10, columns: 1, rows: 1, columnGap: 0, rowGap: 0,
+    fields: ['id', 'model'], scanFields: [], customFields: '', showLogo: false, ownershipText: '此资产归Access集团所有'
   }
 }
 
@@ -93,8 +99,7 @@ const normalizedSettings = computed<LabelSettings>(() => {
     ? customTemplate.value.settings as Record<string, unknown>
     : {}
   const selectedTemplateKey = String(props.settings.templateKey || '').trim()
-  const customBaseTemplateKey = String(customTemplate.value?.baseTemplateKey || customSettings.templateKey || '')
-  const source = selectedTemplateKey === 'defaultAsset' || selectedTemplateKey === 'access' || customBaseTemplateKey === 'access'
+  const source = selectedTemplateKey === 'defaultAsset' || selectedTemplateKey === 'access'
     ? {}
     : { ...customSettings, ...props.settings }
   const fontSize = clampNumber(source.fontSize, defaults.fontSize, 5, 22)
@@ -123,7 +128,8 @@ const normalizedSettings = computed<LabelSettings>(() => {
     fields,
     scanFields: stringList(source.scanFields, defaults.scanFields),
     customFields: String(source.customFields ?? defaults.customFields).slice(0, 600),
-    showLogo: source.showLogo === undefined ? defaults.showLogo : Boolean(source.showLogo)
+    showLogo: source.showLogo === undefined ? defaults.showLogo : Boolean(source.showLogo),
+    ownershipText: String(source.ownershipText ?? defaults.ownershipText ?? '此资产归Access集团所有').slice(0, 40)
   }
 })
 
@@ -169,7 +175,8 @@ const entries = computed<LabelEntry[]>(() => props.assets.map((asset) => {
     asset,
     rows: rowsFor(asset, normalizedSettings.value),
     scanText,
-    qr: createQrGraphic(scanText)
+    qr: createQrGraphic(scanText),
+    accessQr: createQrGraphic(displayAssetCode(asset))
   }
 }))
 const perPage = computed(() => Math.max(1, normalizedSettings.value.columns * normalizedSettings.value.rows))
@@ -231,6 +238,14 @@ const templateRows = (entry: LabelEntry, count: number): LabelRow[] => {
                 <div class="full-template-print-body">
                   <div class="full-template-print-qr"><svg class="asset-label-qr" :viewBox="entry.qr.viewBox" role="img" :aria-label="entry.qr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.qr.path" fill="#000"/></svg></div>
                   <div class="full-template-print-fields"><span v-for="row in templateRows(entry, 2)" :key="row.label" :style="{ '--template-row-font-size': `${row.fontSize}px` }">{{ row.value }}</span></div>
+                </div>
+              </template>
+              <template v-else-if="baseTemplateKey === 'access'">
+                <div class="access-template-print-content">
+                  <div class="access-template-print-qr"><svg class="asset-label-qr" :viewBox="entry.accessQr.viewBox" role="img" :aria-label="entry.accessQr.label"><rect width="100%" height="100%" fill="#fff"/><path :d="entry.accessQr.path" fill="#000"/></svg></div>
+                  <strong class="access-template-print-code">{{ displayAssetCode(entry.asset) }}</strong>
+                  <strong class="access-template-print-name">{{ entry.asset.model || '-' }}</strong>
+                  <span class="access-template-print-owner">{{ normalizedSettings.ownershipText }}</span>
                 </div>
               </template>
               <div v-else class="asset-label-content">
