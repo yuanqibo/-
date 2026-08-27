@@ -16506,6 +16506,7 @@ td .asset-code-text {
   body.printing-asset-labels .asset-label-print-area {
     display: block !important;
     width: auto !important;
+    min-height: 0 !important;
     max-height: none !important;
     overflow: visible !important;
     padding: 0 !important;
@@ -16527,6 +16528,12 @@ td .asset-code-text {
     box-shadow: none !important;
     break-after: page;
     page-break-after: always;
+  }
+
+  body.printing-asset-labels .asset-label-print-workspace.direct-label-print,
+  body.printing-asset-labels .asset-label-print-workspace.direct-label-print .asset-label-preview-scroll {
+    min-height: 0 !important;
+    height: auto !important;
   }
 
   body.printing-asset-labels .asset-label-sheet:last-child {
