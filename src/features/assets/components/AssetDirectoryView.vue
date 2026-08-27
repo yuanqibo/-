@@ -1234,7 +1234,7 @@ const printNow = (options: LabelPrintOptions = {}): void => {
   document.getElementById('asset-label-print-page-size')?.remove()
   const pageStyle = document.createElement('style')
   pageStyle.id = 'asset-label-print-page-size'
-  pageStyle.textContent = `@media print { @page { size: ${pageWidth}mm ${pageHeight}mm; margin: 0; } }`
+  pageStyle.textContent = `@page { size: ${pageWidth}mm ${pageHeight}mm; margin: 0; } @media print { html, body { width: ${pageWidth}mm !important; height: ${pageHeight}mm !important; min-width: ${pageWidth}mm !important; min-height: ${pageHeight}mm !important; margin: 0 !important; overflow: hidden !important; } }`
   document.head.appendChild(pageStyle)
   const cleanup = (): void => {
     document.body.classList.remove('printing-asset-labels')
@@ -1242,6 +1242,9 @@ const printNow = (options: LabelPrintOptions = {}): void => {
   }
   document.body.classList.add('printing-asset-labels')
   window.addEventListener('afterprint', cleanup, { once: true })
+  // Force the print media rules and custom page size to be laid out before
+  // Chromium snapshots the document for its print preview.
+  void document.body.offsetHeight
   window.print()
 }
 const printOrderNow = (): void => window.print()
