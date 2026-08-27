@@ -142,7 +142,10 @@ export const saveAssetCodeSettings = async (value: unknown): Promise<unknown> =>
 }
 
 export const saveLabelSettings = async (entries: Record<string, unknown>, operation: 'save' | 'reset' | 'create' | 'update' | 'delete'): Promise<unknown> => {
-  const saved = await apiRequest('/api/store', { method: 'POST', body: { entries, operation } })
+  const pairs = Object.entries(entries)
+  if (pairs.length !== 1) throw new Error('标签设置一次只能保存一个配置项')
+  const [key, value] = pairs[0]
+  const saved = await apiRequest('/api/store', { method: 'POST', body: { key, value, operation } })
   invalidateReads('store')
   return saved
 }
