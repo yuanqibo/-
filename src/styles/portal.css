@@ -16495,6 +16495,14 @@ td .asset-code-text {
     display: block !important;
   }
 
+  /* Element Plus puts 16px around the dialog itself. On a 40mm label page
+     those extra pixels form a second page containing only the lower border. */
+  body.printing-asset-labels .el-dialog.asset-label-print-dialog {
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   body.printing-asset-labels .el-dialog.asset-label-print-dialog .el-dialog__body {
     display: block !important;
     padding: 0 !important;
