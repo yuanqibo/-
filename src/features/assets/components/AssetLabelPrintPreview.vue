@@ -168,9 +168,20 @@ const accessTextUnits = (value: string): number => Array.from(String(value || ''
   return total + 0.7
 }, 0)
 const accessFontSize = (value: string, baseMm: number, widthMm: number, minMm: number): number => {
-  const units = accessTextUnits(value)
-  if (!units) return baseMm
-  return Math.round(Math.max(minMm, Math.min(baseMm, widthMm / units)) * 100) / 100
+  const text = String(value || '')
+  if (!text) return baseMm
+  let measuredWidthMm = 0
+  try {
+    const context = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d')
+    if (context) {
+      context.font = `500 ${baseMm * 96 / 25.4}px Arial, "Microsoft YaHei", "PingFang SC", sans-serif`
+      measuredWidthMm = context.measureText(text).width / (96 / 25.4)
+    }
+  } catch {
+    measuredWidthMm = 0
+  }
+  const estimatedWidthMm = measuredWidthMm || accessTextUnits(text) * baseMm
+  return Math.round(Math.max(minMm, Math.min(baseMm, baseMm * widthMm / estimatedWidthMm)) * 100) / 100
 }
 const rowsFor = (asset: AssetRecord, settings: LabelSettings): LabelRow[] => [
   ...settings.fields.map((key, index) => ({ label: fieldLabels[key] || key, value: fieldValue(asset, key), fontSize: rowFontSize(settings, index) })),
