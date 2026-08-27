@@ -41,7 +41,9 @@ const props = defineProps<{
 
 const accessTemplateUrl = '/assets/asset-code-template.svg'
 
-defineEmits<{ print: [] }>()
+const emit = defineEmits<{
+  print: [options: Pick<LabelSettings, 'labelWidth' | 'labelHeight' | 'columns' | 'rows' | 'columnGap' | 'rowGap'>]
+}>()
 
 const fieldLabels: Record<string, string> = {
   id: '资产编码', name: '资产名称', category: '资产分类', status: '资产状态', owner: '使用人', employeeCode: '员工工号',
@@ -238,7 +240,18 @@ const templateRows = (entry: LabelEntry, count: number): LabelRow[] => {
 <template>
   <div class="asset-label-print-workspace direct-label-print">
     <div class="asset-label-direct-actions">
-      <button type="button" class="btn primary asset-label-direct-print-button" @click="$emit('print')">打 印</button>
+      <button
+        type="button"
+        class="btn primary asset-label-direct-print-button"
+        @click="emit('print', {
+          labelWidth: normalizedSettings.labelWidth,
+          labelHeight: normalizedSettings.labelHeight,
+          columns: normalizedSettings.columns,
+          rows: normalizedSettings.rows,
+          columnGap: normalizedSettings.columnGap,
+          rowGap: normalizedSettings.rowGap
+        })"
+      >打 印</button>
     </div>
     <div class="asset-label-preview-panel">
       <div class="asset-label-preview-scroll">
