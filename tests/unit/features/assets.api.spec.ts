@@ -13,6 +13,7 @@ import {
   fetchPortalStore,
   invalidateAssetDataCache,
   runAssetCommand,
+  saveLabelSettings,
   searchDirectoryPeople,
   updateStocktake
 } from '../../../src/features/assets/api/assets.api'
@@ -74,6 +75,15 @@ describe('assets feature API', () => {
     await updateStocktake('STK/1', { checked: 3, diff: 1 })
     expect(apiRequest).toHaveBeenLastCalledWith('/api/business-data/stocktakes/STK%2F1', {
       method: 'PATCH', body: { checked: 3, diff: 1 }
+    })
+  })
+
+  it('writes label settings using the single-key Java API payload', async () => {
+    apiRequest.mockResolvedValue({ ok: true })
+    await saveLabelSettings({ assetLabelPrintSettingsV2: { templateKey: 'access' } }, 'save')
+    expect(apiRequest).toHaveBeenLastCalledWith('/api/store', {
+      method: 'POST',
+      body: { key: 'assetLabelPrintSettingsV2', value: { templateKey: 'access' }, operation: 'save' }
     })
   })
 
