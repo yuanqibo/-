@@ -164,7 +164,7 @@ watch(historyOpen, (open) => {
             <tr v-if="sync.status" class="legacy-sync-row">
               <td><code>LEGACY_AMS_ASSET_SYNC</code></td>
               <td>
-                <span class="legacy-sync-name">老系统资产同步</span>
+                <span class="legacy-sync-name">AMS资产同步</span>
                 <span class="legacy-sync-schedule">{{ scheduleLabel }} · {{ sync.status.timeZone }}</span>
               </td>
               <td>Bear Rental AMS</td>
