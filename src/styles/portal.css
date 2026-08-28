@@ -14341,6 +14341,8 @@ body.is-resizing-column * {
 /* Access labels use the supplied artwork's geometry, but render the live print
    frame directly so all four cells stay sharp and inside the printable area. */
 .is-access-template {
+  display: grid;
+  place-items: center;
   border: 0;
   border-radius: 0;
 }
