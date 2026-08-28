@@ -14346,7 +14346,7 @@ body.is-resizing-column * {
 }
 
 .access-template-svg-print-content {
-  width: 57.6mm;
+  width: 58.4mm;
   height: 38.4mm;
   box-sizing: border-box;
   display: grid;
@@ -14354,7 +14354,7 @@ body.is-resizing-column * {
   margin: auto;
   overflow: hidden;
   border: 0.4mm solid #111111;
-  border-radius: 1.6mm;
+  border-radius: 0;
   background: #ffffff;
 }
 
@@ -14368,10 +14368,10 @@ body.is-resizing-column * {
   box-sizing: border-box;
   display: grid;
   grid-template-columns: 17.2mm 38mm;
-  grid-template-rows: 10mm 10mm 12.8mm;
+  grid-template-rows: 10.8mm 10.8mm 12.8mm;
   gap: 0.8mm;
-  align-content: center;
-  padding: 0.4mm;
+  align-content: start;
+  padding: 0.8mm;
   color: #111111;
   font-family: Arial, "Microsoft YaHei", "PingFang SC", sans-serif;
 }
@@ -14394,7 +14394,7 @@ body.is-resizing-column * {
   place-items: center;
   padding: 0.5mm;
   border: 0.4mm solid #111111;
-  border-radius: 1.6mm;
+  border-radius: 0;
 }
 
 .access-template-svg-qr .asset-label-qr {
@@ -14411,7 +14411,7 @@ body.is-resizing-column * {
   align-items: center;
   padding: 0 1.5mm;
   border: 0.4mm solid #111111;
-  border-radius: 1.6mm;
+  border-radius: 0;
   font-size: 4mm;
   font-weight: 500;
   line-height: 1;
@@ -14441,7 +14441,7 @@ body.is-resizing-column * {
   justify-content: center;
   padding: 0 1.5mm;
   border: 0.4mm solid #111111;
-  border-radius: 1.6mm;
+  border-radius: 0;
   font-size: 3.3mm;
   line-height: 1;
   text-align: center;
